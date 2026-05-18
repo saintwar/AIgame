@@ -24,6 +24,7 @@ import {
 import { drawLakeReflections } from './render/reflections.js';
 import { drawNameTag } from './render/name-tag.js';
 import { drawFarmland } from './render/farmland.js';
+import { drawFlowerbed } from './render/flowerbed.js';
 import {
   drawDynamicSky, drawDynamicOverlay,
   getFireflyBrightness, getWindowBrightness,
@@ -1696,6 +1697,9 @@ class VillageScene {
 
     // 左上红色色块 → 菜苗农田（覆盖 ROOF tiles at [1][4],[1][5],[2][4],[2][5]）
     drawFarmland(ctx, 4 * T, 1 * T, 2 * T, 2 * T);
+
+    // 右上红色色块 → 像素花圃（覆盖 ROOF tiles at [1][13],[1][14],[2][13],[2][14]）
+    drawFlowerbed(ctx, 13 * T, 1 * T, 2 * T, 2 * T);
   }
 
   // 建筑渲染已移至 Layer 3（见 render 方法中的直接调用）
