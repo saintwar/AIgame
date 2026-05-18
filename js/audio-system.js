@@ -9,6 +9,7 @@ class AudioSystem {
     this.bgmVolume = 0.7;
     this.sfxVolume = 0.4;
     this.ambientNodes = [];
+    this._pendingBGM = null;   // 因自动播放策略被挂起的 BGM
   }
 
   /**
@@ -27,6 +28,12 @@ class AudioSystem {
     // 浏览器自动播放策略：必须在用户手势后 resume
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume();
+    }
+    // 恢复后尝试播放之前被阻止的 BGM
+    if (this._pendingBGM) {
+      const { src, loopStart, loopEnd } = this._pendingBGM;
+      this._pendingBGM = null;
+      this.playBGM(src, loopStart, loopEnd);
     }
   }
 
@@ -200,6 +207,7 @@ class AudioSystem {
    */
   async playBGM(src, loopStart = null, loopEnd = null) {
     await this.init();
+    this._pendingBGM = null;   // 避免重复加载
     this.stopBGM();
 
     this._bgmAudio = new Audio(src);
@@ -222,7 +230,16 @@ class AudioSystem {
     // 创建 MediaElementSourceNode 接入 Web Audio
     this._bgmSource = this.ctx.createMediaElementSource(this._bgmAudio);
     this._bgmSource.connect(this.bgmGain);
-    this._bgmAudio.play().catch(e => console.warn('BGM play failed:', e));
+    try {
+      await this._bgmAudio.play();
+    } catch (e) {
+      if (e.name === 'NotAllowedError') {
+        // 浏览器自动播放策略：先挂起，等用户交互后由 init() 自动重试
+        this._pendingBGM = { src, loopStart, loopEnd };
+      } else {
+        console.warn('BGM play failed:', e);
+      }
+    }
   }
 
   /**

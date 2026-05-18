@@ -22,6 +22,7 @@ import {
   drawAming, drawXiulan, drawVillageChief, drawLin, drawXiaofang
 } from './render/characters.js';
 import { drawLakeReflections } from './render/reflections.js';
+import { drawNameTag } from './render/name-tag.js';
 import {
   drawDynamicSky, drawDynamicOverlay,
   getFireflyBrightness, getWindowBrightness,
@@ -177,13 +178,6 @@ class VillageScene {
     this.playerNameConfig = {
       enabled: true,               // 是否显示名字
       text: '阿明',               // 名字文本
-      fontSize: 14,               // 字号（px）
-      color: '#FFFFFF',            // 文字颜色
-      strokeColor: '#000000',      // 描边颜色
-      strokeWidth: 3,              // 描边宽度
-      offsetY: -20,               // 相对角色头顶的垂直偏移（drawAming 的 y 是头顶位置，负值向上）
-      shadowBlur: 6,              // 阴影模糊半径（0=无阴影）
-      shadowColor: 'rgba(0,0,0,0.8)', // 阴影颜色
     };
 
     // FPS 滑动窗口（60帧均值）
@@ -1805,6 +1799,10 @@ class VillageScene {
       if (drawFn) {
         drawFn(ctx, npc.px, npc.py, npc.facing || 'down', time);
       }
+      // NPC 头顶名字标签
+      if (!dialogueSystem.isActive()) {
+        drawNameTag(ctx, npc.px + 16, npc.py - 8, npc.name);
+      }
     });
 
     // 保留任务标记（角色宽32px，中心在 px+16）
@@ -1862,41 +1860,12 @@ class VillageScene {
     }
   }
 
-  // 主角头顶名字标签（Billboard 渲染，始终面向摄像机）
+  // 主角头顶名字标签
   _renderPlayerNameTag() {
+    if (dialogueSystem.isActive()) return;
     const cfg = this.playerNameConfig;
     if (!cfg || !cfg.enabled) return;
-
-    const ctx = this.ctx;
-    // 角色像素坐标中心：角色宽32px，左 px+16；角色高48px，头顶 py
-    const cx = this.player.px + 16;
-    const cy = this.player.py + cfg.offsetY;  // 负值向上偏移
-
-    ctx.save();
-
-    // 阴影（Billboard 氛围光）
-    if (cfg.shadowBlur > 0) {
-      ctx.shadowColor = cfg.shadowColor;
-      ctx.shadowBlur = cfg.shadowBlur;
-    }
-
-    // 文字渲染参数
-    ctx.font = `bold ${cfg.fontSize}px "Cubic 11", "Noto Sans TC", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // 第一层：黑色描边（确保在任何背景下清晰可读）
-    if (cfg.strokeWidth > 0 && cfg.strokeColor) {
-      ctx.lineWidth = cfg.strokeWidth;
-      ctx.strokeStyle = cfg.strokeColor;
-      ctx.strokeText(cfg.text, cx, cy);
-    }
-
-    // 第二层：填充颜色
-    ctx.fillStyle = cfg.color;
-    ctx.fillText(cfg.text, cx, cy);
-
-    ctx.restore();
+    drawNameTag(this.ctx, this.player.px + 16, this.player.py - 8, cfg.text);
   }
 
   _renderPlayer() {

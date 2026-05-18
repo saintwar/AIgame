@@ -33,9 +33,24 @@ class DialogueSystem {
       replacements = opts.replacements || null;
     }
 
+    // 如果有 replacements，预处理对话文本（深拷贝避免修改全局 DIALOGUES）
+    let currentDialog = dialog;
+    if (replacements) {
+      currentDialog = {
+        ...dialog,
+        lines: dialog.lines.map(line => {
+          let text = line.text;
+          for (const [key, val] of Object.entries(replacements)) {
+            text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+          }
+          return { ...line, text };
+        })
+      };
+    }
+
     this.active = true;
     this.dialogId = dialogId;
-    this.currentDialog = dialog;
+    this.currentDialog = currentDialog;
     this.currentLineIdx = 0;
     this.charIdx = 0;
     this.onEndCallback = onEnd;
@@ -150,11 +165,21 @@ class DialogueSystem {
         ctx.font = '24px "Cubic 11", "Noto Sans TC", monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
-        ctx.fillStyle = 'rgba(61,43,31,0.6)';
-        const showArrow = this._arrowTimer < 0.25;
-        if (showArrow) {
-          ctx.fillText('▼', 1216, boxY + boxH - 16);
-        }
+
+        // 闪烁动画
+        const showArrow = this._arrowTimer < 0.35;
+        const arrowAlpha = showArrow ? 0.85 : 0.25;
+        ctx.fillStyle = `rgba(61,43,31,${arrowAlpha})`;
+        ctx.fillText('▼', 1216, boxY + boxH - 16);
+
+        // 按键提示文字
+        ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'rgba(61,43,31,0.45)';
+        const isLastLine = this.currentLineIdx >= this.currentDialog.lines.length - 1;
+        const hintText = isLastLine ? '按空格结束' : '按空格继续';
+        ctx.fillText(hintText, 1216, boxY + boxH - 44);
       }
     }
   }
