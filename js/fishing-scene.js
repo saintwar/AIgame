@@ -781,7 +781,7 @@ class FishingScene {
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
-    this._renderTaskProgress(); if (this.taskComplete) this._renderTaskComplete(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (!this.fsm.is('Playing')) this._renderTaskProgress(); if (this.taskComplete && !this.fsm.is('Playing')) this._renderTaskComplete(); ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   _applyShake(ctx, intensity, duration) { const offsetX = (Math.random() - 0.5) * intensity; const offsetY = (Math.random() - 0.5) * intensity; ctx.translate(offsetX, offsetY); }
@@ -1485,7 +1485,7 @@ class FishingScene {
     ctx.fillStyle = '#333'; ctx.fillRect(hpBarX, hpBarY, hpBarW, 16);
     ctx.fillStyle = '#F44336'; ctx.fillRect(hpBarX, hpBarY, hpBarW * Math.max(0, this.fishHP / this.currentFish.maxHP), 16);
     ctx.fillStyle = '#FFF'; ctx.font = "12px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center';
-    ctx.fillText(`耐力 ${Math.round(this.fishHP)}/${this.currentFish.maxHP}`, hpBarX + hpBarW / 2, hpBarY + 26);
+    ctx.fillText(`鱼的体力 ${Math.round(this.fishHP)}/${this.currentFish.maxHP}`, hpBarX + hpBarW / 2, hpBarY + 26);
 
     // 鱼线拉力指示器
     const tensionBarW = hpBarW; const tensionBarX = hpBarX; const tensionBarY = panelY + 100;
@@ -1756,9 +1756,9 @@ class FishingScene {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
     // 纯水下视角：水草从屏幕底部生长
     const bottomY = ch * 0.92;
-    const weedPositions = [cw * 0.06, cw * 0.18, cw * 0.32, cw * 0.48, cw * 0.62, cw * 0.78, cw * 0.92];
-    const heights = [55, 80, 50, 70, 45, 65, 55];
-    const colors = ['#1B5E20', '#2E7D32', '#388E3C', '#1B5E20', '#43A047', '#2E7D32', '#388E3C'];
+    const weedPositions = [cw * 0.04, cw * 0.10, cw * 0.16, cw * 0.22, cw * 0.30, cw * 0.36, cw * 0.42, cw * 0.50, cw * 0.56, cw * 0.62, cw * 0.68, cw * 0.74, cw * 0.80, cw * 0.86, cw * 0.92];
+    const heights = [110, 160, 100, 140, 90, 130, 110, 150, 100, 140, 90, 130, 110, 140, 100];
+    const colors = ['#1B5E20', '#2E7D32', '#388E3C', '#1B5E20', '#43A047', '#2E7D32', '#388E3C', '#1B5E20', '#2E7D32', '#388E3C', '#1B5E20', '#43A047', '#2E7D32', '#388E3C', '#1B5E20'];
     for (let i = 0; i < weedPositions.length; i++) {
       const wx = weedPositions[i];
       const wh = heights[i];
