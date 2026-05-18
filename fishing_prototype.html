@@ -1,0 +1,2397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>《宝岛钓手》- 少年阿明的传说</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+    
+    :root {
+      --bg-color: #1a1a2e;
+      --panel-bg: rgba(0,0,0,0.85);
+      --text-color: #fff;
+      --accent-blue: #4fc3f7;
+      --accent-gold: #ffd700;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      background: linear-gradient(180deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'TencentSans', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: var(--text-color);
+      overflow: hidden;
+    }
+    
+    #gameContainer {
+      position: relative;
+      border-radius: 12px;
+      box-shadow: 0 0 40px rgba(79, 195, 247, 0.3);
+    }
+    
+    #gameCanvas {
+      display: block;
+      border-radius: 12px;
+      background: #87CEEB;
+    }
+    
+    #ui {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    #ui > * { pointer-events: auto; }
+    
+    .panel {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--panel-bg);
+      border: 2px solid var(--accent-blue);
+      border-radius: 16px;
+      padding: 24px 32px;
+      text-align: center;
+      min-width: 320px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .panel.active { display: block; }
+    
+    .panel h2 {
+      font-size: 24px;
+      margin-bottom: 16px;
+      color: var(--accent-gold);
+    }
+    
+    .panel p {
+      font-size: 18px;
+      margin: 8px 0;
+    }
+    
+    .panel .rarity {
+      font-size: 32px;
+      margin: 12px 0;
+    }
+    
+    .panel .stats {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+    }
+    
+    .panel .stat-item {
+      text-align: center;
+    }
+    
+    .panel .stat-value {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--accent-gold);
+    }
+    
+    #failedPanel h2 { color: #ff6b6b; }
+    #caughtPanel h2 { color: var(--accent-gold); }
+    
+    #hint {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 16px;
+      color: rgba(255,255,255,0.8);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    
+    #atlas {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid var(--accent-blue);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    
+    #atlas:hover { background: rgba(79, 195, 247, 0.3); }
+    
+    #atlasPanel {
+      width: 400px;
+      max-height: 80%;
+      overflow-y: auto;
+    }
+    
+    #atlasPanel h2 { margin-bottom: 20px; }
+    
+    .fish-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+    
+    .fish-item {
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    
+    .fish-item.locked {
+      opacity: 0.4;
+    }
+    
+    .fish-item .fish-icon {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+    
+    .fish-item .fish-name {
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    .fish-item .fish-info {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="960" height="600"></canvas>
+    <div id="ui">
+      <div id="atlas" onclick="game.showAtlas()">📖 图鉴 [B]</div>
+      
+      <div id="startPanel" class="panel active">
+        <h2>🎣 宝岛钓手</h2>
+        <p>少年阿明的传说</p>
+        <p style="margin-top: 20px; color: #aaa;">按住 <strong style="color:#4fc3f7">E</strong> 或 <strong style="color:#4fc3f7">空格</strong> 开始钓鱼</p>
+      </div>
+      
+      <div id="caughtPanel" class="panel">
+        <h2>🎉 钓到了!</h2>
+        <div class="rarity" id="caughtRarity">★★★</div>
+        <p id="caughtName">曲腰鱼</p>
+        <div class="stats">
+          <div class="stat-item">
+            <div>尺寸</div>
+            <div class="stat-value" id="caughtSize">32cm</div>
+          </div>
+          <div class="stat-item">
+            <div>价格</div>
+            <div class="stat-value" id="caughtPrice">120</div>
+          </div>
+        </div>
+        <p id="newFishHint" style="color: #ffd700; margin-top: 12px; display: none;">★★ 新增图鉴!</p>
+        <button id="continueBtn" style="margin-top: 16px; padding: 10px 24px; font-size: 16px; background: #4FC3F7; border: none; border-radius: 8px; color: #fff; cursor: pointer;">再钓一竿</button>
+        <p style="margin-top: 12px; color: #888; font-size: 14px;">按 E 或 空格键 继续...</p>
+      </div>
+      
+      <div id="failedPanel" class="panel">
+        <h2>💔 失败了...</h2>
+        <p id="failedReason" style="font-size: 24px; color: #ff6b6b;">用力过头啦!</p>
+        <p style="margin-top: 16px; color: #888; font-size: 14px;">1.5秒后自动重置...</p>
+      </div>
+      
+      <div id="atlasPanel" class="panel">
+        <h2>📖 鱼获图鉴</h2>
+        <button id="upgradeBtn" style="margin-bottom: 12px; padding: 8px 16px; font-size: 14px; background: #FFD700; border: none; border-radius: 6px; color: #333; cursor: pointer;">⬆️ 升级装备</button>
+        <div class="fish-list" id="fishList"></div>
+        <p style="margin-top: 16px; color: #888; font-size: 14px;">按 <strong>B</strong> 或点击关闭</p>
+      </div>
+      
+      <div id="hint"></div>
+    </div>
+  </div>
+
+<script>
+// ============================================================
+// CONFIG - 所有可调参数集中于此
+// ============================================================
+const CONFIG = {
+  aiming: {
+    chargeCycle: 1.5,       // 蓄力周期（秒），一个单程
+    powerWeakMax: 33,        // 弱力上限
+    powerMidMax: 66,         // 中力上限
+    powerStrongMax: 95,      // 强力上限
+    powerOverload: 96,       // 过力阈值
+    castDuration: 0.8,      // 抛竿动画时长
+  },
+  waiting: {
+    fishSpawnDelay: 2.0,     // 鱼影出现延迟
+    biteSinkCount: 3,        // 咬钩下沉次数
+    biteSinkDepth: 6,        // 每次下沉像素
+    biteSinkDuration: 0.2,   // 下沉动画时长
+  },
+  biteWindow: {
+    duration: 1.0,           // 提竿窗口时间（已加倍）
+  },
+  reeling: {
+    qteCountByRarity: [3, 5, 7, 9, 11],
+    tickDurationByRarity: [1.6, 1.4, 1.2, 1.0, 0.8],  // 每拍限时已加倍
+    hpDamageByRarity: [35, 20, 15, 12, 10],
+    tensionPenaltyByRarity: [15, 18, 20, 22, 25],
+    tensionDecayPerTick: 3,
+    tensionDecayPerFrame: 0.5,
+    tensionSuccessBonus: 10,
+    tensionFailPenalty: 20,
+    tensionTimeoutPenalty: 20,
+  },
+  playing: {
+    maxTension: 100,           // 最大张力
+    tensionPerSecond: 20,      // 鱼逃跑时每秒张力增长（增加）
+    tensionDecayPerSecond: 6,  // 按住空格时张力下降速度（减少，拉回更困难）
+    tensionFailBonus: 30,      // 断线时张力增长（增加）
+    fishEscapeSpeed: 150,      // 鱼逃跑速度（增加）
+    fishEscapeSpeedIncrease: 8, // 每次逃跑加速（增加）
+    fishHPPerEscape: 12,       // 每次逃跑损失的HP（增加）
+    maxEscapes: 6,            // 最大逃跑次数（减少）
+    // 捕获区域（右侧10% + 水面上方20%）
+    catchZoneX: 0.9,         // 右侧10%的X阈值
+    catchZoneY: 0.2,         // 水面上方20%的Y阈值
+  },
+  caught: {
+    animationDuration: 2.0,
+    slowmoThreshold: 4,      // 触发慢动作的最低稀有度
+    slowmoScale: 0.3,
+    particleCount: 12,
+    legendaryGlowDuration: 0.5,
+  },
+  failed: {
+    resetDuration: 1.5,
+  },
+  fish: {
+    travelSpeed: 80,        // 鱼影游动速度
+    biteProbBase: 0.6,      // 基础咬钩概率
+  },
+};
+
+// ============================================================
+// FISH_POOL - 鱼类数据
+// ============================================================
+const FISH_POOL = [
+  { id: 'f1', name: '吴郭鱼', rarity: 1, color: '#8B7D6B', size: [16, 8], price: 15, baseProb: 0.60 },
+  { id: 'f2', name: '草鱼', rarity: 2, color: '#6B8E23', size: [24, 12], price: 45, baseProb: 0.45 },
+  { id: 'f3', name: '曲腰鱼', rarity: 3, color: '#4682B4', size: [32, 16], price: 120, baseProb: 0.25 },
+  { id: 'f4', name: '总统鱼', rarity: 4, color: '#9370DB', size: [48, 24], price: 500, baseProb: 0.08 },
+  { id: 'f5', name: '日月潭鱼王', rarity: 5, color: '#FFD700', size: [64, 32], price: 3000, baseProb: 0.015, legendary: true },
+];
+
+const FAILED_MESSAGES = {
+  overload: ['干! 用力过头啦!', '拍谢，钓线炸掉了'],
+  timeout: ['啊~ 跑了啦...', '呜呜不小心发呆了'],
+  tension: ['这尾靠北大! 线撑不住~', '它太拼了啦'],
+  escape: ['它挣脱了耶...', '差一点点啊!'],
+};
+
+// ============================================================
+// StateMachine - 状态机
+// ============================================================
+class StateMachine {
+  constructor() {
+    this.state = 'Idle';
+    this.history = [];
+  }
+  
+  transition(newState, reason) {
+    console.log(`[FSM] ${this.state} → ${newState} (${reason})`);
+    this.history.push({ from: this.state, to: newState, reason, time: Date.now() });
+    this.state = newState;
+  }
+  
+  is(state) {
+    return this.state === state;
+  }
+}
+
+// ============================================================
+// AudioSystem - Web Audio 合成音效
+// ============================================================
+class AudioSystem {
+  constructor() {
+    this.ctx = null;
+    this.enabled = true;
+  }
+  
+  init() {
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio not supported');
+      this.enabled = false;
+    }
+  }
+  
+  play(type) {
+    if (!this.enabled || !this.ctx) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    switch (type) {
+      case 'cast':
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+      case 'bite':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.setValueAtTime(1000, now + 0.05);
+        osc.frequency.setValueAtTime(800, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+      case 'good':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523, now);
+        osc.frequency.setValueAtTime(659, now + 0.1);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+      case 'bad':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+      case 'miss':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, now);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+      case 'caught':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523, now);
+        osc.frequency.setValueAtTime(659, now + 0.15);
+        osc.frequency.setValueAtTime(784, now + 0.3);
+        osc.frequency.setValueAtTime(1047, now + 0.45);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+        osc.start(now);
+        osc.stop(now + 0.6);
+        break;
+      case 'failed':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        break;
+      case 'reeling':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.setValueAtTime(200, now + 0.1);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+      case 'escape':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+    }
+  }
+}
+
+// ============================================================
+// ParticleSystem - 粒子系统
+// ============================================================
+class ParticleSystem {
+  constructor() {
+    this.particles = [];
+  }
+  
+  emit(x, y, count, color, config = {}) {
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5;
+      const speed = config.speed || (80 + Math.random() * 60);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - (config.upward ? 100 : 0),
+        life: 1,
+        decay: config.decay || (0.02 + Math.random() * 0.02),
+        size: config.size || (4 + Math.random() * 4),
+        color: color,
+        gravity: config.gravity !== undefined ? config.gravity : 200,
+      });
+    }
+  }
+  
+  update(dt) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += p.gravity * dt;
+      p.life -= p.decay;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+  }
+  
+  draw(ctx) {
+    this.particles.forEach(p => {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ============================================================
+// InputSystem - 输入系统
+// ============================================================
+class InputSystem {
+  constructor() {
+    this.keys = {};
+    this.keyPressed = {};
+    this.setupListeners();
+  }
+  
+  setupListeners() {
+    document.addEventListener('keydown', e => {
+      // 处理方向键
+      let key = e.key.toLowerCase();
+      if (key === 'arrowup') key = 'up';
+      else if (key === 'arrowdown') key = 'down';
+      else if (key === 'arrowleft') key = 'left';
+      else if (key === 'arrowright') key = 'right';
+      else if (key === ' ') key = 'space';
+      
+      if (!this.keys[key]) this.keyPressed[key] = true;
+      this.keys[key] = true;
+      
+      // 初始化音频上下文（需要用户交互）
+      if (game && game.audio && !game.audio.ctx) {
+        game.audio.init();
+      }
+    });
+    
+    document.addEventListener('keyup', e => {
+      let key = e.key.toLowerCase();
+      if (key === 'arrowup') key = 'up';
+      else if (key === 'arrowdown') key = 'down';
+      else if (key === 'arrowleft') key = 'left';
+      else if (key === 'arrowright') key = 'right';
+      else if (key === ' ') key = 'space';
+      this.keys[key] = false;
+    });
+  }
+  
+  isDown(key) {
+    return !!this.keys[key.toLowerCase()];
+  }
+  
+  wasPressed(key) {
+    const pressed = !!this.keyPressed[key.toLowerCase()];
+    this.keyPressed[key.toLowerCase()] = false;
+    return pressed;
+  }
+  
+  clearPressed() {
+    this.keyPressed = {};
+  }
+}
+
+// ============================================================
+// Renderer - 渲染器
+// ============================================================
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.w = canvas.width;
+    this.h = canvas.height;
+    this.time = 0;
+  }
+  
+  clear() {
+    this.ctx.clearRect(0, 0, this.w, this.h);
+  }
+  
+  // z=000 背景层
+  drawBackground() {
+    const ctx = this.ctx;
+    const waterLevel = this.h * 0.5; // 水面高度
+    
+    // 天空渐变
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, waterLevel);
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(1, '#E0F7FA');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, this.w, waterLevel);
+    
+    // 水面（先绘制，作为山的背景）
+    ctx.fillStyle = '#4A90A4';
+    ctx.fillRect(0, waterLevel, this.w, this.h - waterLevel);
+    
+    // 远山（延伸到水面以下）
+    ctx.fillStyle = '#5D8A66';
+    this.drawMountain(120, waterLevel, 180, 180);
+    ctx.fillStyle = '#7BA885';
+    this.drawMountain(350, waterLevel, 150, 150);
+    ctx.fillStyle = '#4A7A52';
+    this.drawMountain(700, waterLevel, 200, 200);
+    
+    // 前景小山（更近的山）
+    ctx.fillStyle = '#3D6B4A';
+    this.drawMountain(550, waterLevel + 30, 100, 80);
+    
+    // 水面波纹
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    for (let y = waterLevel + 15; y < this.h; y += 25) {
+      ctx.beginPath();
+      for (let x = 0; x < this.w; x += 5) {
+        const waveY = y + Math.sin((x + this.time * 50) / 40) * 4;
+        if (x === 0) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+    }
+  }
+  
+  drawMountain(x, baseY, width, height) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x - width, baseY); // 山脚在水面上
+    ctx.lineTo(x, baseY - height);
+    ctx.lineTo(x + width, baseY); // 山脚在水面上
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  // z=100 角色层（背影，朝向画面右侧）
+  // 阿明少年角色 - 精心设计的2D背影模型
+  drawCharacter(x, y) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(-1, 1); // 水平翻转，朝向画面右侧（抛竿方向）
+    
+    // === 角色身体比例参数 ===
+    const headRadius = 14;      // 头部半径
+    const bodyWidth = 26;       // 身体宽度
+    const bodyHeight = 36;      // 身体高度
+    const armLength = 28;       // 手臂长度
+    const legHeight = 24;       // 腿部长度
+    const footSize = 10;        // 脚部大小
+    
+    // === 头部（少年阿明） ===
+    // 脸部和后脑勺（背影只看到后脑勺和侧面轮廓）
+    ctx.fillStyle = '#FFCC80'; // 肤色
+    ctx.beginPath();
+    ctx.arc(0, -55, headRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 后脑勺/头发（深色短发）
+    ctx.fillStyle = '#3E2723'; // 深棕色头发
+    ctx.beginPath();
+    ctx.arc(2, -58, headRadius + 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 头发高光
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath();
+    ctx.arc(-2, -62, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // === 帽子（草帽/渔夫帽）===
+    ctx.fillStyle = '#8D6E63'; // 帽檐
+    ctx.beginPath();
+    ctx.ellipse(0, -62, 22, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 帽顶
+    ctx.fillStyle = '#A1887F';
+    ctx.beginPath();
+    ctx.ellipse(0, -68, 14, 8, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    
+    // 帽绳
+    ctx.strokeStyle = '#6D4C41';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-14, -62);
+    ctx.quadraticCurveTo(-20, -50, -12, -45);
+    ctx.stroke();
+    
+    // === 身体（背带裤/工作服）===
+    // 衣服主体
+    ctx.fillStyle = '#5C6BC0'; // 蓝色背带裤
+    ctx.fillRect(-bodyWidth/2, -42, bodyWidth, bodyHeight);
+    
+    // 衣服边缘
+    ctx.fillStyle = '#3F51B5';
+    ctx.fillRect(-bodyWidth/2, -42, 3, bodyHeight);
+    ctx.fillRect(bodyWidth/2 - 3, -42, 3, bodyHeight);
+    
+    // 背带
+    ctx.fillStyle = '#3F51B5';
+    ctx.fillRect(-10, -42, 5, 22);
+    ctx.fillRect(5, -42, 5, 22);
+    
+    // 背带扣
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(-8, -35, 4, 4);
+    ctx.fillRect(7, -35, 4, 4);
+    
+    // 口袋
+    ctx.fillStyle = '#3F51B5';
+    ctx.fillRect(6, -20, 8, 10);
+    
+    // === 手臂 ===
+    // 后臂（左手扶竿手）
+    ctx.fillStyle = '#FFCC80';
+    ctx.save();
+    ctx.translate(-bodyWidth/2, -30);
+    ctx.rotate(-0.3); // 微微向后
+    ctx.beginPath();
+    ctx.ellipse(-8, 10, 6, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 手掌
+    ctx.fillStyle = '#F5DEB3';
+    ctx.beginPath();
+    ctx.ellipse(-10, 22, 5, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
+    // 前臂（持竿手，向右伸展）
+    ctx.fillStyle = '#FFCC80';
+    ctx.save();
+    ctx.translate(bodyWidth/2, -28);
+    ctx.rotate(-0.5); // 微微向前伸
+    ctx.beginPath();
+    ctx.ellipse(6, 12, 6, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 手掌
+    ctx.fillStyle = '#F5DEB3';
+    ctx.beginPath();
+    ctx.ellipse(10, 24, 5, 6, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
+    // === 腿部 ===
+    ctx.fillStyle = '#5D4037'; // 深色裤子
+    ctx.fillRect(-12, -6, 10, legHeight);
+    ctx.fillRect(2, -6, 10, legHeight);
+    
+    // 裤子褶皱
+    ctx.strokeStyle = '#4E342E';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-7, -2);
+    ctx.lineTo(-8, 8);
+    ctx.moveTo(7, -2);
+    ctx.lineTo(6, 8);
+    ctx.stroke();
+    
+    // === 脚部/鞋子 ===
+    // 左脚
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-13, 18, 12, footSize);
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(-13, 18 + footSize - 2, 12, 2);
+    
+    // 右脚
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(1, 18, 12, footSize);
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(1, 18 + footSize - 2, 12, 2);
+    
+    // 站立投影（微妙阴影）
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 28, 18, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  // 绘制浮台
+  drawFloatingPlatform(x, y, time) {
+    const ctx = this.ctx;
+    
+    // 浮台尺寸参数（与角色对齐）
+    const platformWidth = 140;      // 浮台宽度，比肩宽更宽
+    const platformHeight = 14;      // 浮台高度（厚度）
+    const platformDepth = 16;       // 浮台深度（厚度感）
+    const floatTubeRadius = 12;    // 浮筒半径
+  
+  // 浮台轻微上下浮动（模拟水面浮力）
+  const floatOffset = Math.sin(time * 1.8) * 2.5;
+  const drawY = y + floatOffset;
+  
+  // === 浮台主体（木质平台）===
+  // 底层（木板厚度）
+  ctx.fillStyle = '#5D4037';
+  ctx.fillRect(x - platformWidth / 2, drawY + platformHeight - 4, platformWidth, 6);
+  
+  // 主平台（木纹效果）
+  ctx.fillStyle = '#A1887F';
+  ctx.fillRect(x - platformWidth / 2, drawY, platformWidth, platformHeight);
+  
+  // 木板纹理线
+  ctx.strokeStyle = '#8D6E63';
+  ctx.lineWidth = 1;
+  for (let i = -platformWidth / 2 + 22; i < platformWidth / 2; i += 24) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, drawY + 2);
+    ctx.lineTo(x + i, drawY + platformHeight - 3);
+    ctx.stroke();
+  }
+  
+  // 水平木纹
+  ctx.strokeStyle = '#8D6E63';
+  ctx.beginPath();
+  ctx.moveTo(x - platformWidth / 2 + 2, drawY + platformHeight / 2);
+  ctx.lineTo(x + platformWidth / 2 - 2, drawY + platformHeight / 2);
+  ctx.stroke();
+  
+  // 平台高光
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.fillRect(x - platformWidth / 2 + 5, drawY + 2, platformWidth - 10, 3);
+  
+  // 平台阴影
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.fillRect(x - platformWidth / 2 + 5, drawY + platformHeight - 5, platformWidth - 10, 2);
+  
+  // === 浮筒（两侧的红色浮标）===
+  const tubeY = drawY + platformHeight;
+  const tubeGap = 8;
+  
+  // 左浮筒
+  ctx.fillStyle = '#D32F2F'; // 红色
+  ctx.beginPath();
+  ctx.ellipse(x - platformWidth / 2 + floatTubeRadius + 4, tubeY + floatTubeRadius, floatTubeRadius, floatTubeRadius + 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // 左浮筒高光
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.beginPath();
+  ctx.arc(x - platformWidth / 2 + floatTubeRadius + 2, tubeY + floatTubeRadius - 2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // 右浮筒
+  ctx.fillStyle = '#D32F2F'; // 红色
+  ctx.beginPath();
+  ctx.ellipse(x + platformWidth / 2 - floatTubeRadius - 4, tubeY + floatTubeRadius, floatTubeRadius, floatTubeRadius + 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // 右浮筒高光
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.beginPath();
+  ctx.arc(x + platformWidth / 2 - floatTubeRadius - 6, tubeY + floatTubeRadius - 2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // === 连接绳索 ===
+  ctx.strokeStyle = '#5D4037';
+  ctx.lineWidth = 2;
+  // 左绳
+  ctx.beginPath();
+  ctx.moveTo(x - platformWidth / 2 + floatTubeRadius, drawY + platformHeight);
+  ctx.lineTo(x - platformWidth / 2 + floatTubeRadius + 2, tubeY);
+  ctx.stroke();
+  // 右绳
+  ctx.beginPath();
+  ctx.moveTo(x + platformWidth / 2 - floatTubeRadius, drawY + platformHeight);
+  ctx.lineTo(x + platformWidth / 2 - floatTubeRadius - 2, tubeY);
+  ctx.stroke();
+  
+  // === 水面波纹（浮台周围）===
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 2;
+  for (let r = 80; r <= 120; r += 20) {
+    ctx.beginPath();
+    ctx.ellipse(x, drawY + platformHeight + floatTubeRadius + 5, r, r * 0.3, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  return floatOffset;
+  }
+  
+  drawBob(x, y, sinking = false) {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#F44336';
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // 浮标顶
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  drawFishingLine(fromX, fromY, toX, toY) {
+    const ctx = this.ctx;
+    ctx.strokeStyle = 'rgba(100,100,100,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    // 曲线
+    const midX = (fromX + toX) / 2;
+    const midY = Math.min(fromY, toY) - 30;
+    ctx.quadraticCurveTo(midX, midY, toX, toY);
+    ctx.stroke();
+  }
+  
+  drawFishShadow(fish, x, y) {
+    const ctx = this.ctx;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = fish.color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, fish.size[0], fish.size[1], 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  
+  // z=200 FX层
+  drawParticles(particles) {
+    particles.draw(this.ctx);
+  }
+  
+  // z=300 HUD层
+  drawHUD(money, fishCount) {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(10, 10, 150, 40);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '20px PingFang SC';
+    ctx.fillText(`💰 ${money}`, 20, 38);
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(170, 10, 120, 40);
+    ctx.fillStyle = '#4FC3F7';
+    ctx.fillText(`🐟 ${fishCount}`, 180, 38);
+  }
+  
+  // z=400 状态特定UI
+  drawAimBar(power, x, y, w, h) {
+    const ctx = this.ctx;
+    // 背景
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+    // 分段
+    const segW = w / 100;
+    for (let i = 0; i < 100; i++) {
+      if (i < 33) ctx.fillStyle = '#9E9E9E';
+      else if (i < 66) ctx.fillStyle = '#4CAF50';
+      else if (i < 95) ctx.fillStyle = '#FFC107';
+      else ctx.fillStyle = '#F44336';
+      ctx.fillRect(x + i * segW, y, segW, h);
+    }
+    // 指针
+    const pointerX = x + power * segW;
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath();
+    ctx.moveTo(pointerX, y - 8);
+    ctx.lineTo(pointerX - 6, y - 2);
+    ctx.lineTo(pointerX + 6, y - 2);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 标签
+    ctx.fillStyle = '#FFF';
+    ctx.font = '14px PingFang SC';
+    ctx.textAlign = 'center';
+    const label = power < 33 ? '弱力' : power < 66 ? '中力' : power < 95 ? '强力' : '⚠️过力!';
+    ctx.fillText(label, x + w / 2, y + h + 20);
+    ctx.textAlign = 'left';
+  }
+  
+  drawTensionBar(tension, maxTension = 100, tensionChange = null) {
+    const ctx = this.ctx;
+    const x = this.w - 220;
+    const y = this.h - 60;
+    const w = 200;
+    const h = 24;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+    
+    // 张力条
+    const tensionColor = tension < 50 ? '#4CAF50' : tension < 80 ? '#FFC107' : '#F44336';
+    const fillW = (tension / maxTension) * w;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = tensionColor;
+    ctx.fillRect(x, y, fillW, h);
+    
+    // 文字
+    ctx.fillStyle = '#FFF';
+    ctx.font = '14px PingFang SC';
+    ctx.fillText(`张力: ${Math.round(tension)}`, x + 5, y + 17);
+    
+    // 张力变化提示
+    if (tensionChange && tensionChange.timer > 0) {
+      const alpha = Math.min(1, tensionChange.timer * 2);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#FF5722';
+      ctx.font = 'bold 20px PingFang SC';
+      ctx.fillText(tensionChange.text, x + w / 2, y - 10);
+      ctx.globalAlpha = 1;
+    }
+  }
+  
+  drawFishHP(hp, maxHP, fishName) {
+    const ctx = this.ctx;
+    const x = this.w - 220;
+    const y = this.h - 100;
+    const w = 200;
+    const h = 24;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+    
+    // HP条
+    const fillW = Math.max(0, (hp / maxHP) * w);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#F44336';
+    ctx.fillRect(x, y, fillW, h);
+    
+    // 文字
+    ctx.fillStyle = '#FFF';
+    ctx.font = '14px PingFang SC';
+    ctx.fillText(`${fishName} HP: ${Math.round(hp)}`, x + 5, y + 17);
+  }
+  
+  drawQTEArrow(direction, timeLeft, maxTime) {
+    const ctx = this.ctx;
+    const cx = this.w / 2;
+    const cy = this.h / 2;
+    
+    // 背景遮罩
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    
+    // 大箭头
+    const arrows = { up: '↑', down: '↓', left: '←', right: '→' };
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 96px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(arrows[direction], cx, cy - 30);
+    
+    // 倒计时圆环
+    const radius = 60;
+    const progress = timeLeft / maxTime;
+    ctx.strokeStyle = progress > 0.3 ? '#4CAF50' : '#F44336';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 30, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.stroke();
+    
+    // 时间文字
+    ctx.fillStyle = '#FFF';
+    ctx.font = '24px PingFang SC';
+    ctx.fillText(Math.ceil(timeLeft * 10) / 10 + 's', cx, cy + 60);
+    
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+  
+  drawBiteAlert(timeLeft) {
+    const ctx = this.ctx;
+    const cx = this.w / 2;
+    const cy = this.h / 2;
+    
+    ctx.fillStyle = 'rgba(255,0,0,0.2)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    
+    // 闪烁感叹号
+    const flash = Math.sin(Date.now() / 100) > 0;
+    if (flash) {
+      ctx.fillStyle = '#FF0000';
+      ctx.font = 'bold 120px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', cx, cy);
+      
+      ctx.fillStyle = '#FFF';
+      ctx.font = '28px PingFang SC';
+      ctx.fillText('快按 E 提竿!', cx, cy + 80);
+      
+      ctx.font = '20px PingFang SC';
+      ctx.fillText(`剩余 ${(timeLeft * 10).toFixed(1)}s`, cx, cy + 120);
+      
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
+  
+  drawCastingAnimation(t, fromX, fromY, toX, toY) {
+    const ctx = this.ctx;
+    const x = fromX + (toX - fromX) * t;
+    const baseY = fromY + (toY - fromY) * t;
+    const arc = 150 * t * (1 - t); // 抛物线高度
+    const y = baseY - arc;
+    
+    // 浮标
+    ctx.fillStyle = '#F44336';
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 鱼饵线
+    ctx.strokeStyle = 'rgba(100,100,100,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.quadraticCurveTo((fromX + x) / 2, Math.min(fromY, y) - 50, x, y);
+    ctx.stroke();
+  }
+  
+  // 遛鱼视角：2D平面视图
+  drawPlayingScene(fishX, fishY, fishColor, fishSize, tension, maxTension, fishHP, maxHP, fishName, holdingSpace, lineStartX, lineStartY) {
+    const ctx = this.ctx;
+    const w = this.w;
+    const h = this.h;
+    
+    // 绘制水面背景
+    const waterGrad = ctx.createLinearGradient(0, 0, 0, h);
+    waterGrad.addColorStop(0, '#1a5f7a');
+    waterGrad.addColorStop(0.5, '#2d8faf');
+    waterGrad.addColorStop(1, '#0d3d4d');
+    ctx.fillStyle = waterGrad;
+    ctx.fillRect(0, 0, w, h);
+    
+    // 水波效果
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const yPos = 80 + i * 70;
+      ctx.beginPath();
+      for (let x = 0; x < w; x += 5) {
+        const waveY = yPos + Math.sin((x + this.time * 80 + i * 50) / 60) * 8;
+        if (x === 0) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+    }
+    
+    // 鱼线（不带鱼竿）
+    const lineEndX = fishX;
+    const lineEndY = fishY;
+    
+    // 鱼线（带张力效果）
+    // 张力颜色：绿色(40以下) → 橙色(40-70) → 红色(70以上)
+    const tensionRatio = tension / maxTension;
+    if (tensionRatio > 0.7) {
+      ctx.strokeStyle = '#ff4444'; // 红色 - 极限
+    } else if (tensionRatio > 0.4) {
+      ctx.strokeStyle = '#ffaa00'; // 橙色 - 中等
+    } else {
+      ctx.strokeStyle = '#44ff44'; // 绿色 - 充沛
+    }
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(lineStartX, lineStartY);
+    
+    // 根据张力计算线的弧度
+    const sag = tension > 50 ? 20 - (tension - 50) * 0.5 : 20;
+    const midX = (lineStartX + lineEndX) / 2;
+    const midY = Math.max(lineStartY, lineEndY) + sag;
+    ctx.quadraticCurveTo(midX, midY, lineEndX, lineEndY);
+    ctx.stroke();
+    
+    // 鱼钩（挂在鱼嘴上）
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(lineEndX, lineEndY, 6, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 绘制鱼
+    this.drawPlayingFish(fishX, fishY, fishColor, fishSize, holdingSpace);
+    
+    // 提示文字（左上角）
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(20, 20, 200, 40);
+    ctx.fillStyle = '#FFF';
+    ctx.font = '16px PingFang SC';
+    ctx.textAlign = 'center';
+    ctx.fillText(holdingSpace ? '✓ 拉回中...' : '按住 空格键 拉回鱼', 120, 45);
+    ctx.textAlign = 'left';
+  }
+  
+  // 捕获后的出水画面
+  drawCaughtScene() {
+    const ctx = this.ctx;
+    const w = this.w;
+    const h = this.h;
+    const fish = this.caughtFish;
+    
+    // 天空渐变
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.4);
+    skyGrad.addColorStop(0, '#FF8C00');
+    skyGrad.addColorStop(0.5, '#FFB347');
+    skyGrad.addColorStop(1, '#FFE4B5');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, h * 0.4);
+    
+    // 水面
+    ctx.fillStyle = '#4A90A4';
+    ctx.fillRect(0, h * 0.4, w, h * 0.6);
+    
+    // 水波
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    for (let y = h * 0.45; y < h; y += 25) {
+      ctx.beginPath();
+      for (let x = 0; x < w; x += 5) {
+        const waveY = y + Math.sin((x + this.time * 60) / 50) * 6;
+        if (x === 0) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+    }
+    
+    // 鱼的渐变出水动画
+    const t = Math.min(1, (this.caughtTimer - CONFIG.caught.animationDuration) / 1.0);
+    const fishY = h * 0.7 - t * h * 0.4;
+    const fishScale = 0.5 + t * 0.5;
+    
+    // 绘制大鱼
+    ctx.save();
+    ctx.translate(w / 2, fishY);
+    ctx.scale(fishScale, fishScale);
+    
+    // 鱼身
+    ctx.fillStyle = fish.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 80, 40, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 鱼尾
+    ctx.beginPath();
+    ctx.moveTo(-70, 0);
+    ctx.lineTo(-110, -30);
+    ctx.lineTo(-110, 30);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 鱼鳍
+    ctx.beginPath();
+    ctx.moveTo(0, -30);
+    ctx.lineTo(-20, -60);
+    ctx.lineTo(30, -40);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 眼睛
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath();
+    ctx.arc(50, -10, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(53, -10, 7, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 水花效果
+    if (t < 0.5) {
+      const splashAlpha = 1 - t * 2;
+      ctx.globalAlpha = splashAlpha * 0.5;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI + Math.sin(this.time * 10) * 0.2;
+        const r = 100 + Math.sin(this.time * 8 + i) * 20;
+        ctx.fillStyle = '#87CEEB';
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * r, -20 + Math.sin(angle) * 30, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    
+    ctx.restore();
+    
+    // 鱼获信息面板
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(w / 2 - 150, 50, 300, 120);
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(w / 2 - 150, 50, 300, 120);
+    
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 28px PingFang SC';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎉 钓到了!', w / 2, 80);
+    
+    ctx.fillStyle = '#FFF';
+    ctx.font = '24px PingFang SC';
+    ctx.fillText(fish.name, w / 2, 110);
+    
+    ctx.font = '18px PingFang SC';
+    ctx.fillStyle = '#4FC3F7';
+    ctx.fillText(`★`.repeat(fish.rarity), w / 2, 135);
+    
+    ctx.fillStyle = '#AAA';
+    ctx.font = '16px PingFang SC';
+    ctx.fillText(`尺寸: ${this.caughtFishSize || fish.size[0]}cm  价格: $${fish.price}`, w / 2, 160);
+    
+    ctx.textAlign = 'left';
+    
+    // 新鱼提示
+    if (this.isNewFish && !this.newFishHintShown) {
+      this.newFishHintShown = true;
+    }
+  }
+  
+  drawPlayingFish(x, y, color, size, struggling) {
+    const ctx = this.ctx;
+    const scale = size / 30; // 基于基准大小缩放
+    const flip = struggling ? -1 : 1;
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(flip, 1);
+    
+    // 挣扎动画
+    if (struggling) {
+      ctx.rotate(Math.sin(this.time * 20) * 0.2);
+    }
+    
+    // 鱼身
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 40 * scale, 20 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 鱼尾
+    ctx.beginPath();
+    ctx.moveTo(-30 * scale, 0);
+    ctx.lineTo(-55 * scale, -15 * scale);
+    ctx.lineTo(-55 * scale, 15 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 鱼鳍
+    ctx.beginPath();
+    ctx.moveTo(0, -15 * scale);
+    ctx.lineTo(-10 * scale, -30 * scale);
+    ctx.lineTo(10 * scale, -20 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 眼睛
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath();
+    ctx.arc(25 * scale, -5 * scale, 8 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(27 * scale, -5 * scale, 4 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 嘴巴（挂钩位置）
+    ctx.fillStyle = '#d00';
+    ctx.beginPath();
+    ctx.arc(40 * scale, 5 * scale, 5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+  
+  drawPlayingRod(startX, startY) {
+    const ctx = this.ctx;
+    // 竿身
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(startX - 50, startY + 30);
+    ctx.lineTo(startX, startY);
+    ctx.stroke();
+    
+    // 把手
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(startX - 60, startY + 20, 20, 15);
+  }
+  
+  // 抖动效果
+  applyShake(intensity, duration) {
+    if (duration > 0) {
+      const offsetX = (Math.random() - 0.5) * intensity;
+      const offsetY = (Math.random() - 0.5) * intensity;
+      // 使用 setTransform 确保变换是绝对的，不受之前状态影响
+      const currentTransform = this.ctx.getTransform();
+      this.ctx.setTransform(
+        currentTransform.a,
+        currentTransform.b,
+        currentTransform.c,
+        currentTransform.d,
+        currentTransform.e + offsetX,
+        currentTransform.f + offsetY
+      );
+    }
+  }
+  
+  save() { this.ctx.save(); }
+  restore() { this.ctx.restore(); }
+  
+  resetTransform() {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+}
+
+// ============================================================
+// Atlas - 图鉴系统
+// ============================================================
+class Atlas {
+  constructor() {
+    this.caughtFish = new Set();
+  }
+  
+  addFish(fishId) {
+    this.caughtFish.add(fishId);
+  }
+  
+  hasFish(fishId) {
+    return this.caughtFish.has(fishId);
+  }
+  
+  getNewFish() {
+    return Array.from(this.caughtFish);
+  }
+}
+
+// ============================================================
+// FishingGame - 主游戏类
+// ============================================================
+class FishingGame {
+  constructor() {
+    this.canvas = document.getElementById('gameCanvas');
+    this.renderer = new Renderer(this.canvas);
+    this.input = new InputSystem();
+    this.audio = new AudioSystem();
+    this.particles = new ParticleSystem();
+    this.atlas = new Atlas();
+    this.fsm = new StateMachine();
+    
+    this.money = 0;
+    this.fishCount = 0;
+    
+    this.aimPower = 0;
+    this.aimDirection = 1; // 1=上升, -1=下降
+    this.castProgress = 0;
+    this.castFrom = { x: 0, y: 0 };
+    this.castTo = { x: 0, y: 0 };
+    
+    this.waitTimer = 0;
+    this.currentFish = null;
+    this.fishShadow = null;
+    this.fishShadowPos = { x: 0, y: 0 };
+    this.biteCount = 0;
+    this.biteSinking = false;
+    this.biteSinkingProgress = 0;
+    this.biteResumeTimer = 0;
+    
+    this.biteWindowTimer = 0;
+    
+    this.qteIndex = 0;
+    this.qteTotal = 0;
+    this.qteDirection = '';
+    this.qteTimer = 0;
+    this.qteMaxTime = 0;
+    this.fishHP = 0;
+    this.tension = 0;
+    this.qteResult = '';
+    this.qteResultColor = '#FFF';
+    this.tensionChangeText = '';
+    this.tensionChangeTimer = 0;
+    
+    this.caughtTimer = 0;
+    this.failedTimer = 0;
+    this.failedReason = '';
+    this.timeScale = 1;
+    this.glowTimer = 0;
+    
+    this.showAtlasPanel = false;
+    this.showingFishInfo = false;
+    this.lastTime = 0;
+    
+    // 主角站在屏幕正下方的浮台上
+    this.characterX = this.renderer.w / 2;  // 屏幕正中央
+    this.platformY = this.renderer.h - 50;  // 浮台底部位置（离底部50px）
+    // 角色脚底与浮台顶部精准对齐（浮台高14px，脚底在角色坐标y=28处）
+    this.characterY = this.platformY - 28;  // 脚底对齐浮台顶部（浮动时由floatOffset调整）
+    this.bobX = this.characterX + 20;
+    this.bobY = this.renderer.h * 0.5 + 60; // 统一水面浮标位置
+    
+    this.hideAllPanels();
+    document.getElementById('startPanel').classList.add('active');
+    this.updateHint('按 E 开始钓鱼');
+  }
+  
+  hideAllPanels() {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  }
+  
+  updateHint(text) {
+    document.getElementById('hint').textContent = text;
+  }
+  
+  start() {
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.loop.bind(this));
+  }
+  
+  loop(timestamp) {
+    const rawDt = (timestamp - this.lastTime) / 1000;
+    this.lastTime = timestamp;
+    const dt = Math.min(rawDt, 0.1) * this.timeScale;
+    this.renderer.time += dt;
+    
+    this.update(dt);
+    this.render();
+    
+    requestAnimationFrame(this.loop.bind(this));
+  }
+  
+  update(dt) {
+    // 恢复时间缩放
+    if (this.fsm.is('Caught') && this.caughtTimer > 0) {
+      // 慢动作效果在update后处理
+    }
+    
+    switch (this.fsm.state) {
+      case 'Idle':
+        this.updateIdle();
+        break;
+      case 'Aiming':
+        this.updateAiming(dt);
+        break;
+      case 'Casting':
+        this.updateCasting(dt);
+        break;
+      case 'Waiting':
+        this.updateWaiting(dt);
+        break;
+      case 'BiteWindow':
+        this.updateBiteWindow(dt);
+        break;
+      case 'Reeling':
+        this.updateReeling(dt);
+        break;
+      case 'Playing':
+        this.updatePlaying(dt);
+        break;
+      case 'Caught':
+        this.updateCaught(dt);
+        break;
+      case 'Failed':
+        this.updateFailed(dt);
+        break;
+    }
+    
+    // 粒子更新
+    this.particles.update(dt);
+    
+    // 输入缓冲清理
+    this.input.clearPressed();
+  }
+  
+  updateIdle() {
+    if (this.input.wasPressed('e') || this.input.wasPressed(' ')) {
+      this.hideAllPanels(); // 关闭开始界面
+      this.fsm.transition('Aiming', 'press E');
+      this.aimPower = 0;
+      this.aimDirection = 1;
+      this.audio.init();
+      this.updateHint('按住 E 蓄力... 松开抛竿 | Q 取消');
+    }
+    if (this.input.wasPressed('b')) {
+      this.toggleAtlas();
+    }
+  }
+  
+  updateAiming(dt) {
+    // 蓄力值循环
+    const cfg = CONFIG.aiming;
+    const period = cfg.chargeCycle * 2; // 往返周期
+    const cycleTime = (performance.now() / 1000) % period;
+    
+    if (cycleTime < cfg.chargeCycle) {
+      this.aimPower = (cycleTime / cfg.chargeCycle) * 100;
+    } else {
+      this.aimPower = 100 - ((cycleTime - cfg.chargeCycle) / cfg.chargeCycle) * 100;
+    }
+    this.aimPower = Math.round(this.aimPower);
+    
+    // 松开E
+    if (!this.input.isDown('e') && !this.input.isDown(' ')) {
+      if (this.aimPower >= cfg.powerOverload) {
+        this.fsm.transition('Failed', 'overload');
+        this.failedReason = 'overload';
+        this.showFailed();
+      } else {
+        this.fsm.transition('Casting', 'release E');
+        this.castProgress = 0;
+        // 抛竿起点：右手手掌位置（翻转后屏幕坐标）
+        this.castFrom = { x: this.characterX - 23, y: this.characterY - 4 };
+        // 根据蓄力值决定落点
+        let distance;
+        if (this.aimPower <= cfg.powerWeakMax) distance = 80;
+        else if (this.aimPower <= cfg.powerMidMax) distance = 160;
+        else distance = 280;
+        this.castTo = { 
+          x: Math.min(this.renderer.w - 50, this.characterX + distance),
+          y: this.renderer.h * 0.55 + 40
+        };
+        this.bobX = this.castTo.x;
+        this.bobY = this.castTo.y;
+        this.audio.play('cast');
+        this.updateHint('');
+      }
+    }
+    
+    // Q取消
+    if (this.input.wasPressed('q') || this.input.wasPressed('escape')) {
+      this.fsm.transition('Idle', 'cancel');
+      this.updateHint('按住 E 或 空格 开始钓鱼');
+    }
+  }
+
+  updateCasting(dt) {
+    const cfg = CONFIG.aiming;
+    this.castProgress += dt / cfg.castDuration;
+    
+    if (this.castProgress >= 1) {
+      this.fsm.transition('Waiting', 'cast complete');
+      this.waitTimer = 0;
+      this.currentFish = null;
+      this.fishShadow = null;
+      this.updateHint('等待鱼儿上钩... Q 收回');
+    }
+  }
+  
+  updateWaiting(dt) {
+    this.waitTimer += dt;
+    
+    // 处理咬钩下沉动画
+    this.updateWaitingBite(dt);
+    
+    // 生成鱼影
+    if (!this.fishShadow && this.waitTimer >= CONFIG.waiting.fishSpawnDelay) {
+      this.selectFish();
+      if (this.currentFish) {
+        this.fishShadow = { ...this.currentFish };
+        // 随机方向生成
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.fishShadowPos = {
+          x: this.bobX + side * (100 + Math.random() * 100),
+          y: this.bobY + (Math.random() - 0.5) * 40
+        };
+        this.fishShadow.targetX = this.bobX;
+        this.fishShadow.targetY = this.bobY;
+        this.fishShadow.moving = true;
+      }
+    }
+    
+    // 鱼影移动
+    if (this.fishShadow && this.fishShadow.moving) {
+      const dx = this.fishShadow.targetX - this.fishShadowPos.x;
+      const dy = this.fishShadow.targetY - this.fishShadowPos.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist > 5) {
+        const speed = CONFIG.fish.travelSpeed;
+        this.fishShadowPos.x += (dx / dist) * speed * dt;
+        this.fishShadowPos.y += (dy / dist) * speed * dt;
+      } else {
+        // 到达浮标，决定是否咬钩
+        this.fishShadow.moving = false;
+        // 修复：计算出的 prob 应该作为阈值来判断咬钩概率
+        const biteProb = this.currentFish.baseProb + Math.random() * 0.4;
+        if (Math.random() < biteProb) {
+          this.startBite();
+        } else {
+          // 鱼不咬钩，游走了，重置以便生成新鱼
+          console.log('[WAITING] 鱼游走了，等待下一条...');
+          this.fishShadow = null;
+          this.waitTimer = CONFIG.waiting.fishSpawnDelay - 0.5; // 稍等后重新生成
+        }
+      }
+    }
+    
+    // Q收回
+    if (this.input.wasPressed('q') || this.input.wasPressed('escape')) {
+      this.resetToIdle();
+    }
+  }
+  
+  selectFish() {
+    const totalProb = FISH_POOL.reduce((sum, f) => sum + f.baseProb, 0);
+    let rand = Math.random() * totalProb;
+    
+    for (const fish of FISH_POOL) {
+      rand -= fish.baseProb;
+      if (rand <= 0) {
+        this.currentFish = { ...fish };
+        this.currentFish.maxHP = fish.rarity * 80;
+        this.fishHP = this.currentFish.maxHP;
+        break;
+      }
+    }
+  }
+  
+  startBite() {
+    this.biteCount = 0;
+    this.biteSinking = true;
+    this.biteSinkingProgress = 0;
+    this.biteResumeTimer = 0;
+    console.log('[BITE] 鱼开始咬钩');
+  }
+  
+  updateWaitingBite(dt) {
+    // 确保状态正确
+    if (!this.fsm.is('Waiting')) {
+      return; // 不是等待状态，不处理
+    }
+    
+    // 检查是否需要开始下一次下沉
+    if (!this.biteSinking && this.biteCount > 0 && this.biteCount < CONFIG.waiting.biteSinkCount) {
+      this.biteResumeTimer -= dt;
+      if (this.biteResumeTimer <= 0) {
+        this.biteSinking = true;
+        this.biteSinkingProgress = 0;
+        console.log(`[BITE] 开始第 ${this.biteCount + 1} 次下沉`);
+      }
+    }
+    
+    if (this.biteSinking) {
+      this.biteSinkingProgress += dt / CONFIG.waiting.biteSinkDuration;
+      if (this.biteSinkingProgress >= 1) {
+        this.biteSinking = false;
+        this.biteSinkingProgress = 0;
+        this.bobY = this.renderer.h * 0.65 + 40;
+        
+        this.biteCount++;
+        this.audio.play('bite');
+        console.log(`[BITE] 第 ${this.biteCount} 次下沉完成`);
+        
+        if (this.biteCount >= CONFIG.waiting.biteSinkCount) {
+          // 咬钩完成，进入提竿窗口
+          this.fsm.transition('BiteWindow', 'fish bite complete');
+          this.biteWindowTimer = CONFIG.biteWindow.duration;
+          this.updateHint('!!! 按 E 提竿 !!!');
+          console.log('[BITE] 进入BiteWindow，提竿窗口开启');
+        } else {
+          // 设置下次下沉延迟
+          this.biteResumeTimer = 0.2; // 200ms后继续下沉
+          console.log(`[BITE] 等待第 ${this.biteCount + 1} 次下沉...`);
+        }
+      } else {
+        // 下沉动画
+        this.bobY = this.renderer.h * 0.65 + 40 + CONFIG.waiting.biteSinkDepth * this.biteSinkingProgress;
+      }
+    }
+  }
+  
+  updateBiteWindow(dt) {
+    this.biteWindowTimer -= dt;
+    
+    if (this.input.wasPressed('e') || this.input.wasPressed(' ')) {
+      this.startReeling();
+      return;
+    }
+    
+    if (this.biteWindowTimer <= 0) {
+      this.fsm.transition('Failed', 'timeout');
+      this.failedReason = 'timeout';
+      this.showFailed();
+    }
+  }
+  
+  startReeling() {
+    console.log('[BITE] 提竿成功! 进入遛鱼状态');
+    this.fsm.transition('Playing', 'success bite');
+    this.initPlayingState();
+    console.log('[PLAYING] 初始化完成 - fishHP:', this.fishHP, 'maxHP:', this.currentFish.maxHP);
+    this.updateHint('按住空格键阻止鱼逃跑!');
+  }
+  
+  updateReeling(dt) {
+    this.qteTimer -= dt;
+    
+    // 张力自然衰减
+    this.tension = Math.max(0, this.tension - CONFIG.reeling.tensionDecayPerFrame * dt * 60);
+    
+    // 更新张力变化提示计时器
+    if (this.tensionChangeTimer > 0) {
+      this.tensionChangeTimer -= dt;
+      if (this.tensionChangeTimer <= 0) {
+        this.tensionChangeText = '';
+      }
+    }
+    
+    // 检测输入
+    let pressed = null;
+    if (this.input.wasPressed('up') || this.input.wasPressed('w')) pressed = 'up';
+    else if (this.input.wasPressed('down') || this.input.wasPressed('s')) pressed = 'down';
+    else if (this.input.wasPressed('left') || this.input.wasPressed('a')) pressed = 'left';
+    else if (this.input.wasPressed('right') || this.input.wasPressed('d')) pressed = 'right';
+    
+    if (pressed) {
+      if (pressed === this.qteDirection) {
+        // 正确
+        const dmg = CONFIG.reeling.hpDamageByRarity[this.currentFish.rarity - 1];
+        this.fishHP -= dmg;
+        this.tension = Math.max(0, this.tension - CONFIG.reeling.tensionSuccessBonus);
+        this.qteResult = 'Good!';
+        this.qteResultColor = '#4CAF50';
+        this.audio.play('good');
+        this.completeQTE();
+      } else {
+        // 错误 - 显示张力增长提示
+        const penalty = CONFIG.reeling.tensionFailPenalty;
+        this.tension += penalty;
+        this.qteResult = `张力 +${penalty}!`;
+        this.qteResultColor = '#FF5722';
+        this.audio.play('bad');
+        this.completeQTE();
+        
+        // 显示张力变化动画
+        this.showTensionChange(penalty);
+      }
+    } else if (this.qteTimer <= 0) {
+      // 超时
+      const penalty = CONFIG.reeling.tensionTimeoutPenalty;
+      this.tension += penalty;
+      this.qteResult = `超时 +${penalty}`;
+      this.qteResultColor = '#FFC107';
+      this.audio.play('miss');
+      this.completeQTE();
+      
+      // 显示张力变化动画
+      this.showTensionChange(penalty);
+    }
+    
+    // 判定胜负
+    if (this.tension >= 100) {
+      this.fsm.transition('Failed', 'tension overflow');
+      this.failedReason = 'tension';
+      this.showFailed();
+    } else if (this.fishHP <= 0) {
+      this.fsm.transition('Caught', 'fish caught');
+      this.showCaught();
+    }
+  }
+  
+  showTensionChange(amount) {
+    // 张力变化提示（用于显示在张力条旁边）
+    this.tensionChangeText = `+${amount}`;
+    this.tensionChangeTimer = 0.8;
+  }
+  
+  updatePlaying(dt) {
+    const cfg = CONFIG.playing;
+    const holdingSpace = this.input.isDown(' ') || this.input.isDown('space');
+    const w = this.renderer.w;
+    const h = this.renderer.h;
+    
+    // 1. 鱼的HP随时间减少（基于鱼的稀有度）
+    const hpDecayRate = 5 + this.currentFish.rarity * 3; // 每秒HP减少量
+    if (this.fishHP > 0) {
+      this.fishHP = Math.max(0, this.fishHP - hpDecayRate * dt);
+    }
+    
+    // 2. 当HP为0时，鱼不再挣扎
+    const fishExhausted = this.fishHP <= 0;
+    
+    // 张力音效
+    if (this.tension > 70 && !this.highTensionSound) {
+      this.highTensionSound = true;
+      this.audio.play('reeling');
+    } else if (this.tension <= 70) {
+      this.highTensionSound = false;
+    }
+    
+    // 张力接近极限时的警告提示
+    if (this.tension > cfg.maxTension * 0.85 && !this.warningShown) {
+      this.warningShown = true;
+      this.updateHint('⚠️ 即将断线！松开空格！');
+    } else if (this.tension <= cfg.maxTension * 0.85 && this.warningShown) {
+      this.warningShown = false;
+      this.updateHint('按住空格键阻止鱼逃跑!');
+    }
+    
+    // 3. 当张力接近极限时，如果继续按住空格键，随机断线
+    if (this.tension > cfg.maxTension * 0.9 && holdingSpace) {
+      // 每次检测有概率断线（概率随张力增加）
+      const breakChance = (this.tension - cfg.maxTension * 0.9) / (cfg.maxTension * 0.1) * 0.3 * dt;
+      if (Math.random() < breakChance) {
+        console.log('[PLAYING] 张力过大，断线了！');
+        this.fsm.transition('Failed', 'tension overflow');
+        this.failedReason = 'tension';
+        this.showFailed();
+        return;
+      }
+    }
+    
+    // 根据鱼的个体大小计算拉回能力
+    const sizeFactor = this.currentFish.size[0] / 30;
+    
+    if (holdingSpace && !fishExhausted) {
+      // 按住空格：拉回鱼，张力消耗
+      const pullSpeed = 80 + sizeFactor * 40;
+      const tensionDecay = cfg.tensionDecayPerSecond * (1 + (sizeFactor - 1) * 0.3);
+      
+      this.tension = Math.max(0, this.tension - tensionDecay * dt);
+      this.playingFishX += pullSpeed * dt; // 鱼往右拉回
+      this.escapeSpeed = cfg.fishEscapeSpeed * 0.3; // 减慢逃跑
+      this.escapeBurstTimer = 0; // 重置冲刺计时器
+    } else if (!fishExhausted) {
+      // 松开空格：鱼逃跑
+      if (this.escapeBurstTimer > 0) {
+        // 冲刺阶段：0.2秒内快速逃跑
+        this.escapeBurstTimer -= dt;
+        this.escapeSpeed = cfg.fishEscapeSpeed * 3; // 3倍速度冲刺
+        this.tension += cfg.tensionPerSecond * 1.5 * dt; // 冲刺时张力增长更快
+      } else {
+        // 恢复正常逃跑速度
+        this.escapeSpeed += cfg.fishEscapeSpeedIncrease * dt;
+        this.tension += cfg.tensionPerSecond * dt;
+      }
+    } else {
+      // 鱼已精疲力竭，无法逃跑
+      this.escapeSpeed = 0;
+      // 缓慢拉向右侧
+      this.playingFishX += 30 * dt;
+    }
+    
+    // 鱼始终向左逃跑（或被拉回）
+    this.playingFishX -= this.escapeSpeed * dt;
+    
+    // 限制鱼的左右范围
+    this.playingFishX = Math.max(-20, Math.min(w - 60, this.playingFishX));
+    
+    // Y轴游动：缩小浮动范围
+    this.fishYTime += dt * 1.5;
+    
+    // 捕获区域：画面右侧10%（鱼被拉近时停止上下游动）
+    const catchZoneRight = w * 0.9;
+    if (this.playingFishX >= catchZoneRight || fishExhausted) {
+      // 鱼在捕获区域或已精疲力竭，不再上下游动
+      this.fishYTime = 0; // 重置游动时间
+    } else {
+      // 正常游动
+      const yAmplitude = h * 0.1;
+      this.playingFishY = this.fishYCenter + Math.sin(this.fishYTime) * yAmplitude;
+    }
+    
+    // 捕获条件：鱼在右侧10%范围 + 按住空格拉出水面，或者鱼已精疲力竭
+    if ((this.playingFishX >= w * cfg.catchZoneX && holdingSpace) || fishExhausted) {
+      // 强制拉向水面
+      const pullUpSpeed = fishExhausted ? 150 : 100;
+      this.playingFishY -= pullUpSpeed * dt;
+      
+      // 检测是否拉出水面
+      if (this.playingFishY <= h * cfg.catchZoneY) {
+        console.log(`[PLAYING] 捕获成功! x=${this.playingFishX}, y=${this.playingFishY}`);
+        this.fsm.transition('Caught', 'fish caught');
+        this.showCaught();
+        return;
+      }
+    }
+    
+    if (this.tension >= cfg.maxTension) {
+      // 断线
+      this.fsm.transition('Failed', 'tension overflow');
+      this.failedReason = 'tension';
+      this.showFailed();
+    } else if (this.playingFishX < -20) {
+      // 鱼跑出画面，直接失败回到抛竿
+      console.log('[PLAYING] 鱼跑掉了!');
+      this.fsm.transition('Failed', 'escape');
+      this.failedReason = 'escape';
+      this.showFailed();
+    }
+  }
+  
+  initPlayingState() {
+    // 初始化遛鱼状态
+    const cfg = CONFIG.playing;
+    const w = this.renderer.w;
+    const h = this.renderer.h;
+    
+    // 鱼线起点：画面右上角
+    this.lineStartX = w - 50;
+    this.lineStartY = 80;
+    
+    // 鱼从屏幕右侧进入，随机出现在屏幕中央50%区域
+    this.playingFishX = w + 60;
+    const centerY = h * 0.5;
+    const rangeY = h * 0.25; // 中心上下25%范围
+    this.playingFishY = centerY + (Math.random() - 0.5) * rangeY * 2;
+    
+    this.escapeSpeed = cfg.fishEscapeSpeed;
+    this.baseEscapeSpeed = cfg.fishEscapeSpeed;
+    this.tension = 30;
+    this.escapeBurstTimer = 0;
+    
+    // 鱼的Y轴游动参数
+    this.fishYCenter = this.playingFishY;
+    this.fishYTime = Math.random() * Math.PI * 2;
+    
+    // 新增状态变量
+    this.warningShown = false;
+    this.updateHint('按住空格键阻止鱼逃跑!');
+  }
+  
+  completeQTE() {
+    this.qteIndex++;
+    this.qteResult = this.qteResult; // 保留显示
+    
+    setTimeout(() => {
+      this.qteResult = '';
+    }, 300);
+    
+    if (this.qteIndex >= this.qteTotal) {
+      if (this.fishHP > 0) {
+        // QTE用完但鱼还活着
+        this.fsm.transition('Failed', 'escape');
+        this.failedReason = 'escape';
+        this.showFailed();
+      }
+    } else {
+      this.nextQTE();
+    }
+  }
+  
+  updateCaught(dt) {
+    this.caughtTimer += dt;
+    
+    // 慢动作效果
+    if (this.currentFish.rarity >= CONFIG.caught.slowmoThreshold) {
+      this.timeScale = CONFIG.caught.slowmoScale;
+    }
+    
+    // 金光效果
+    if (this.currentFish.legendary) {
+      this.glowTimer += dt;
+    }
+    
+    // 显示出水动画（约2秒），然后显示鱼获信息
+    if (this.caughtTimer >= CONFIG.caught.animationDuration && !this.showingFishInfo) {
+      this.showingFishInfo = true;
+      this.showFishCaughtInfo();
+    }
+    
+    // 按任意键关闭
+    if (this.showingFishInfo) {
+      const ePressed = this.input.keyPressed['e'];
+      const spacePressed = this.input.keyPressed['space'];
+      if (ePressed || spacePressed) {
+        this.input.clearPressed();
+        this.hideAllPanels();
+        this.resetToWaiting(); // 返回抛竿状态继续钓鱼
+      }
+    }
+  }
+  
+  updateFailed(dt) {
+    this.failedTimer += dt;
+    if (this.failedTimer >= CONFIG.failed.resetDuration) {
+      if (this.failedReason === 'escape') {
+        this.resetToWaiting();
+      } else {
+        this.resetToIdle();
+      }
+    }
+  }
+  
+  showCaught() {
+    this.caughtTimer = 0;
+    this.showingFishInfo = false;
+    this.newFishHintShown = false;
+    this.caughtFish = this.currentFish;
+    
+    // 计算尺寸
+    const baseSize = this.currentFish.size[0];
+    const sizeVar = baseSize * 0.2;
+    this.caughtFishSize = Math.round(baseSize + (Math.random() - 0.5) * 2 * sizeVar);
+    
+    // 检查是否新图鉴
+    this.isNewFish = !this.atlas.hasFish(this.currentFish.id);
+    if (this.isNewFish) {
+      this.atlas.addFish(this.currentFish.id);
+    }
+    
+    // 更新统计
+    this.fishCount++;
+    this.money += this.currentFish.price;
+    
+    // 不显示面板，等待动画完成后显示Canvas画面
+    this.hideAllPanels();
+    
+    // 粒子效果
+    this.particles.emit(this.playingFishX || this.bobX, this.playingFishY || this.bobY, CONFIG.caught.particleCount, '#87CEEB', { upward: true });
+    this.particles.emit(this.playingFishX || this.bobX, this.playingFishY || this.bobY, CONFIG.caught.particleCount, '#FFF', { speed: 60 });
+    
+    this.audio.play('caught');
+  }
+  
+  showFishCaughtInfo() {
+    // 显示捕获结算面板
+    const panel = document.getElementById('caughtPanel');
+    const rarity = this.currentFish.rarity;
+    const stars = '★'.repeat(rarity) + '☆'.repeat(5 - rarity);
+    
+    document.getElementById('caughtRarity').textContent = stars;
+    document.getElementById('caughtName').textContent = this.currentFish.name;
+    document.getElementById('caughtSize').textContent = this.caughtFishSize + 'cm';
+    document.getElementById('caughtPrice').textContent = this.currentFish.price;
+    
+    // 新鱼提示
+    const newFishHint = document.getElementById('newFishHint');
+    if (this.isNewFish) {
+      newFishHint.style.display = 'block';
+      newFishHint.textContent = '★★ 新增图鉴!';
+    } else {
+      newFishHint.style.display = 'none';
+    }
+    
+    panel.classList.add('active');
+  }
+  
+  showFailed() {
+    this.failedTimer = 0;
+    this.hideAllPanels();
+    const panel = document.getElementById('failedPanel');
+    const msgs = FAILED_MESSAGES[this.failedReason] || ['失败...'];
+    document.getElementById('failedReason').textContent = msgs[Math.floor(Math.random() * msgs.length)];
+    panel.classList.add('active');
+    this.audio.play('failed');
+  }
+
+  resetToWaiting() {
+    // 回到抛竿场景
+    this.fsm.transition('Waiting', 'reset');
+    this.timeScale = 1;
+    this.waitTimer = 0;
+    this.caughtTimer = 0;
+    this.caughtFish = null;
+    this.caughtFishSize = 0;
+    this.currentFish = null;
+    this.fishShadow = null;
+    this.biteSinking = false;
+    this.biteCount = 0;
+    this.biteSinkingProgress = 0;
+    this.biteResumeTimer = 0;
+    this.showingFishInfo = false;
+    this.isNewFish = false;
+    this.glowTimer = 0;
+    this.warningShown = false;
+    this.hideAllPanels();
+    this.updateHint('等待鱼儿上钩... Q 收回');
+  }
+  
+  resetToIdle() {
+    this.fsm.transition('Idle', 'reset');
+    this.timeScale = 1;
+    this.bobX = this.characterX + 20;
+    this.bobY = this.renderer.h * 0.65 + 40;
+    this.fishShadow = null;
+    this.currentFish = null;
+    this.biteSinking = false;
+    this.showingFishInfo = false;
+    this.hideAllPanels();
+    this.updateHint('按住 E 或 空格 开始钓鱼');
+  }
+  
+  toggleAtlas() {
+    this.showAtlasPanel = !this.showAtlasPanel;
+    if (this.showAtlasPanel) {
+      this.showAtlas();
+    } else {
+      this.hideAllPanels();
+    }
+  }
+  
+  showAtlas() {
+    const list = document.getElementById('fishList');
+    list.innerHTML = '';
+    
+    FISH_POOL.forEach(fish => {
+      const div = document.createElement('div');
+      div.className = 'fish-item' + (this.atlas.hasFish(fish.id) ? '' : ' locked');
+      div.innerHTML = `
+        <div class="fish-icon">${this.atlas.hasFish(fish.id) ? '🐟' : '🔒'}</div>
+        <div class="fish-name" style="color:${fish.color}">${fish.name}</div>
+        <div class="fish-info">${'★'.repeat(fish.rarity)} | $${fish.price}</div>
+      `;
+      list.appendChild(div);
+    });
+    
+    this.hideAllPanels();
+    document.getElementById('atlasPanel').classList.add('active');
+    this.showAtlasPanel = true;
+  }
+  
+  render() {
+    const ctx = this.renderer.ctx;
+    this.renderer.clear();
+    
+    // 保存上下文状态（用于处理抖动等变换）
+    this.renderer.save();
+    
+    // 应用抖动
+    if (this.fsm.is('Failed')) {
+      this.renderer.applyShake(8, 0.2);
+    }
+    
+    // Playing状态直接绘制2D遛鱼视角
+    if (this.fsm.is('Playing')) {
+      const holdingSpace = this.input.isDown(' ') || this.input.isDown('space');
+      
+      // 2D平面视角（不显示鱼竿，只有鱼线）
+      this.renderer.drawPlayingScene(
+        this.playingFishX,
+        this.playingFishY,
+        this.currentFish.color,
+        this.currentFish.size[0],
+        this.tension,
+        CONFIG.playing.maxTension,
+        this.fishHP,
+        this.currentFish.maxHP,
+        this.currentFish.name,
+        holdingSpace,
+        this.lineStartX,
+        this.lineStartY
+      );
+      
+      // 绘制HP条和张力条（放在2D画面上）
+      this.renderer.drawFishHP(this.fishHP, this.currentFish.maxHP, this.currentFish.name);
+      const tensionChange = this.tensionChangeTimer > 0 ? { text: this.tensionChangeText, timer: this.tensionChangeTimer } : null;
+      this.renderer.drawTensionBar(this.tension, CONFIG.playing.maxTension, tensionChange);
+      
+      // Playing状态需要恢复保存的上下文状态
+      this.renderer.restore();
+      return;
+    }
+    
+    // 其他状态正常绘制
+    // z=000 背景
+    this.renderer.drawBackground();
+    
+    // z=050 浮台（先绘制，在角色下方）
+    // 浮台定位在屏幕中下部，角色站在上面
+    const floatOffset = this.renderer.drawFloatingPlatform(this.characterX, this.platformY, this.renderer.time);
+    
+    // z=100 角色与游戏对象（根据浮台浮动同步调整位置）
+    const adjustedCharacterY = this.characterY + floatOffset;
+    this.renderer.drawCharacter(this.characterX, adjustedCharacterY);
+    
+    // 鱼影
+    if (this.fishShadow && this.fishShadow.moving) {
+      this.renderer.drawFishShadow(this.fishShadow, this.fishShadowPos.x, this.fishShadowPos.y);
+    }
+    
+    // 浮标和鱼线
+    if (this.fsm.is('Casting')) {
+      // 抛竿动画中
+    } else if (!this.fsm.is('Idle')) {
+      // 角色被 scale(-1,1) 翻转，右手在前（屏幕左侧）
+      // 右手手掌位置：translate(bodyWidth/2, -28) -> translate(13, -28)，手掌在(10, 24)
+      // 翻转后屏幕坐标：characterX - 23（手掌水平位置）
+      const rodHandX = this.characterX - 23;
+      const rodHandY = adjustedCharacterY - 4;
+      this.renderer.drawFishingLine(rodHandX, rodHandY, this.bobX, this.bobY);
+      this.renderer.drawBob(this.bobX, this.bobY, this.biteSinking);
+    }
+    
+    // z=200 粒子
+    this.renderer.drawParticles(this.particles);
+    
+    // 慢动作闪金光
+    if (this.fsm.is('Caught') && this.currentFish && this.currentFish.legendary && this.glowTimer < CONFIG.caught.legendaryGlowDuration) {
+      ctx.fillStyle = `rgba(255, 215, 0, ${0.3 * (1 - this.glowTimer / CONFIG.caught.legendaryGlowDuration)})`;
+      ctx.fillRect(0, 0, this.renderer.w, this.renderer.h);
+    }
+    
+    // 捕获后的出水画面
+    if (this.fsm.is('Caught') && this.showingFishInfo) {
+      this.renderer.drawCaughtScene();
+    }
+    
+    // z=300 HUD
+    this.renderer.drawHUD(this.money, this.fishCount);
+    
+    // z=400 状态UI
+    if (this.fsm.is('Aiming')) {
+      this.renderer.drawAimBar(this.aimPower, this.renderer.w / 2 - 150, this.renderer.h - 60, 300, 20);
+    }
+    
+    if (this.fsm.is('Casting')) {
+      this.renderer.drawCastingAnimation(
+        this.castProgress,
+        this.castFrom.x, this.castFrom.y,
+        this.castTo.x, this.castTo.y
+      );
+    }
+    
+    if (this.fsm.is('Waiting')) {
+      // updateWaitingBite已在updateWaiting中调用
+    }
+    
+    if (this.fsm.is('BiteWindow')) {
+      this.renderer.drawBiteAlert(this.biteWindowTimer);
+    }
+    
+    if (this.fsm.is('Reeling')) {
+      this.renderer.drawFishHP(this.fishHP, this.currentFish.maxHP, this.currentFish.name);
+      
+      // 张力变化提示
+      const tensionChange = this.tensionChangeTimer > 0 ? { text: this.tensionChangeText, timer: this.tensionChangeTimer } : null;
+      this.renderer.drawTensionBar(this.tension, 100, tensionChange);
+      
+      this.renderer.drawQTEArrow(this.qteDirection, this.qteTimer, this.qteMaxTime);
+      
+      // QTE结果
+      if (this.qteResult) {
+        ctx.fillStyle = this.qteResultColor || '#FFF';
+        ctx.font = 'bold 36px PingFang SC';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.qteResult, this.renderer.w / 2, this.renderer.h / 2 + 100);
+        ctx.textAlign = 'left';
+      }
+    }
+    
+    // 遛鱼视角（已在上面处理）
+    
+    // 恢复上下文状态（配合开头save的restore）
+    this.renderer.restore();
+  }
+}
+
+// ============================================================
+// BOOT - 入口
+// ============================================================
+let game;
+
+document.addEventListener('DOMContentLoaded', () => {
+  game = new FishingGame();
+  game.start();
+  
+  // 面板点击关闭
+  document.querySelectorAll('.panel').forEach(p => {
+    p.addEventListener('click', (e) => {
+      // 如果点击的是"再钓一竿"按钮，不处理（由单独的事件处理）
+      if (e.target.id === 'continueBtn') return;
+      
+      if (p.id === 'atlasPanel') {
+        game.showAtlasPanel = false;
+      }
+      // 只有Caught和Atlas可以关闭
+      if (p.id === 'caughtPanel' || p.id === 'atlasPanel') {
+        game.hideAllPanels();
+      }
+    });
+  });
+  
+  // "再钓一竿"按钮事件
+  document.getElementById('continueBtn').addEventListener('click', (e) => {
+    e.stopPropagation(); // 阻止事件冒泡
+    if (game) {
+      game.hideAllPanels();
+      game.resetToWaiting();
+    }
+  });
+  
+  // "升级装备"按钮事件
+  document.getElementById('upgradeBtn').addEventListener('click', () => {
+    alert('功能开发中。。。');
+  });
+});
+
+/*
+================================================================
+🎮 调参助手 - 《宝岛钓手》核心玩法参数说明
+================================================================
+
+▸ CONFIG.aiming.chargeCycle (默认: 1.5)
+  → 蓄力条一个单程的时间（秒）
+  → 调小: 节奏更快, 容错更低 | 调大: 节奏更慢, 更易控制
+
+▸ CONFIG.aiming.powerOverload (默认: 96)
+  → 过力断线阈值 (0-100)
+  → 调小: 更容易过力断线 | 调大: 更安全但少了紧张感
+
+▸ CONFIG.waiting.fishSpawnDelay (默认: 2.0)
+  → 抛竿后鱼影出现的延迟（秒）
+  → 调小: 节奏更快 | 调大: 更多等待时间
+
+▸ CONFIG.biteWindow.duration (默认: 0.5)
+  → 提竿窗口时间（秒）
+  → 调小: 更紧张刺激 | 调大: 更友善
+
+▸ CONFIG.reeling.qteCountByRarity (默认: [3,5,7,9,11])
+  → 每个稀有度的QTE按键次数
+  → 调大: 更持久紧张 | 调小: 更快结束
+
+▸ CONFIG.reeling.tickDurationByRarity (默认: [0.8,0.7,0.6,0.5,0.4])
+  → 每拍按键的限时（秒）
+  → 调小: 更快节奏 | 调大: 更宽容
+
+▸ CONFIG.reeling.tensionPenaltyByRarity (默认: [15,18,20,22,25])
+  → 每次失败/超时增加的张力
+  → 调小: 容忍度更高 | 调大: 容易断线
+
+▸ CONFIG.fish.travelSpeed (默认: 80)
+  → 鱼影游向浮标的速度（像素/秒）
+  → 调小: 更慢更从容 | 调大: 更急促
+
+================================================================
+*/
+</script>
+</body>
+</html>
