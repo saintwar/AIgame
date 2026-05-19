@@ -25,6 +25,7 @@ import { drawLakeReflections } from './render/reflections.js';
 import { drawNameTag } from './render/name-tag.js';
 import { drawFarmland } from './render/farmland.js';
 import { drawFlowerbed } from './render/flowerbed.js';
+import { drawTitleBg } from './render/title-bg.js';
 import {
   drawDynamicSky, drawDynamicOverlay,
   getFireflyBrightness, getWindowBrightness,
@@ -195,6 +196,9 @@ class VillageScene {
     this.currentNarrLine = 0;
     this.narrOpacity = 0;
     this.btnPulse = 0; // 按钮闪烁计时器
+    this._btnHoverTarget = 0; // 0=离开, 1=悬停
+    this._btnHover = 0;       // 平滑过渡值 (0→1)
+    this._btnPressed = false; // 鼠标按下状态
 
     // 操作提示卡
     this.tutorialCardActive = false;
@@ -386,11 +390,9 @@ class VillageScene {
 
     let opacity = 0;
     if (elapsed < 0.4) {
-      opacity = elapsed / 0.4;
-    } else if (elapsed >= 1.6) {
-      opacity = 1 - (elapsed - 1.6) / 0.4;
+      opacity = elapsed / 0.4;  // 前 0.4s 淡入
     } else {
-      opacity = 1;
+      opacity = 1;              // 淡入后无限停留，直到玩家点击/按键
     }
     opacity = Math.max(0, Math.min(1, opacity));
 
@@ -398,18 +400,96 @@ class VillageScene {
 
     ctx.globalAlpha = opacity;
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, cw, ch);
+    // ── 像素吉卜力日月潭黄昏背景（替代纯白） ──
+    drawTitleBg(ctx, cw, ch);
 
-    ctx.fillStyle = '#A83C3C';
+    // ── 标题动画：漂浮 + 金色光泽 ──────────────────────
+    const floatY = Math.sin(this.btnPulse * Math.PI * 2 / 4) * (-8); // 4s 周期，8px 幅度
+    const titleBaseY = ch / 2 - 60;
+    const titleY = titleBaseY + floatY;
+    const titleText = '宝岛钓手';
+
     ctx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('宝岛钓手', cw / 2, ch / 2 - 60);
 
-    ctx.fillStyle = '#3D2B1F';
+    const textWidth = ctx.measureText(titleText).width;
+
+    // 金色光泽：6s 周期，前 1.5s 扫过，后 4.5s 静止
+    const shinePhase = this.btnPulse % 6;
+
+    if (shinePhase < 1.5) {
+      // 离屏 Canvas：先画文字，再用 source-atop 叠加光泽（精确裁剪到文字形状）
+      if (!this._titleOffscreen) this._titleOffscreen = document.createElement('canvas');
+      const oc = this._titleOffscreen;
+      const ocW = Math.ceil(textWidth) + 20;
+      const ocH = 116;
+      oc.width = ocW;
+      oc.height = ocH;
+      const octx = oc.getContext('2d');
+      octx.clearRect(0, 0, ocW, ocH);
+
+      // 描边（深色，保证背景可读性）
+      octx.strokeStyle = 'rgba(30,15,10,0.6)';
+      octx.lineWidth = 4;
+      octx.lineJoin = 'round';
+      octx.strokeText(titleText, ocW / 2, ocH / 2);
+
+      // 基础文字
+      octx.fillStyle = '#A83C3C';
+      octx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      octx.fillText(titleText, ocW / 2, ocH / 2);
+
+      // 光泽渐变（120deg 斜向扫过）
+      const progress = shinePhase / 1.5;
+      const sweepX = -ocW * 0.3 + progress * ocW * 1.6;
+      const shineBand = ocW * 0.35;
+      const grad = octx.createLinearGradient(
+        sweepX - shineBand, 0,
+        sweepX + shineBand, ocH
+      );
+      grad.addColorStop(0, 'rgba(255,215,0,0)');
+      grad.addColorStop(0.40, 'rgba(255,215,0,0)');
+      grad.addColorStop(0.50, 'rgba(255,215,0,0.5)');
+      grad.addColorStop(0.60, 'rgba(255,215,0,0)');
+      grad.addColorStop(1, 'rgba(255,215,0,0)');
+
+      octx.globalCompositeOperation = 'source-atop';
+      octx.fillStyle = grad;
+      octx.fillRect(0, 0, ocW, ocH);
+      octx.globalCompositeOperation = 'source-over';
+
+      ctx.drawImage(oc, cw / 2 - ocW / 2, titleY - ocH / 2);
+    } else {
+      ctx.strokeStyle = 'rgba(30,15,10,0.6)';
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(titleText, cw / 2, titleY);
+      ctx.fillStyle = '#A83C3C';
+      ctx.fillText(titleText, cw / 2, titleY);
+    }
+
     ctx.font = '48px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 副标题描边（深紫，保证在山脉背景上可读）
+    ctx.strokeStyle = 'rgba(50, 30, 60, 0.6)';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.strokeText('～ 水社村 ～', cw / 2, ch / 2 + 30);
+    // 副标题阴影
+    ctx.shadowColor = 'rgba(50, 30, 60, 0.95)';
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#FFF4E0';
     ctx.fillText('～ 水社村 ～', cw / 2, ch / 2 + 30);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#A83C3C';
     ctx.fillRect(cw / 2 - 120, ch / 2 + 70, 240, 4);
@@ -429,26 +509,71 @@ class VillageScene {
 
     // 缓慢呼吸闪烁效果（周期约3秒）
     const pulse = Math.sin(this.btnPulse * 2.1) * 0.5 + 0.5; // 0~1
-    const btnAlpha = 0.12 + pulse * 0.18; // 填充透明度 0.12~0.30
-    const borderAlpha = 0.5 + pulse * 0.5; // 边框透明度 0.5~1.0
 
-    // 按钮背景（绿色边框 + 半透明填充，带呼吸效果）
-    ctx.fillStyle = `rgba(76, 175, 80, ${btnAlpha})`;
+    // 悬停动画参数
+    const h = this._btnHover; // 0~1 平滑过渡
+    const pressed = this._btnPressed && h > 0.3;
+    const hoverLift = pressed ? -1 : h * -3;     // 悬停抬升 3px / 按下 1px
+    const hoverScale = pressed ? 1.02 : 1 + h * 0.04; // 缩放 1.04 / 按下 1.02
+
+    ctx.save();
+    // 以按钮中心为缩放原点
+    const btnCX = btnX + btnW / 2;
+    const btnCY = btnY + btnH / 2;
+    ctx.translate(btnCX, btnCY + hoverLift);
+    ctx.scale(hoverScale, hoverScale);
+    ctx.translate(-btnCX, -btnCY);
+
+    // 按钮背景（半透明深色 + 亮金边框，带呼吸效果）
+    const bgAlpha = 0.65 + pulse * 0.10 + h * 0.10;
+    ctx.fillStyle = `rgba(${15 + h * 5}, ${15 + h * 5}, ${35 + h * 5}, ${bgAlpha})`;
     ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = `rgba(76, 175, 80, ${borderAlpha})`;
-    ctx.lineWidth = 3;
+
+    // 边框
+    const borderBright = pressed ? 0.9 : (0.7 + pulse * 0.3 + h * 0.15);
+    const borderColor = h > 0.3 ? '#FFE08A' : `rgba(255, 209, 102, ${borderBright})`;
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 3 + h;
     ctx.strokeRect(btnX, btnY, btnW, btnH);
 
-    // 按钮文字（带呼吸效果）
-    ctx.fillStyle = `rgba(76, 175, 80, ${0.6 + pulse * 0.4})`;
+    // 金色光晕（悬停时扩散）
+    ctx.shadowColor = `rgba(255, 209, 102, ${0.3 + h * 0.3})`;
+    ctx.shadowBlur = 16 + h * 32;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+    // 按下时额外阴影
+    if (pressed) {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+    }
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // 按钮文字（亮金色 + 阴影）
+    const textBright = h > 0.3 ? '#FFE8A8' : '#FFD166';
+    ctx.fillStyle = textBright;
     ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.shadowColor = h > 0.3 ? 'rgba(255,224,138,0.5)' : 'rgba(0,0,0,0.8)';
+    ctx.shadowOffsetY = h > 0.3 ? 0 : 2;
+    ctx.shadowBlur = h > 0.3 ? 8 : 4;
     ctx.fillText('开始游戏', cw / 2, btnY + btnH / 2);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
 
-    // 提示文字
-    ctx.fillStyle = '#888';
+    ctx.restore();
+
+    // 提示文字（白字 + 黑描边）
     ctx.font = '14px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText('点击按钮或按空格键开始', cw / 2, btnY + btnH + 24);
+    ctx.fillStyle = '#FFFFFF';
     ctx.fillText('点击按钮或按空格键开始', cw / 2, btnY + btnH + 24);
 
     ctx.globalAlpha = 1;
@@ -909,9 +1034,36 @@ class VillageScene {
       }
     };
 
+    // 鼠标移动 → 检测按钮悬停
+    this._moveHandler = (e) => {
+      if (this.introState === 'title') {
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        const btnW = 220, btnH = 56;
+        const btnX = cw / 2 - btnW / 2;
+        const btnY = ch / 2 + 100;
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        this._btnHoverTarget = (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) ? 1 : 0;
+        this.canvas.style.cursor = this._btnHoverTarget ? 'pointer' : 'default';
+      }
+    };
+
+    // 鼠标按下/抬起 → 按压反馈
+    this._downHandler = (e) => {
+      if (this.introState === 'title' && e.button === 0) this._btnPressed = true;
+    };
+    this._upHandler = () => { this._btnPressed = false; };
+
     document.addEventListener('keydown', this._keyHandler);
     document.addEventListener('keyup', this._keyUpHandler);
     this.canvas.addEventListener('click', this._clickHandler);
+    this.canvas.addEventListener('mousemove', this._moveHandler);
+    this.canvas.addEventListener('mousedown', this._downHandler);
+    window.addEventListener('mouseup', this._upHandler);
   }
 
   _unbindInput() {
@@ -923,7 +1075,15 @@ class VillageScene {
     }
     if (this._clickHandler && this.canvas) {
       this.canvas.removeEventListener('click', this._clickHandler);
+      this.canvas.removeEventListener('mousemove', this._moveHandler);
+      this.canvas.removeEventListener('mousedown', this._downHandler);
       this._clickHandler = null;
+      this._moveHandler = null;
+      this._downHandler = null;
+    }
+    if (this._upHandler) {
+      window.removeEventListener('mouseup', this._upHandler);
+      this._upHandler = null;
     }
   }
 
@@ -1398,6 +1558,8 @@ class VillageScene {
       // 标题画面无限停留，直到用户点击按钮或按键才进入淡入
       // 更新按钮闪烁计时器
       this.btnPulse += dt;
+      // 平滑过渡悬停动画（0.25s 过渡）
+      this._btnHover += (this._btnHoverTarget - this._btnHover) * Math.min(1, dt * 10);
     } else if (this.introState === 'fadein') {
       if (this.introTimer >= 0.6) {
         this.introState = null;
