@@ -429,17 +429,24 @@ class VillageScene {
       const octx = oc.getContext('2d');
       octx.clearRect(0, 0, ocW, ocH);
 
-      // 描边（深色，保证背景可读性）
-      octx.strokeStyle = 'rgba(30,15,10,0.6)';
+      // ⚠️ 必须在绘制前设置字体（oc.width 重置了上下文，font 回到默认值）
+      octx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+
+      // 描边（深棕像素素描边，保证背景可读性）
+      octx.strokeStyle = '#5C3A1E';
       octx.lineWidth = 4;
       octx.lineJoin = 'round';
       octx.strokeText(titleText, ocW / 2, ocH / 2);
 
-      // 基础文字
-      octx.fillStyle = '#A83C3C';
-      octx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
-      octx.textAlign = 'center';
-      octx.textBaseline = 'middle';
+      // 暖金高光（左上 1px 内描边，模拟光照）
+      octx.strokeStyle = '#FFD580';
+      octx.lineWidth = 1;
+      octx.strokeText(titleText, ocW / 2 - 1, ocH / 2 - 1);
+
+      // 基础文字（米白）
+      octx.fillStyle = '#FFF4D6';
       octx.fillText(titleText, ocW / 2, ocH / 2);
 
       // 光泽渐变（120deg 斜向扫过）
@@ -452,7 +459,7 @@ class VillageScene {
       );
       grad.addColorStop(0, 'rgba(255,215,0,0)');
       grad.addColorStop(0.40, 'rgba(255,215,0,0)');
-      grad.addColorStop(0.50, 'rgba(255,215,0,0.5)');
+      grad.addColorStop(0.50, 'rgba(255,215,0,0.25)');
       grad.addColorStop(0.60, 'rgba(255,215,0,0)');
       grad.addColorStop(1, 'rgba(255,215,0,0)');
 
@@ -463,11 +470,15 @@ class VillageScene {
 
       ctx.drawImage(oc, cw / 2 - ocW / 2, titleY - ocH / 2);
     } else {
-      ctx.strokeStyle = 'rgba(30,15,10,0.6)';
+      ctx.strokeStyle = '#5C3A1E';
       ctx.lineWidth = 4;
       ctx.lineJoin = 'round';
       ctx.strokeText(titleText, cw / 2, titleY);
-      ctx.fillStyle = '#A83C3C';
+      // 暖金高光（左上 1px 内描边）
+      ctx.strokeStyle = '#FFD580';
+      ctx.lineWidth = 1;
+      ctx.strokeText(titleText, cw / 2 - 1, titleY - 1);
+      ctx.fillStyle = '#FFF4D6';
       ctx.fillText(titleText, cw / 2, titleY);
     }
 

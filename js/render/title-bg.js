@@ -10,6 +10,51 @@ let _cache = null;
 let _cacheW = 0;
 let _cacheH = 0;
 
+// Bayer 4x4 矩阵（0-15 归一化到 0/16 ~ 15/16）
+const BAYER4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5],
+];
+
+/**
+ * 对一个离屏 canvas 区域施加 Bayer 4x4 dither
+ * 在 colorA ↔ colorB 之间按 threshold 混合
+ * @param {CanvasRenderingContext2D} c
+ * @param {number} x0  区域左上 x
+ * @param {number} y0  区域左上 y
+ * @param {number} rw  区域宽
+ * @param {number} rh  区域高
+ * @param {number[]} colorA  [r,g,b] 色 A
+ * @param {number[]} colorB  [r,g,b] 色 B
+ * @param {number} t         混合比例 0~1（0=A, 1=B）
+ */
+function _ditherRect(c, x0, y0, rw, rh, colorA, colorB, t) {
+  const id = c.getImageData(x0, y0, rw, rh);
+  const d = id.data;
+  const [aR, aG, aB] = colorA;
+  const [bR, bG, bB] = colorB;
+  // 插值色
+  const iR = aR + (bR - aR) * t;
+  const iG = aG + (bG - aG) * t;
+  const iB = aB + (bB - aB) * t;
+
+  for (let y = 0; y < rh; y++) {
+    const bRow = BAYER4[y & 3];
+    for (let x = 0; x < rw; x++) {
+      const threshold = bRow[x & 3] / 16; // 0 ~ 0.9375
+      const idx = (y * rw + x) * 4;
+      const useB = t > threshold;
+      d[idx]     = useB ? bR : aR;
+      d[idx + 1] = useB ? bG : aG;
+      d[idx + 2] = useB ? bB : aB;
+      // alpha 不变
+    }
+  }
+  c.putImageData(id, x0, y0);
+}
+
 function _buildCache(w, h) {
   const oc = document.createElement('canvas');
   oc.width = w;
@@ -18,7 +63,7 @@ function _buildCache(w, h) {
   c.imageSmoothingEnabled = false;
 
   // ═══════════════════════════════════════
-  // 层 1：天空（上半屏 ~50%）像素阶梯渐变
+  // 层 1：天空（上半屏 ~50%）像素阶梯渐变 + Bayer dither
   // ═══════════════════════════════════════
   const skyH = Math.floor(h * 0.52);
   const skyBands = [
@@ -31,10 +76,36 @@ function _buildCache(w, h) {
   // 修正最后一段填满
   skyBands[4].h = skyH - skyBands[0].h - skyBands[1].h - skyBands[2].h - skyBands[3].h;
 
+  // 解析颜色为 [r,g,b]
+  const skyRGB = [
+    [255, 176, 136],  // #FFB088
+    [255, 158, 110],  // #FF9E6E
+    [255, 142, 92],   // #FF8E5C
+    [255, 200, 122],  // #FFC87A
+    [255, 216, 158],  // #FFD89E
+  ];
+
+  // 先用最上方颜色填满天空区域，再逐段 dither
+  c.fillStyle = '#FFB088';
+  c.fillRect(0, 0, w, skyH);
+
   let sy = 0;
-  for (const band of skyBands) {
-    c.fillStyle = band.color;
-    c.fillRect(0, sy, w, band.h);
+  for (let i = 0; i < skyBands.length; i++) {
+    const band = skyBands[i];
+    if (band.h <= 0) continue;
+    // 每个色带内部：从上一色到当前色做 dither 渐变
+    const prevRGB = i === 0 ? skyRGB[0] : skyRGB[i - 1];
+    const curRGB = skyRGB[i];
+    // 将色带分为若干 dither 子段（每段 ~8px 高）
+    const subSegH = 8;
+    const segs = Math.max(1, Math.ceil(band.h / subSegH));
+    let segY = sy;
+    for (let s = 0; s < segs; s++) {
+      const thisH = s === segs - 1 ? (sy + band.h - segY) : subSegH;
+      const t = (s + 1) / segs;
+      _ditherRect(c, 0, segY, w, thisH, prevRGB, curRGB, t);
+      segY += thisH;
+    }
     sy += band.h;
   }
 
@@ -94,26 +165,71 @@ function _buildCache(w, h) {
   _drawMountain(c, 0, mtBase + mtH * 0.55, w, mtH * 0.45, 2, 64);
 
   // ═══════════════════════════════════════
-  // 层 3：日月潭湖面（下半屏 ~30%）
+  // 层 3：日月潭湖面（下半屏 ~30%）暖紫蓝 + 夕阳反光
   // ═══════════════════════════════════════
   const lakeY = mtBase + mtH;
   const lakeH = h - lakeY - Math.floor(h * 0.05);
 
-  // 湖面横条纹渐变
+  // 湖面横条纹渐变（暖紫蓝色系）
   const lakeBands = [
-    { color: '#FF8E5C', h: Math.floor(lakeH * 0.06) },  // 地平线倒映橙
-    { color: '#3A6FA0', h: Math.floor(lakeH * 0.10) },  // 过渡
-    { color: '#2E5C8A', h: Math.floor(lakeH * 0.35) },  // 深湖蓝
-    { color: '#3A7099', h: Math.floor(lakeH * 0.25) },  // 过渡
-    { color: '#4A8FC2', h: 0 },                           // 浅湖蓝
+    { color: '#FF8E5C', h: Math.floor(lakeH * 0.05) },  // 地平线倒映橙
+    { color: '#6A7BA0', h: Math.floor(lakeH * 0.10) },  // 过渡（偏暖）
+    { color: '#5A6B95', h: Math.floor(lakeH * 0.35) },  // 暖紫蓝（主色）
+    { color: '#5E7598', h: Math.floor(lakeH * 0.25) },  // 过渡
+    { color: '#4E6488', h: 0 },                           // 深紫蓝
   ];
   lakeBands[4].h = lakeH - lakeBands[0].h - lakeBands[1].h - lakeBands[2].h - lakeBands[3].h;
 
+  const lakeRGB = [
+    [255, 142, 92],   // #FF8E5C 倒映橙
+    [106, 123, 160],  // #6A7BA0 过渡
+    [90,  107, 149],  // #5A6B95 暖紫蓝
+    [94,  117, 152],  // #5E7598 过渡
+    [78,  100, 136],  // #4E6488 深紫蓝
+  ];
+
+  // 先用第一色填满
+  c.fillStyle = '#FF8E5C';
+  c.fillRect(0, lakeY, w, lakeH);
+
+  // 逐段 dither 渐变
   let ly = lakeY;
-  for (const band of lakeBands) {
-    c.fillStyle = band.color;
-    c.fillRect(0, ly, w, band.h);
+  for (let i = 0; i < lakeBands.length; i++) {
+    const band = lakeBands[i];
+    if (band.h <= 0) continue;
+    const prevRGB = i === 0 ? lakeRGB[0] : lakeRGB[i - 1];
+    const curRGB = lakeRGB[i];
+    const subSegH = 8;
+    const segs = Math.max(1, Math.ceil(band.h / subSegH));
+    let segY = ly;
+    for (let s = 0; s < segs; s++) {
+      const thisH = s === segs - 1 ? (ly + band.h - segY) : subSegH;
+      const t = (s + 1) / segs;
+      _ditherRect(c, 0, segY, w, thisH, prevRGB, curRGB, t);
+      segY += thisH;
+    }
     ly += band.h;
+  }
+
+  // ── 夕阳横向反光带（湖面上半部分） ──
+  const reflZoneH = Math.floor(lakeH * 0.35);
+  const reflBaseY = lakeY;
+  const rngRefl = _seededRand(777);
+  for (let ry = 0; ry < reflZoneH; ry++) {
+    // 越靠近地平线越亮
+    const fadeT = 1 - ry / reflZoneH;
+    const alpha = Math.floor(fadeT * fadeT * 100); // 0~100 → 实际用 rgba
+    if (alpha < 10) continue;
+    // 每隔 4-8 像素画一条反光带
+    const gap = 4 + Math.floor(rngRefl() * 5);
+    if (ry % gap !== 0) continue;
+    // 反光带宽度随机 2-4px
+    const bandH = 2 + Math.floor(rngRefl() * 3);
+    c.fillStyle = `rgba(244, 162, 97, ${alpha / 255})`; // #F4A261 半透明
+    // 反光带不是全宽，中间亮两侧暗
+    const reflW = Math.floor(w * (0.4 + rngRefl() * 0.3));
+    const reflX = Math.floor(w * (0.15 + rngRefl() * 0.25));
+    c.fillRect(reflX, reflBaseY + ry, reflW, Math.min(bandH, reflZoneH - ry));
   }
 
   // 拉鲁岛剪影（中央偏左）
@@ -134,8 +250,8 @@ function _buildCache(w, h) {
   const rng = _seededRand(123);
   for (let i = 0; i < 40; i++) {
     const rx = Math.floor(rng() * w);
-    const ry = lakeY + Math.floor(rng() * lakeH);
-    c.fillRect(rx, ry, 1, 1);
+    const ry2 = lakeY + Math.floor(rng() * lakeH);
+    c.fillRect(rx, ry2, 1, 1);
   }
 
   // ═══════════════════════════════════════
