@@ -1265,8 +1265,7 @@ class FishingScene {
     const tipY = y + rodTipLocalY;
     ctx.restore(); // 结束翻转坐标系
     if (progress >= 0.4) { ctx.strokeStyle = 'rgba(100,100,100,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(bobX, bobY); ctx.stroke(); }
-    ctx.fillStyle = '#F44336'; ctx.beginPath(); ctx.arc(bobX, bobY, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.arc(bobX - 3, bobY - 3, 4.5, 0, Math.PI * 2); ctx.fill();
+    this._drawPixelBob(bobX, bobY);
   }
 
   _renderRodAndBob(floatOffset = 0) {
@@ -1292,8 +1291,7 @@ class FishingScene {
     const tipY = y + rodTipLocalY;
     ctx.restore(); // 结束翻转坐标系
     ctx.strokeStyle = 'rgba(100,100,100,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tipX, tipY); const midX = (tipX + this.bobX) / 2; ctx.quadraticCurveTo(midX, Math.min(tipY, this.bobY) - 45, this.bobX, this.bobY); ctx.stroke();
-    ctx.fillStyle = '#F44336'; ctx.beginPath(); ctx.arc(this.bobX, this.bobY, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(this.bobX, this.bobY - 12, 6, 0, Math.PI * 2); ctx.fill();
+    this._drawPixelBob(this.bobX, this.bobY);
   }
 
   _renderFishShadow() {
@@ -1472,30 +1470,205 @@ class FishingScene {
     ctx.restore();
   }
 
+  // ════════════════════════════════════════════════════════
+  // PHASE 13-2 像素 HUD 辅助函数
+  //   _drawWoodPlaque  木牌底板（棕 + 深棕 2px 像素描边，无圆角）
+  //   _drawPixelText   像素字（monospace bold + 深棕 2px 描边 + 米白填充）
+  //   _drawPixelIcon   像素图标（coin / fish / target / rod）
+  //   _drawPixelBob    像素浮漂（红白方块拼接）
+  // ════════════════════════════════════════════════════════
+  _drawWoodPlaque(x, y, w, h) {
+    const ctx = this.ctx;
+    // 深棕外描边（2px）
+    ctx.fillStyle = '#5C3A1E';
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    // 棕色主体
+    ctx.fillStyle = '#8B6F47';
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + 2, Math.ceil(w) - 4, Math.ceil(h) - 4);
+    // 内侧浅色高光（顶 1px）
+    ctx.fillStyle = '#A88860';
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + 2, Math.ceil(w) - 4, 1);
+    // 内侧深色阴影（底 1px）
+    ctx.fillStyle = '#6B4A2A';
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + Math.ceil(h) - 3, Math.ceil(w) - 4, 1);
+  }
+  _drawPixelText(text, x, y, size, fill, stroke) {
+    const ctx = this.ctx;
+    ctx.font = `bold ${size}px "Courier New", "Consolas", monospace`;
+    ctx.textBaseline = 'middle';
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'miter';
+      ctx.miterLimit = 2;
+      ctx.strokeText(text, Math.floor(x), Math.floor(y));
+    }
+    ctx.fillStyle = fill;
+    ctx.fillText(text, Math.floor(x), Math.floor(y));
+    ctx.textBaseline = 'alphabetic';
+  }
+  _drawPixelIcon(type, x, y, s) {
+    // s = 单像素方块边长（默认 2）
+    const ctx = this.ctx;
+    s = s || 2;
+    const px = (col, row, w, h, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.floor(x + col * s), Math.floor(y + row * s), w * s, h * s);
+    };
+    if (type === 'coin') {
+      // 8x8 金币：外圈深棕，主体金黄，左上高光
+      px(2, 0, 4, 1, '#5C3A1E'); px(1, 1, 1, 1, '#5C3A1E'); px(6, 1, 1, 1, '#5C3A1E');
+      px(0, 2, 1, 4, '#5C3A1E'); px(7, 2, 1, 4, '#5C3A1E');
+      px(1, 6, 1, 1, '#5C3A1E'); px(6, 6, 1, 1, '#5C3A1E'); px(2, 7, 4, 1, '#5C3A1E');
+      px(2, 1, 4, 1, '#F4C430'); px(1, 2, 6, 4, '#F4C430'); px(2, 6, 4, 1, '#F4C430');
+      px(2, 2, 1, 1, '#FFF4D6'); px(3, 2, 1, 1, '#FFF4D6'); px(2, 3, 1, 1, '#FFF4D6'); // 高光
+      px(3, 3, 2, 2, '#E8B020'); // 中心 $ 暗色
+    } else if (type === 'fish') {
+      // 8x6 像素鱼（蓝色侧视）
+      px(1, 1, 1, 1, '#1A1A2E'); px(2, 0, 4, 1, '#1A1A2E'); px(6, 1, 1, 1, '#1A1A2E');
+      px(0, 2, 1, 2, '#1A1A2E'); px(7, 2, 1, 2, '#1A1A2E');
+      px(1, 4, 1, 1, '#1A1A2E'); px(2, 5, 4, 1, '#1A1A2E'); px(6, 4, 1, 1, '#1A1A2E');
+      px(2, 1, 4, 1, '#5A95B0'); px(1, 2, 6, 2, '#5A95B0'); px(2, 4, 4, 1, '#5A95B0');
+      px(2, 2, 2, 1, '#8FBED0'); // 高光
+      px(5, 2, 1, 1, '#FFFFFF'); px(5, 3, 1, 1, '#1A1A2E'); // 眼睛
+      // 尾巴
+      px(8, 1, 1, 1, '#1A1A2E'); px(9, 0, 1, 1, '#1A1A2E'); px(9, 2, 1, 1, '#1A1A2E');
+      px(8, 2, 1, 2, '#5A95B0'); px(9, 1, 1, 1, '#5A95B0'); px(9, 3, 1, 1, '#5A95B0');
+      px(8, 4, 1, 1, '#1A1A2E'); px(9, 4, 1, 1, '#1A1A2E'); px(9, 5, 1, 1, '#1A1A2E');
+    } else if (type === 'target') {
+      // 8x8 靶心：3 圈红白红
+      px(2, 0, 4, 1, '#1A1A2E'); px(1, 1, 1, 1, '#1A1A2E'); px(6, 1, 1, 1, '#1A1A2E');
+      px(0, 2, 1, 4, '#1A1A2E'); px(7, 2, 1, 4, '#1A1A2E');
+      px(1, 6, 1, 1, '#1A1A2E'); px(6, 6, 1, 1, '#1A1A2E'); px(2, 7, 4, 1, '#1A1A2E');
+      px(2, 1, 4, 1, '#E76F51'); px(1, 2, 6, 1, '#E76F51'); px(1, 5, 6, 1, '#E76F51'); px(2, 6, 4, 1, '#E76F51');
+      px(2, 2, 4, 1, '#FFF4D6'); px(2, 5, 4, 1, '#FFF4D6');
+      px(2, 3, 4, 2, '#E76F51');
+      px(3, 3, 2, 2, '#1A1A2E'); // 中心黑点
+    } else if (type === 'rod') {
+      // 12x8 像素钓竿（左下到右上的斜杆 + 鱼线 + 红浮漂）
+      // 棕色竿身（斜对角）
+      for (let i = 0; i < 8; i++) {
+        px(i, 7 - i, 1, 1, '#5C3A1E');
+        if (i < 7) px(i + 1, 7 - i, 1, 1, '#8B6F47');
+      }
+      // 握把
+      px(0, 6, 1, 2, '#1A1A2E'); px(1, 7, 1, 1, '#1A1A2E');
+      // 鱼线
+      px(8, 0, 1, 1, '#AAA');
+      px(9, 1, 1, 1, '#AAA'); px(10, 2, 1, 1, '#AAA');
+      // 红浮漂
+      px(10, 3, 2, 1, '#1A1A2E'); px(9, 4, 1, 1, '#1A1A2E'); px(12, 4, 1, 1, '#1A1A2E');
+      px(10, 4, 2, 1, '#E76F51'); px(11, 4, 1, 1, '#FFF4D6');
+      px(10, 5, 2, 1, '#1A1A2E');
+    }
+  }
+  _drawPixelBob(cx, cy) {
+    // 8x8 像素浮漂：上 4 行白、下 4 行红，外圈 1px 深色描边
+    const ctx = this.ctx;
+    const s = 2; // 单像素 = 2 屏幕像素
+    const x0 = Math.floor(cx - 4 * s);
+    const y0 = Math.floor(cy - 4 * s);
+    const px = (col, row, w, h, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x0 + col * s, y0 + row * s, w * s, h * s);
+    };
+    // 外圈描边（八边形近似圆）
+    px(2, 0, 4, 1, '#1A1A2E'); px(1, 1, 1, 1, '#1A1A2E'); px(6, 1, 1, 1, '#1A1A2E');
+    px(0, 2, 1, 4, '#1A1A2E'); px(7, 2, 1, 4, '#1A1A2E');
+    px(1, 6, 1, 1, '#1A1A2E'); px(6, 6, 1, 1, '#1A1A2E'); px(2, 7, 4, 1, '#1A1A2E');
+    // 上半白
+    px(2, 1, 4, 1, '#FFF4D6'); px(1, 2, 6, 2, '#FFF4D6');
+    // 下半红
+    px(1, 4, 6, 2, '#E76F51'); px(2, 6, 4, 1, '#E76F51');
+    // 中线分隔（深红）
+    px(1, 3, 6, 1, '#C75543');
+    // 高光
+    px(2, 1, 1, 1, '#FFFFFF'); px(3, 1, 1, 1, '#FFFFFF');
+  }
+
   _renderHUD() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(cw * 0.008, ch * 0.014, cw * 0.117, ch * 0.056);
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 30px 'TencentSansW7', sans-serif"; ctx.fillText(`💰 ${this.money}`, cw * 0.016, ch * 0.053);
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(cw * 0.133, ch * 0.014, cw * 0.094, ch * 0.056);
-    ctx.fillStyle = '#4FC3F7'; ctx.fillText(`🐟 ${this.fishCount}`, cw * 0.141, ch * 0.053);
+    // —— 金币木牌 ——
+    const coinX = Math.floor(cw * 0.008);
+    const coinY = Math.floor(ch * 0.014);
+    const coinW = Math.floor(cw * 0.117);
+    const coinH = Math.floor(ch * 0.056);
+    this._drawWoodPlaque(coinX, coinY, coinW, coinH);
+    this._drawPixelIcon('coin', coinX + 10, coinY + (coinH - 16) / 2, 2);
+    this._drawPixelText(`${this.money}`, coinX + 36, coinY + coinH / 2, 24, '#FFF4D6', '#5C3A1E');
+    // —— 鱼数木牌 ——
+    const fishX = Math.floor(cw * 0.133);
+    const fishY = coinY;
+    const fishW = Math.floor(cw * 0.094);
+    const fishH = coinH;
+    this._drawWoodPlaque(fishX, fishY, fishW, fishH);
+    this._drawPixelIcon('fish', fishX + 8, fishY + (fishH - 12) / 2, 2);
+    this._drawPixelText(`${this.fishCount}`, fishX + 38, fishY + fishH / 2, 24, '#FFF4D6', '#5C3A1E');
 
-    // 装备钓竿显示（左下角）
+    // —— 装备钓竿木牌（左下角）——
     if (window.equipment) {
       const rod = window.equipment.getEquippedRod();
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(20, 660, 280, 40);
-      ctx.fillStyle = '#ffd700';
-      ctx.font = "18px 'TencentSansW7', sans-serif";
-      ctx.fillText(`${rod.icon} ${rod.name}`, 30, 686);
+      const rx = 20, ry = 660, rw = 280, rh = 40;
+      this._drawWoodPlaque(rx, ry, rw, rh);
+      this._drawPixelIcon('rod', rx + 10, ry + (rh - 16) / 2, 2);
+      this._drawPixelText(`${rod.name}`, rx + 44, ry + rh / 2, 18, '#FFF4D6', '#5C3A1E');
     }
   }
 
   _renderAimBar() {
-    const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const barW = 450; const barH = 30; const x = (cw - barW) / 2; const y = ch - 90;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - 3, y - 3, barW + 6, barH + 6);
-    const segW = barW / 100; for (let i = 0; i < 100; i++) { ctx.fillStyle = i < 33 ? '#9E9E9E' : i < 66 ? '#4CAF50' : i < 95 ? '#FFC107' : '#F44336'; ctx.fillRect(x + i * segW, y, segW, barH); }
-    const pointerX = x + this.aimPower * segW; ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.moveTo(pointerX, y - 12); ctx.lineTo(pointerX - 9, y - 3); ctx.lineTo(pointerX + 9, y - 3); ctx.closePath(); ctx.fill();
-    ctx.font = "21px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.fillText(this.aimPower < 33 ? '弱力' : this.aimPower < 66 ? '中力' : this.aimPower < 95 ? '强力' : '⚠️过力!', cw / 2, y + barH + 30); ctx.textAlign = 'left';
+    const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
+    // 20 个像素方格，每格相对屏幕约 22~24px 宽，整体宽度 ~ 450px
+    const cellCount = 20;
+    const cellW = 22; const cellH = 28;
+    const barW = cellCount * cellW;
+    const x = Math.floor((cw - barW) / 2);
+    const y = Math.floor(ch - 90);
+    // 深棕边框（外 3px）
+    ctx.fillStyle = '#5C3A1E';
+    ctx.fillRect(x - 3, y - 3, barW + 6, cellH + 6);
+    // 内侧木牌底色（兜底，避免方格间缝隙泛黑）
+    ctx.fillStyle = '#2A1810';
+    ctx.fillRect(x, y, barW, cellH);
+    // 像素方格：灰/绿/黄/红，相邻格交替深浅
+    for (let i = 0; i < cellCount; i++) {
+      const pct = (i + 0.5) / cellCount * 100; // 当前格中心百分比
+      let cMain, cDark;
+      if (pct < 33)      { cMain = '#6B7280'; cDark = '#4A5360'; }
+      else if (pct < 66) { cMain = '#5DBB63'; cDark = '#4A9F50'; }
+      else if (pct < 95) { cMain = '#F4C430'; cDark = '#E0AE20'; }
+      else               { cMain = '#E76F51'; cDark = '#C75543'; }
+      // 交替深浅
+      ctx.fillStyle = (i & 1) ? cDark : cMain;
+      ctx.fillRect(x + i * cellW + 1, y + 1, cellW - 2, cellH - 2);
+      // 顶 1px 高光
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(x + i * cellW + 1, y + 1, cellW - 2, 2);
+      // 底 1px 暗影
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(x + i * cellW + 1, y + cellH - 3, cellW - 2, 2);
+    }
+    // 像素三角指针（8x8 方块阶梯三角，顶部白色 + 深色描边）
+    const pointerX = Math.floor(x + (this.aimPower / 100) * barW);
+    const pyBase = y - 4;
+    const s = 2; // 像素方块边
+    // 黑色描边层（先画大一圈）
+    ctx.fillStyle = '#1A1A2E';
+    for (let row = 0; row < 5; row++) {
+      const halfW = (5 - row);
+      ctx.fillRect(pointerX - halfW * s - s, pyBase - row * s - s, (halfW * 2 + 1) * s + s * 2, s);
+    }
+    // 白色填充层
+    ctx.fillStyle = '#FFF4D6';
+    for (let row = 0; row < 5; row++) {
+      const halfW = (5 - row) - 1;
+      if (halfW < 0) continue;
+      ctx.fillRect(pointerX - halfW * s, pyBase - row * s - s, (halfW * 2 + 1) * s, s);
+    }
+    // 像素文字：弱力/中力/强力/过力
+    const label = this.aimPower < 33 ? '弱 力' : this.aimPower < 66 ? '中 力' : this.aimPower < 95 ? '强 力' : '过 力 !';
+    ctx.textAlign = 'center';
+    this._drawPixelText(label, cw / 2, y + cellH + 22, 22, '#FFF4D6', '#5C3A1E');
+    ctx.textAlign = 'left';
   }
 
   _renderBiteAlert() {
@@ -1654,17 +1827,22 @@ class FishingScene {
       itemCount = this.questParams.detail.split(/\s+/).filter(Boolean).length;
     }
     const h = isQ002 ? (55 + itemCount * 26) : 60;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.font = "bold 22px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center';
-    ctx.fillText(`🎯 ${this.questParams.target} ${this.questParams.progress || 0}/${this.questParams.need}`, x + w / 2, y + 30); ctx.textAlign = 'left';
-    // q002 显示详细鱼种进度（每行一个，竖向排列）
+    // 木牌底板（无圆角）
+    this._drawWoodPlaque(x, y, w, h);
+    // 像素靶心图标
+    this._drawPixelIcon('target', x + 10, y + 14, 2);
+    // 像素字标题
+    this._drawPixelText(
+      `${this.questParams.target} ${this.questParams.progress || 0}/${this.questParams.need}`,
+      x + 34, y + 22, 18, '#FFF4D6', '#5C3A1E'
+    );
+    // q002 显示详细鱼种进度（每行一个，竖向排列，米白小字）
     if (isQ002 && this.questParams.detail) {
-      ctx.fillStyle = '#AAA'; ctx.font = "14px 'TencentSansW7', sans-serif";
       const items = this.questParams.detail.split(/\s+/).filter(Boolean);
       const lineH = 26;
       const startY = y + 55;
       for (let i = 0; i < items.length; i++) {
-        ctx.fillText(items[i], x + 16, startY + i * lineH);
+        this._drawPixelText(items[i], x + 16, startY + i * lineH, 13, '#FFE9B0', '#5C3A1E');
       }
     }
   }
