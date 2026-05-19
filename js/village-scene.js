@@ -1700,6 +1700,12 @@ class VillageScene {
 
     // 右上红色色块 → 像素花圃（覆盖 ROOF tiles at [1][13],[1][14],[2][13],[2][14]）
     drawFlowerbed(ctx, 13 * T, 1 * T, 2 * T, 2 * T);
+
+    // 左下红色色块 → 像素花圃（覆盖 ROOF tiles at [4][1],[4][2],[5][1],[5][2]）
+    drawFlowerbed(ctx, 1 * T, 4 * T, 2 * T, 2 * T);
+
+    // 右下红色色块 → 菜苗农田（覆盖 ROOF tiles at [4][15],[4][16],[5][15],[5][16]）
+    drawFarmland(ctx, 15 * T, 4 * T, 2 * T, 2 * T);
   }
 
   // 建筑渲染已移至 Layer 3（见 render 方法中的直接调用）
