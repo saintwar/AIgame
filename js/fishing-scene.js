@@ -15,13 +15,63 @@ const CONFIG = {
   waiting: { fishSpawnDelay: 2.0, biteSinkCount: 3, biteSinkDepth: 9, biteSinkDuration: 0.2 },
   biteWindow: { duration: 2.0 },
   reeling: { qteCountByRarity: [3, 5, 7, 9, 11], tickDurationByRarity: [1.6, 1.4, 1.2, 1.0, 0.8], hpDamageByRarity: [35, 20, 15, 12, 10], tensionPenaltyByRarity: [15, 18, 20, 22, 25], tensionSuccessBonus: 10, tensionFailPenalty: 20, tensionTimeoutPenalty: 20 },
-  playing: { maxTension: 100, tensionPerSecond: 20, tensionDecayPerSecond: 6, fishEscapeSpeed: 225, fishEscapeSpeedIncrease: 12, catchZoneX: 0.9, catchZoneY: 0.2, tensionLowThreshold: 40, tensionHighThreshold: 70, escapeBaseChanceAtZero: 0.08, escapeChanceAtHalf: 0.015, escapeChanceAtFull: 0.001, lowTensionPenaltyMultiplier: 3.0, highTensionBonusMultiplier: 0.3, escapeCheckInterval: 0.5, fishHPRecoverPerSecond: 8, fishHPMaxRecoverRatio: 0.3 },
+  playing: { maxTension: 100, tensionPerSecond: 20, tensionDecayPerSecond: 6, fishEscapeSpeed: 225, fishEscapeSpeedIncrease: 12, catchZoneX: 0.9, catchZoneY: 0.2, tensionLowThreshold: 40, tensionHighThreshold: 70, escapeBaseChanceAtZero: 0.08, escapeChanceAtHalf: 0.015, escapeChanceAtFull: 0.001, lowTensionPenaltyMultiplier: 3.0, highTensionBonusMultiplier: 0.3, escapeCheckInterval: 0.5, fishHPRecoverPerSecond: 8, fishHPMaxRecoverRatio: 0.3,
+    // PHASE 13-4：空格控压维度（叠加在 QTE 系统上）
+    //   按住空格 → tension 上升；松开 → tension 下降
+    //   tension≤0 持续 slackFailGrace 秒 → slack 失败（鱼脱钩，与 ≥100 鱼线断对称）
+    tensionRiseRate: 15,    // 按住空格每秒 +15（涨慢，0→100 约 6.7s）
+    tensionFallRate: 40,    // 松开每秒 -40（掉快，100→0 约 2.5s）
+    slackFailGrace: 0.5,    // tension≤0 缓冲秒数（避免松手瞬间触发）
+    goldZoneMin: 30, goldZoneMax: 70 // tension 黄金区（拉力条上高亮提示）
+  },
   caught: { animationDuration: 2.0, slowmoThreshold: 4, slowmoScale: 0.3, particleCount: 18, legendaryGlowDuration: 0.5 },
   failed: { resetDuration: 1.5 },
   fish: { travelSpeed: 120, biteProbBase: 0.6 },
 };
 
-const FAILED_MESSAGES = { overload: ['干! 用力过头炸线啦!', '拍谢，钓线炸掉了'], timeout: ['啊~ 跑了啦...', '呜呜不小心发呆了'], tension: ['这尾靠北大! 线撑不住~', '它太拼了啦'], escape: ['它挣脱了耶...', '差一点点啊!'] };
+const FAILED_MESSAGES = { overload: ['干! 用力过头炸线啦!', '拍谢，钓线炸掉了'], timeout: ['啊~ 跑了啦...', '呜呜不小心发呆了'], tension: ['这尾靠北大! 线撑不住~', '它太拼了啦'], escape: ['它挣脱了耶...', '差一点点啊!'], slack: ['鱼线松了！鱼跑了～', '哎呀！要保持张力啊！'] };
+
+// ════════════════════════════════════════════════════════
+// PHASE 13-3c：拉力色板（鱼线 / 拉力条共享同一组 hex）
+//   state = 'low' | 'mid' | 'high'，定义统一来自此处
+//   阈值与 CONFIG.playing.tensionLowThreshold / tensionHighThreshold 联动
+//   注意：现有"拉力条"语义为 high=绿（最佳拉力区间）/ low=红（鱼快跑），
+//        因此鱼线颜色按"拉力条当前显示色"取，逻辑完全一致
+// ════════════════════════════════════════════════════════
+const TENSION_PALETTE = {
+  low:  { main: '#E76F51', dark: '#C75543' }, // 红 - 拉力过低（鱼快跑）
+  mid:  { main: '#F4C430', dark: '#E0AE20' }, // 黄 - 警戒区间
+  high: { main: '#5DBB63', dark: '#4A9F50' }  // 绿 - 拉力高（最佳）
+};
+
+// PHASE 13-5：拉力视觉色板 —— 鱼线 + 拉力条共用唯一色源（正向语义定稿）
+//   tension 的语义 = "鱼的反抗值 / 玩家压制度"：
+//     拉力低 → 鱼快脱钩 → 红（危险）
+//     拉力中 → 拉锯战 → 黄（警戒）
+//     拉力高 → 玩家压制成功 → 绿（安全）
+//     拉力 100 → 鱼线绷断（仍触发失败；条外侧叠加红色闪烁外框警告）
+//   ⚠️ 玩法层 tension 完全不变（按对-10/按错+20/空格控压/≥100失败）
+//   ⚠️ 任何拉力相关颜色绘制必须 *统一* 调用 getTensionColor(tension)（见下方）
+//      darkColor 用于像素方格条偶数格暗纹（_drawPixelTensionBar 像素感）
+const TENSION_COLOR_SCHEME = {
+  safeColor:    '#5DBB63', safeDark:   '#4A9F50', // 绿（沿用现有绿，视觉无突变）
+  warnColor:    '#F4C430', warnDark:   '#E0AE20', // 黄（沿用现有黄）
+  dangerColor:  '#E76F51', dangerDark: '#C75543', // 红（沿用现有红）
+  warnThreshold:   70, // tension > 70 → 绿
+  dangerThreshold: 40  // tension ≤ 40 → 红
+};
+
+// PHASE 13-5：拉力条视觉规范定稿 —— 正向语义颜色映射（拉力条 + 鱼线唯一色源）
+//   tension ≤ 40  → 红（危险，鱼快脱钩）
+//   tension ≤ 70  → 黄（警戒，拉锯中）
+//   tension > 70  → 绿（安全，玩家压制成功）
+//   tension ≥ 100 → 鱼线绷断（颜色仍是绿，但已经触发失败判定；条外侧叠加红色闪烁外框作警告）
+//   ⚠️ 任何拉力相关颜色绘制必须 *统一* 调用 getTensionColor(tension)
+function getTensionColor(tension) {
+  if (tension <= 40) return { main: TENSION_COLOR_SCHEME.dangerColor, dark: TENSION_COLOR_SCHEME.dangerDark }; // 红
+  if (tension <= 70) return { main: TENSION_COLOR_SCHEME.warnColor,   dark: TENSION_COLOR_SCHEME.warnDark   }; // 黄
+  return                    { main: TENSION_COLOR_SCHEME.safeColor,   dark: TENSION_COLOR_SCHEME.safeDark   }; // 绿
+}
 
 // ============================================================
 // StateMachine
@@ -481,6 +531,7 @@ class FishingScene {
     this.playingFishX = centerX + (Math.random() - 0.5) * rangeX * 2; this.playingFishY = centerY + (Math.random() - 0.5) * rangeY * 2;
     this.escapeSpeed = cfg.fishEscapeSpeed; this.tension = 60; this.escapeBurstTimer = 0; this.fishMaxHP = this.currentFish.maxHP;
     this.fishYCenter = this.playingFishY; this.fishYTime = Math.random() * Math.PI * 2; this.escapeCheckTimer = 0; this.warningShown = false;
+    this.slackTimer = 0; // PHASE 13-4：tension≤0 累计秒数，超过 slackFailGrace 则 slack 失败
     // 首次进入水下场景时显示拉力教程
     this._showTensionTutorialIfNeeded();
   }
@@ -559,6 +610,23 @@ class FishingScene {
     if ((this.playingFishX >= w * cfg.catchZoneX && holdingSpace) || fishExhausted) { const pullUpSpeed = fishExhausted ? 225 : 150; this.playingFishY -= pullUpSpeed * dt; if (this.playingFishY <= h * cfg.catchZoneY) { this.fsm.transition('Caught', 'fish caught'); this._onFishCaught(); return; } }
     if (this.tension >= cfg.maxTension) { this.fsm.transition('Failed', 'tension overflow'); this.failedReason = 'tension'; }
     else if (this.playingFishX < -30) { this.fsm.transition('Failed', 'escape'); this.failedReason = 'escape'; }
+
+    // PHASE 13-4：空格控压维度（叠加在现有 QTE / 鱼挣扎逻辑上）
+    //   按住空格 → tension 上升（玩家主动施压，拉力变大；视觉条变短趋红）
+    //   松开空格 → tension 下降（鱼线松弛；视觉条变长趋绿）
+    //   ⚠️ 玩法要求"按对方向键 -10 / 按错 +20"在 _updateReeling QTE 中保留，未动
+    if (holdingSpace) this.tension += cfg.tensionRiseRate * dt;
+    else              this.tension -= cfg.tensionFallRate * dt;
+    this.tension = Math.max(0, Math.min(cfg.maxTension, this.tension));
+
+    // PHASE 13-4：低拉力（鱼线松弛）失败判定 —— tension≤0 持续 slackFailGrace 秒 → slack
+    //   与 tension≥100 鱼线断对称，均为"控压失败"。0.5 秒缓冲避开松手瞬间误触发
+    if (this.tension <= 0) {
+      this.slackTimer += dt;
+      if (this.slackTimer >= cfg.slackFailGrace) { this.fsm.transition('Failed', 'slack'); this.failedReason = 'slack'; return; }
+    } else {
+      this.slackTimer = 0;
+    }
   }
 
   _calculateEscapeChance(tension, maxTension) {
@@ -981,25 +1049,38 @@ class FishingScene {
 
   /** 丁达尔光柱（Light Shafts）—— 从水面射入的散射光 */
   _renderLightShafts(ctx, cw, ch) {
-    const shaftCount = 6;
-    for (let i = 0; i < shaftCount; i++) {
-      const baseX = cw * (0.1 + i * 0.15) + Math.sin(this.time * 0.3 + i * 1.7) * 40;
-      const width = 25 + Math.sin(this.time * 0.25 + i * 2.1) * 12;
-      const length = ch * (0.35 + Math.sin(this.time * 0.2 + i * 1.3) * 0.1);
-      const alpha = 0.06 + Math.sin(this.time * 0.4 + i * 0.9) * 0.025;
-      const shaftGrad = ctx.createLinearGradient(baseX, 0, baseX, length);
-      shaftGrad.addColorStop(0, `rgba(180, 235, 255, ${alpha * 1.5})`);
-      shaftGrad.addColorStop(0.3, `rgba(140, 210, 240, ${alpha})`);
-      shaftGrad.addColorStop(0.7, `rgba(100, 180, 220, ${alpha * 0.4})`);
-      shaftGrad.addColorStop(1, 'rgba(80, 160, 200, 0)');
-      ctx.fillStyle = shaftGrad;
-      ctx.beginPath();
-      ctx.moveTo(baseX - width * 0.4, 0);
-      ctx.lineTo(baseX + width * 0.4, 0);
-      ctx.lineTo(baseX + width * 1.2, length);
-      ctx.lineTo(baseX - width * 1.2, length);
-      ctx.closePath();
-      ctx.fill();
+    // PHASE 13-3：从矢量平滑梯形 → 像素列状光带
+    // 3 道光柱（左中右），每道由 4~8px 宽的硬边像素列拼接
+    const shafts = [
+      { baseX: cw * 0.18, width: 60, length: ch * 0.42, alphaBase: 0.10, freq: 0.30, off: 1.7 },
+      { baseX: cw * 0.50, width: 80, length: ch * 0.50, alphaBase: 0.13, freq: 0.25, off: 3.4 },
+      { baseX: cw * 0.82, width: 55, length: ch * 0.38, alphaBase: 0.09, freq: 0.35, off: 5.1 }
+    ];
+    const colCellW = 6; // 单像素列宽 6px（像素感明显但不过散）
+    for (const s of shafts) {
+      const sway = Math.sin(this.time * s.freq + s.off) * 25;
+      const baseX = s.baseX + sway;
+      const breath = 0.85 + Math.sin(this.time * 0.4 + s.off) * 0.15;
+      const length = s.length * breath;
+      const colCount = Math.ceil(s.width / colCellW);
+      const leftX = Math.floor(baseX - (colCount * colCellW) / 2);
+      for (let i = 0; i < colCount; i++) {
+        // 距中心越远透明度越低（梯度）+ 顶部更亮、底部消散
+        const distRatio = Math.abs(i - colCount / 2) / (colCount / 2);
+        const colAlpha = s.alphaBase * (1 - distRatio * 0.7) * breath;
+        // 每列底部要比顶部宽（透视感）→ 用每列再切成几段，越往下宽度略偏移
+        const segH = 8;
+        const segCount = Math.ceil(length / segH);
+        for (let j = 0; j < segCount; j++) {
+          const yTop = j * segH;
+          const fade = 1 - (j / segCount); // 顶亮底淡
+          const a = Math.max(0, colAlpha * (0.5 + fade * 0.5));
+          ctx.fillStyle = `rgba(168, 208, 224, ${a.toFixed(3)})`;
+          // 透视外撇：每往下偏 colCellW*0.06 的像素
+          const colX = leftX + i * colCellW + Math.floor(j * 0.4 * (i - colCount / 2) / colCount);
+          ctx.fillRect(colX, yTop, colCellW, segH);
+        }
+      }
     }
   }
 
@@ -1314,6 +1395,7 @@ class FishingScene {
     // ═══════════════════════════════════════════════════════════
 
     // ── Layer 0: 深水渐变（从上方微光到深处暗蓝）────────────
+    ctx.imageSmoothingEnabled = false; // PHASE 13-3：水下场景全程禁用反锯齿
     const waterGrad = ctx.createLinearGradient(0, 0, 0, ch);
     waterGrad.addColorStop(0, '#2A7A90');     // 顶部：水面透光区
     waterGrad.addColorStop(0.08, '#1E6880');   // 浅层
@@ -1322,6 +1404,9 @@ class FishingScene {
     waterGrad.addColorStop(0.75, '#0A3242');   // 深层
     waterGrad.addColorStop(1, '#061E2E');       // 最深处
     ctx.fillStyle = waterGrad; ctx.fillRect(0, 0, cw, ch);
+
+    // ── Layer 0.5: Bayer 4x4 dither 颗粒（PHASE 13-3，缓存一次 / 不每帧重算）──
+    ctx.drawImage(this._getUnderwaterDither(), 0, 0);
 
     // ── Layer 1: 焦散光纹（水面上方阳光折射产生的网状光纹）──────
     this._renderCaustics(ctx, cw, ch);
@@ -1374,79 +1459,166 @@ class FishingScene {
     //  游戏元素层
     // ═══════════════════════════════════════════════════════════
 
-    // 鱼线（水下视角：从右上角延伸入水）
-    let lineColor = this.tension >= cfg.tensionHighThreshold ? '#44ff44' : this.tension <= cfg.tensionLowThreshold ? '#ff4444' : '#ffaa00';
-    ctx.strokeStyle = lineColor; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(this.lineStartX, this.lineStartY);
-    const sag = this.tension > 50 ? 30 - (this.tension - 50) * 0.75 : 30; const midX = (this.lineStartX + this.playingFishX) / 2; ctx.quadraticCurveTo(midX, Math.max(this.lineStartY, this.playingFishY) + sag, this.playingFishX, this.playingFishY); ctx.stroke();
-    ctx.fillStyle = '#888'; ctx.beginPath(); ctx.arc(this.playingFishX, this.playingFishY, 9, 0, Math.PI * 2); ctx.fill();
+    // ── 鱼线（PHASE 13-3f：单段二次贝塞尔 · 抗锯齿 · 圆头 · 鱼端偏置 0.75）──
+    // 颜色：危险阈值才变色（85+ 黄 / 95+ 红闪），与右下拉力条独立映射
+    // 形状：单段 quadraticCurveTo，最低点偏鱼端 75%；总弧度仍走 curveFactor 表
+    // 约束：起点/终点坐标完全不动；其他场景元素仍保持像素风（save/restore 局部隔离）
+    const lineWidth = 4; // 老版本测量值 ~4-5px，取 4
+    const fishingLineColor = this._getFishingLineColor(this.tension);
+    this._drawSmoothFishingLine(this.lineStartX, this.lineStartY, this.playingFishX, this.playingFishY, fishingLineColor, lineWidth);
+    // 钩点（小像素方块，替代矢量灰圆）
+    ctx.fillStyle = '#2A2A2E';
+    ctx.fillRect(Math.floor(this.playingFishX) - 4, Math.floor(this.playingFishY) - 4, 8, 8);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(Math.floor(this.playingFishX) - 2, Math.floor(this.playingFishY) - 2, 4, 4);
 
-    // 渲染鱼
+    // 渲染鱼（约束 6：鱼形状不动）
     this._renderFish(this.playingFishX, this.playingFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace);
 
-    // 鱼身体下方耐力条
-    const fishHPBarW = 120; const fishHPBarX = this.playingFishX - fishHPBarW / 2; const fishHPBarY = this.playingFishY + 55;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(fishHPBarX - 3, fishHPBarY - 3, fishHPBarW + 6, 16);
-    ctx.fillStyle = '#333'; ctx.fillRect(fishHPBarX, fishHPBarY, fishHPBarW, 10);
-    ctx.fillStyle = '#F44336'; ctx.fillRect(fishHPBarX, fishHPBarY, fishHPBarW * Math.max(0, this.fishHP / this.currentFish.maxHP), 10);
-    ctx.fillStyle = '#FFF'; ctx.font = "12px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.fillText(Math.round(this.fishHP) + '/' + this.currentFish.maxHP, this.playingFishX, fishHPBarY + 22); ctx.textAlign = 'left';
+    // ── 鱼身体下方耐力条（PHASE 13-3：像素方格 + 像素字）──
+    const fishHPBarW = 120; const fishHPBarX = Math.floor(this.playingFishX - fishHPBarW / 2); const fishHPBarY = Math.floor(this.playingFishY + 55);
+    this._drawPixelHPBar(fishHPBarX, fishHPBarY, fishHPBarW, 10, this.fishHP / this.currentFish.maxHP, 4);
+    ctx.textAlign = 'center';
+    this._drawPixelText(`${Math.round(this.fishHP)}/${this.currentFish.maxHP}`, this.playingFishX, fishHPBarY + 24, 12, '#FFF4D6', '#5C3A1E');
+    ctx.textAlign = 'left';
 
     // ═══════════════════════════════════════════════════════════
     //  UI层
     // ═══════════════════════════════════════════════════════════
 
-    // 屏幕正下方 操作提示
-    const hintW = 400; const hintH = 70; const hintX = (cw - hintW) / 2; const hintY = ch - 100;
-    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(hintX, hintY, hintW, hintH, 12); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2; ctx.stroke();
+    // ── 屏幕正下方 操作提示（PHASE 13-3：木牌 + 像素字 + 空格键按键样式）──
+    const hintW = 420; const hintH = 70; const hintX = Math.floor((cw - hintW) / 2); const hintY = Math.floor(ch - 100);
+    this._drawWoodPlaque(hintX, hintY, hintW, hintH);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (holdingSpace) {
-      ctx.fillStyle = '#FFF'; ctx.font = "bold 28px 'TencentSansW7', sans-serif";
-      ctx.fillText('✓ 拉回中...', cw / 2, hintY + hintH / 2);
+      this._drawPixelText('✓ 拉 回 中 ...', cw / 2, hintY + hintH / 2, 22, '#5DBB63', '#1A1A2E');
     } else {
-      const textY = hintY + hintH / 2 - 8;
-      ctx.fillStyle = '#FFF'; ctx.font = "bold 28px 'TencentSansW7', sans-serif";
-      ctx.fillText('按住', cw / 2 - 85, textY);
-      ctx.fillStyle = '#FF4444'; ctx.font = "bold 40px 'TencentSansW7', sans-serif";
-      ctx.fillText('空格键', cw / 2 + 8, textY);
-      ctx.fillStyle = '#FFF'; ctx.font = "bold 28px 'TencentSansW7', sans-serif";
-      ctx.fillText('拉回鱼', cw / 2 + 110, textY);
+      const textY = hintY + hintH / 2 - 6;
+      // "按住" 米白
+      this._drawPixelText('按住', cw / 2 - 110, textY, 22, '#FFF4D6', '#5C3A1E');
+      // "空格键" 像素键帽：深色描边 + 浅色按键 + 米白字
+      const keyW = 92, keyH = 32;
+      const keyX = cw / 2 - 46;
+      const keyY = textY - keyH / 2;
+      // 键帽描边
+      ctx.fillStyle = '#1A1A2E';
+      ctx.fillRect(keyX, keyY, keyW, keyH);
+      // 键帽内层（按下/未按区分）
+      ctx.fillStyle = '#FFE9B0';
+      ctx.fillRect(keyX + 2, keyY + 2, keyW - 4, keyH - 4);
+      // 顶高光
+      ctx.fillStyle = '#FFF4D6';
+      ctx.fillRect(keyX + 2, keyY + 2, keyW - 4, 3);
+      // 底阴影
+      ctx.fillStyle = '#C99A4A';
+      ctx.fillRect(keyX + 2, keyY + keyH - 5, keyW - 4, 3);
+      // 键帽文字
+      this._drawPixelText('空格键', cw / 2, keyY + keyH / 2, 16, '#1A1A2E', null);
+      // "拉回鱼" 米白
+      this._drawPixelText('拉回鱼', cw / 2 + 130, textY, 22, '#FFF4D6', '#5C3A1E');
     }
-    if (!holdingSpace) { ctx.fillStyle = '#4CAF50'; ctx.font = "16px 'TencentSansW7', sans-serif"; ctx.fillText('提示：不拉鱼线时鱼会恢复体力！', cw / 2, hintY + hintH / 2 + 22); }
+    if (!holdingSpace) {
+      this._drawPixelText('提示：不拉鱼线时鱼会恢复体力！', cw / 2, hintY + hintH / 2 + 22, 13, '#5DBB63', '#1A1A2E');
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
-    // 右侧信息面板（右下角）
+    // ── 右下角"奇力鱼"信息面板（PHASE 13-3：木牌质感 + 像素血条/张力条）──
     const panelW = 240; const panelH = 155; const panelX = cw - panelW - 20; const panelY = ch - panelH - 20;
-    ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.beginPath(); ctx.roundRect(panelX, panelY, panelW, panelH, 10); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 20px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center';
-    ctx.fillText(this.currentFish.name, panelX + panelW / 2, panelY + 28);
-    ctx.fillStyle = '#FFF'; ctx.font = "16px 'TencentSansW7', sans-serif";
-    ctx.fillText('★'.repeat(this.currentFish.rarity), panelX + panelW / 2, panelY + 50);
+    this._drawWoodPlaque(panelX, panelY, panelW, panelH);
+    // 鱼名（米白大字 + 深棕描边）
+    ctx.textAlign = 'center';
+    this._drawPixelText(this.currentFish.name, panelX + panelW / 2, panelY + 22, 18, '#FFF4D6', '#5C3A1E');
+    // 星级（金黄米白）
+    this._drawPixelText('★'.repeat(this.currentFish.rarity), panelX + panelW / 2, panelY + 46, 16, '#FFD46B', '#5C3A1E');
 
-    // 耐力条
-    const hpBarW = panelW - 30; const hpBarX = panelX + 15; const hpBarY = panelY + 65;
-    ctx.fillStyle = '#333'; ctx.fillRect(hpBarX, hpBarY, hpBarW, 16);
-    ctx.fillStyle = '#F44336'; ctx.fillRect(hpBarX, hpBarY, hpBarW * Math.max(0, this.fishHP / this.currentFish.maxHP), 16);
-    ctx.fillStyle = '#FFF'; ctx.font = "12px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center';
-    ctx.fillText(`鱼的体力 ${Math.round(this.fishHP)}/${this.currentFish.maxHP}`, hpBarX + hpBarW / 2, hpBarY + 26);
+    // 耐力条（像素方格）
+    const hpBarW = panelW - 30; const hpBarX = panelX + 15; const hpBarY = panelY + 60;
+    this._drawPixelHPBar(hpBarX, hpBarY, hpBarW, 16, this.fishHP / this.currentFish.maxHP, 6);
+    this._drawPixelText(`鱼的体力 ${Math.round(this.fishHP)}/${this.currentFish.maxHP}`, hpBarX + hpBarW / 2, hpBarY + 28, 12, '#FFF4D6', '#5C3A1E');
 
-    // 鱼线拉力指示器
+    // 鱼线拉力指示器（像素方格 + 三色档分）
     const tensionBarW = hpBarW; const tensionBarX = hpBarX; const tensionBarY = panelY + 100;
-    ctx.fillStyle = '#222'; ctx.fillRect(tensionBarX, tensionBarY, tensionBarW, 16);
-    const tensionColor = this.tension >= cfg.tensionHighThreshold ? '#44ff44' : this.tension <= cfg.tensionLowThreshold ? '#ff4444' : '#ffaa00';
-    ctx.fillStyle = tensionColor; ctx.fillRect(tensionBarX, tensionBarY, tensionBarW * (this.tension / cfg.maxTension), 16);
-    ctx.fillStyle = '#FFF'; ctx.font = "12px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center';
-    ctx.fillText(`鱼线拉力 ${Math.round(this.tension)}/${cfg.maxTension}`, tensionBarX + tensionBarW / 2, tensionBarY + 28);
+    // PHASE 13-5：拉力条视觉规范定稿 —— 正向语义
+    //   tension=0 → 条空（左端）；tension=100 → 条满（右端）
+    //   颜色：≤40 红 / ≤70 黄 / >70 绿（getTensionColor 唯一色源，鱼线同步）
+    const tensionRatio = Math.max(0, Math.min(1, this.tension / cfg.maxTension));
+    const tensionPalette = getTensionColor(this.tension);
+    // 1. 黄金区高亮带（条底色之上、填充之下）：条上 40%~85%，半透明绿
+    //    起点 X = barX + barW * 0.40，终点 X = barX + barW * 0.85
+    //    ⚠️ 必须先于 _drawPixelTensionBar 绘制（z-index：底色 → 黄金区 → 填充 → 边框 → 指针 → 文字）
+    //    但 _drawPixelTensionBar 内部包含底色绘制，因此在 _drawPixelTensionBar 之后再画黄金区也能"压在填充之下"——
+    //    解法：先调用 _drawPixelTensionBar 画底色+填充，再画黄金区半透明叠加（不会盖住填充因为透明度仅 0.25），最后画指针+文字
+    //    （半透明绿带与填充色叠加视觉柔和，符合"提示性高亮"语义）
+    this._drawPixelTensionBar(tensionBarX, tensionBarY, tensionBarW, 16, tensionRatio, tensionPalette, 6);
+    // 2. 黄金区高亮带（半透明绿叠加，提示玩家"维持在 40~85 区间最理想"）
+    {
+      const goldL = 0.40, goldR = 0.85;
+      const goldX = Math.floor(tensionBarX + tensionBarW * goldL);
+      const goldW = Math.ceil(tensionBarW * (goldR - goldL));
+      ctx.fillStyle = 'rgba(92, 232, 92, 0.25)';
+      ctx.fillRect(goldX, tensionBarY, goldW, 16);
+      // 黄金区两端 1px 米色描边（更可读）
+      ctx.fillStyle = 'rgba(255, 244, 214, 0.55)';
+      ctx.fillRect(goldX, tensionBarY, 1, 16);
+      ctx.fillRect(goldX + goldW - 1, tensionBarY, 1, 16);
+    }
+    // 3. tension≥85 闪烁警告外框（在条外侧加 2px 红色描边，sin 4Hz 振荡）
+    //    叠加效果：不替换填充色 —— tension=92 时绿色填充 + 红色闪烁外框（"安全但接近极限"）
+    if (this.tension >= 85) {
+      const flashAlpha = 0.5 + 0.5 * Math.sin(this.time * 8 * Math.PI); // 4Hz（period 0.25s）
+      ctx.strokeStyle = `rgba(232, 76, 76, ${flashAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tensionBarX - 2, tensionBarY - 2, tensionBarW + 4, 16 + 4);
+      ctx.lineWidth = 1;
+    }
+    // 4. 当前位置 ▲ 指针（位于填充末端，即 tension/100 处）
+    {
+      const ptrX = Math.floor(tensionBarX + tensionBarW * tensionRatio);
+      ctx.fillStyle = '#1A1A2E';
+      ctx.beginPath();
+      ctx.moveTo(ptrX, tensionBarY + 16);
+      ctx.lineTo(ptrX - 6, tensionBarY + 24);
+      ctx.lineTo(ptrX + 6, tensionBarY + 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#FFF4D6';
+      ctx.beginPath();
+      ctx.moveTo(ptrX, tensionBarY + 17);
+      ctx.lineTo(ptrX - 4, tensionBarY + 23);
+      ctx.lineTo(ptrX + 4, tensionBarY + 23);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // 5. 数字文字（保持原格式）
+    this._drawPixelText(`鱼线拉力 ${Math.round(this.tension)}/${cfg.maxTension}`, tensionBarX + tensionBarW / 2, tensionBarY + 28, 12, '#FFF4D6', '#5C3A1E');
+    ctx.textAlign = 'left';
 
-    if (this.tension <= cfg.tensionLowThreshold) {
+    // PHASE 13-5：极限警告牌（tension ≥ 85，鱼线快断）—— 与条外闪烁外框配合，全屏红闪+木牌
+    if (this.tension >= 85) {
       const flashAlpha = 0.5 + 0.5 * Math.sin(this.time * 8);
       ctx.fillStyle = `rgba(244, 67, 54, ${flashAlpha * 0.3})`; ctx.fillRect(0, 0, cw, ch);
-      const alertW = 450; const alertH = 90; const alertX = (cw - alertW) / 2; const alertY = (ch - alertH) / 2;
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.8 * flashAlpha})`; ctx.fillRect(alertX - 6, alertY - 6, alertW + 12, alertH + 12);
-      ctx.fillStyle = `rgba(244, 67, 54, ${flashAlpha})`; ctx.fillRect(alertX, alertY, alertW, alertH);
-      ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`; ctx.font = "bold 42px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('⚠ 鱼线拉力极限 ⚠', cw / 2, alertY + 57); ctx.textAlign = 'left';
+      // 极限警告：木牌 + 红底像素字
+      const alertW = 460; const alertH = 88; const alertX = Math.floor((cw - alertW) / 2); const alertY = Math.floor((ch - alertH) / 2);
+      // 黑色像素描边
+      ctx.fillStyle = `rgba(26, 26, 46, ${flashAlpha})`;
+      ctx.fillRect(alertX - 4, alertY - 4, alertW + 8, alertH + 8);
+      // 红底
+      ctx.fillStyle = `rgba(231, 111, 81, ${flashAlpha})`;
+      ctx.fillRect(alertX, alertY, alertW, alertH);
+      // 顶高光
+      ctx.fillStyle = `rgba(255, 244, 214, ${flashAlpha * 0.5})`;
+      ctx.fillRect(alertX, alertY, alertW, 3);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      this._drawPixelText('⚠ 鱼 线 拉 力 极 限 ⚠', cw / 2, alertY + alertH / 2, 26, '#FFF4D6', '#1A1A2E');
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
     ctx.textAlign = 'left';
+    // PHASE 13-4：屏幕底部操作提示（拉力 + QTE 双手协作）
+    {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      this._drawPixelText('按住 [空格] 控制拉力 · 方向键 QTE 攻击鱼', cw / 2, ch - 20, 14, '#FFF4D6', '#1A1A2E');
+      ctx.textAlign = 'left';
+    }
     this._renderHUD();
   }
 
@@ -1876,33 +2048,211 @@ class FishingScene {
   }
 
   _renderWaterWeeds() {
+    // PHASE 13-3：从矢量曲线 → 4~8px 像素列阶梯状
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
-    // 纯水下视角：水草从屏幕底部生长
     const bottomY = ch * 0.92;
     const weedPositions = [cw * 0.04, cw * 0.10, cw * 0.16, cw * 0.22, cw * 0.30, cw * 0.36, cw * 0.42, cw * 0.50, cw * 0.56, cw * 0.62, cw * 0.68, cw * 0.74, cw * 0.80, cw * 0.86, cw * 0.92];
     const heights = [110, 160, 100, 140, 90, 130, 110, 150, 100, 140, 90, 130, 110, 140, 100];
-    const colors = ['#1B5E20', '#2E7D32', '#388E3C', '#1B5E20', '#43A047', '#2E7D32', '#388E3C', '#1B5E20', '#2E7D32', '#388E3C', '#1B5E20', '#43A047', '#2E7D32', '#388E3C', '#1B5E20'];
+    // 任务要求：#3A6B45 深绿 + #5DBB63 亮绿 2 色像素拼接
+    const colMain = '#3A6B45';
+    const colLight = '#5DBB63';
+    const colShadow = '#264A30';
+    const colW = 6;   // 单像素列宽 6px
+    const stepH = 5;  // 阶梯每段高度 5px（产生明显锯齿感）
     for (let i = 0; i < weedPositions.length; i++) {
-      const wx = weedPositions[i];
+      const wx = Math.floor(weedPositions[i]);
       const wh = heights[i];
-      ctx.save();
-      ctx.translate(wx, bottomY);
-      for (let j = 0; j < 3; j++) {
-        const bladeX = (j - 1) * 7;
-        const sway = Math.sin(this.time * 1.5 + i * 1.3 + j * 0.8) * 8;
-        const curve = Math.sin(this.time * 1.1 + i * 0.9 + j * 0.5) * 5;
-        ctx.beginPath();
-        ctx.strokeStyle = colors[i]; ctx.lineWidth = 3;
-        ctx.moveTo(bladeX, 0);
-        ctx.quadraticCurveTo(bladeX + sway, -wh * 0.5, bladeX + sway + curve, -wh);
-        ctx.stroke();
-        // 叶片
-        const leafAngle = Math.sin(this.time * 1.3 + i + j) * 0.25;
-        ctx.save(); ctx.translate(bladeX + sway + curve * 0.8, -wh * 0.7); ctx.rotate(leafAngle);
-        ctx.beginPath(); ctx.ellipse(0, 0, 4, 10, 0.4, 0, Math.PI * 2); ctx.fillStyle = colors[i]; ctx.fill(); ctx.restore();
+      // 整株摇摆相位
+      const swayPhase = this.time * 1.2 + i * 0.8;
+      // 每株 3 列：左 / 中 / 右
+      for (let blade = -1; blade <= 1; blade++) {
+        const segCount = Math.ceil(wh / stepH);
+        for (let seg = 0; seg < segCount; seg++) {
+          const yTop = bottomY - (seg + 1) * stepH;
+          // 顶部摇摆幅度大，根部不动
+          const swayWeight = (seg / segCount) * (seg / segCount); // 平方曲线
+          const sway = Math.sin(swayPhase + blade * 0.5) * 9 * swayWeight;
+          const xCenter = wx + blade * 7 + Math.floor(sway);
+          // 阶梯按 colW 对齐（向下取整到偶数列）→ 像素列错位感
+          const colX = Math.floor(xCenter / 2) * 2 - colW / 2;
+          // 2 色交替（亮/深）+ 顶端偶尔加亮绿叶尖
+          const isTip = (seg === segCount - 1);
+          const isLight = (seg + i + blade) % 2 === 0;
+          ctx.fillStyle = isTip ? colLight : (isLight ? colMain : colShadow);
+          ctx.fillRect(colX, yTop, colW, stepH);
+        }
       }
-      ctx.restore();
     }
+  }
+
+  // ════════════════════════════════════════════════════════
+  // PHASE 13-3 水下场景像素化辅助
+  //   _drawPixelLine     深灰像素硬边直线（Bresenham 风格）
+  //   _drawPixelHPBar    像素方格血条
+  //   _drawPixelTensionBar 像素方格张力条（绿/橙/红三档）
+  //   _getUnderwaterDither 缓存的 4x4 Bayer dither 颗粒图层
+  //   _getFishingLineColor 鱼线颜色按拉力 4 段映射 + ≥90 红白闪烁（PHASE 13-3b）
+  // ════════════════════════════════════════════════════════
+  /**
+   * PHASE 13-5：鱼线颜色 —— 与拉力条共用 getTensionColor（正向语义，唯一色源）
+   * - tension ≤ 40 → 红（危险，鱼快脱钩）
+   * - tension ≤ 70 → 黄（警戒）
+   * - tension > 70 → 绿（安全）
+   * - tension ≥ 95 → 红白闪烁（断线极限警告，等价于旧版闪烁逻辑）
+   */
+  _getFishingLineColor(tension) {
+    const base = getTensionColor(tension).main;
+    if (tension >= 95) {
+      return ((Date.now() / 250) | 0) % 2 === 0 ? base : '#FFEBEB';
+    }
+    return base;
+  }
+  /**
+   * PHASE 13-3f：抗锯齿单段二次贝塞尔鱼线（悬链线感 · 圆头 · 鱼端偏置 0.75）
+   * - 起点/终点完全不变
+   * - 弧度总量 sag = 线长 × curveFactor（拉力联动表沿用）
+   * - bias = 0.75：曲线最低点偏鱼端 75%
+   * - 控制点经验公式：control = 2·midPoint - (start+end)/2，其中 midPoint = 起终点直线 75% 处再下移 sag
+   *   该式保证 t=bias 时贝塞尔点 = midPoint，达到"最低点在 75%"
+   * - lineCap='round' 圆头；imageSmoothingEnabled 用 save/restore 局部开启，画完恢复像素风
+   */
+  _drawSmoothFishingLine(x0, y0, x1, y1, color, w) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    // 拉力系数（PHASE 13-3d 表，沿用）
+    const t = this.tension;
+    let curveFactor;
+    if (t < 30)      curveFactor = 0.08;
+    else if (t < 60) curveFactor = 0.05;
+    else if (t < 85) curveFactor = 0.03;
+    else             curveFactor = 0.015;
+    const sag = len * curveFactor;
+    // 偏置 0.75：让贝塞尔曲线在 t=0.75 处达到"直线 75% 点 + sag 下移"
+    const bias = 0.75;
+    const midX = x0 + bias * dx;
+    const midY = y0 + bias * dy + sag;
+    // 控制点反推：B(t)=midPoint 时 t=bias，但二次贝塞尔最大下垂点 t=0.5 偏移
+    // 经验公式（任务规范）：control = 2·mid - (start+end)/2
+    const ctrlX = 2 * midX - (x0 + x1) / 2;
+    const ctrlY = 2 * midY - (y0 + y1) / 2;
+    // 局部开启抗锯齿 + 圆头，画完 restore 不影响像素风渲染
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(ctrlX, ctrlY, x1, y1);
+    ctx.stroke();
+    ctx.restore();
+  }
+  _drawPixelLine(x0, y0, x1, y1, color, w) {
+    // Bresenham 整数直线（每像素绘制 w×w 方块），imageSmoothingEnabled 已关闭
+    const ctx = this.ctx;
+    ctx.fillStyle = color;
+    let xi = Math.round(x0), yi = Math.round(y0);
+    const x2 = Math.round(x1), y2 = Math.round(y1);
+    const dx = Math.abs(x2 - xi), dy = Math.abs(y2 - yi);
+    const sx = xi < x2 ? 1 : -1, sy = yi < y2 ? 1 : -1;
+    let err = dx - dy;
+    // 限制迭代上限（避免 stale state 导致死循环）
+    const maxStep = dx + dy + 4;
+    let step = 0;
+    while (step++ < maxStep) {
+      ctx.fillRect(xi - Math.floor(w / 2), yi - Math.floor(w / 2), w, w);
+      if (xi === x2 && yi === y2) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; xi += sx; }
+      if (e2 < dx)  { err += dx; yi += sy; }
+    }
+  }
+  _drawPixelHPBar(x, y, w, h, ratio, cellW) {
+    // 像素方格血条：满血 #E76F51 / #C75543 交替；底色 #2A2A2E
+    const ctx = this.ctx;
+    cellW = cellW || 4;
+    ratio = Math.max(0, Math.min(1, ratio));
+    // 外描边 1px
+    ctx.fillStyle = '#1A1A2E';
+    ctx.fillRect(Math.floor(x) - 1, Math.floor(y) - 1, Math.ceil(w) + 2, Math.ceil(h) + 2);
+    // 底色（空槽）
+    ctx.fillStyle = '#2A2A2E';
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    // 填充像素方格
+    const filledW = w * ratio;
+    const cellCount = Math.ceil(filledW / cellW);
+    for (let i = 0; i < cellCount; i++) {
+      const cx = Math.floor(x) + i * cellW;
+      const cellRealW = Math.min(cellW - 1, Math.floor(x + filledW) - cx); // -1 留 1px 像素缝
+      if (cellRealW <= 0) continue;
+      ctx.fillStyle = (i & 1) ? '#C75543' : '#E76F51';
+      ctx.fillRect(cx, Math.floor(y), cellRealW, Math.ceil(h));
+      // 顶 1px 高光
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(cx, Math.floor(y), cellRealW, 1);
+    }
+  }
+  _drawPixelTensionBar(x, y, w, h, ratio, palette, cellW) {
+    // PHASE 13-3g：张力条直接接收颜色对象 { main, dark }（统一来自 getTensionColor）
+    const ctx = this.ctx;
+    cellW = cellW || 6;
+    ratio = Math.max(0, Math.min(1, ratio));
+    ctx.fillStyle = '#1A1A2E';
+    ctx.fillRect(Math.floor(x) - 1, Math.floor(y) - 1, Math.ceil(w) + 2, Math.ceil(h) + 2);
+    ctx.fillStyle = '#2A2A2E';
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    const filledW = w * ratio;
+    const cellCount = Math.ceil(filledW / cellW);
+    for (let i = 0; i < cellCount; i++) {
+      const cx = Math.floor(x) + i * cellW;
+      const cellRealW = Math.min(cellW - 1, Math.floor(x + filledW) - cx);
+      if (cellRealW <= 0) continue;
+      ctx.fillStyle = (i & 1) ? palette.dark : palette.main;
+      ctx.fillRect(cx, Math.floor(y), cellRealW, Math.ceil(h));
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(cx, Math.floor(y), cellRealW, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(cx, Math.floor(y) + Math.ceil(h) - 1, cellRealW, 1);
+    }
+  }
+  /** 缓存 4x4 Bayer dither 颗粒到 offscreen，水下场景叠加用（只生成一次） */
+  _getUnderwaterDither() {
+    if (this._underwaterDither && this._underwaterDither.w === this.cw && this._underwaterDither.h === this.ch) {
+      return this._underwaterDither.canvas;
+    }
+    const off = document.createElement('canvas');
+    off.width = this.cw; off.height = this.ch;
+    const octx = off.getContext('2d');
+    const img = octx.createImageData(this.cw, this.ch);
+    // 4x4 Bayer 矩阵
+    const bayer = [
+      [ 0,  8,  2, 10],
+      [12,  4, 14,  6],
+      [ 3, 11,  1,  9],
+      [15,  7, 13,  5]
+    ];
+    for (let y = 0; y < this.ch; y++) {
+      for (let x = 0; x < this.cw; x++) {
+        const b = bayer[y & 3][x & 3]; // 0~15
+        // 居中映射：8 = 中灰透明；<8 偏暗，>8 偏亮
+        const d = b - 7; // -7..+8
+        const idx = (y * this.cw + x) * 4;
+        if (d < 0) {
+          img.data[idx] = 0; img.data[idx + 1] = 0; img.data[idx + 2] = 0;
+          img.data[idx + 3] = Math.min(255, -d * 5); // 0..35 alpha
+        } else if (d > 0) {
+          img.data[idx] = 255; img.data[idx + 1] = 255; img.data[idx + 2] = 255;
+          img.data[idx + 3] = Math.min(255, d * 3); // 0..24 alpha（亮颗粒比暗弱）
+        } else {
+          img.data[idx + 3] = 0;
+        }
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    this._underwaterDither = { canvas: off, w: this.cw, h: this.ch };
+    return off;
   }
 
   _initSmallFish() {
