@@ -4,6 +4,7 @@ import SceneManager from './scene-manager.js';
 import questSystem from './quest-system.js';
 import { QUESTS } from './data/quests.js';
 import { rollFishWithRod, SHUISHE_FISH_POOL } from './data/fish-pool.js';
+import { drawFishingBg } from './render/fishing-bg.js';
 
 // ============================================================
 // CONFIG
@@ -789,91 +790,35 @@ class FishingScene {
   _renderBackground() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const waterLevel = ch * 0.5;
 
-    // ── Layer 0: 天空渐变（日月潭清晨色调）──────────────
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, waterLevel);
-    skyGrad.addColorStop(0, '#6BB3D9');      // 高空淡蓝
-    skyGrad.addColorStop(0.35, '#9DD1ED');   // 天际蓝
-    skyGrad.addColorStop(0.65, '#C8E6F5');   // 浅蓝
-    skyGrad.addColorStop(1, '#E8F4EC');       // 地平线微绿（湖面反光）
-    ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, cw, waterLevel);
+    // ── Layer 0-4 静态背景【清晨清澈】：天空 dither / 像素云 / 晨雾远山 / 晨阳 /
+    //   三层青蓝湖（含柔和倒影 + 像素气泡 + 晨光反光带 + 浅滩过渡） ──
+    // 全部一次性绘制到离屏 Canvas，每场仅跑一次（详见 js/render/fishing-bg.js）
+    drawFishingBg(ctx, cw, ch);
 
-    // ── Layer 1: 远云 ──────────────────────────────────
-    this._renderEnvClouds(ctx);
+    // ── Layer 4.1: 已删除 ──
+    //   原"远山反向锯齿倒影"会形成尖刺/怪物嘴感，
+    //   且与新版 fishing-bg.js 内置的"水波错位柔和倒影"冲突，故移除。
 
-    // ── Layer 2: 远山层叠（4 层）────────────────────────
-    // 最远层（淡紫蓝 + 雾）
-    ctx.fillStyle = '#8FA8BF'; this._drawMountainRange(ctx, cw, waterLevel, 0.06, 0.18, 5, 0.02);
-    ctx.fillStyle = 'rgba(200,215,230,0.35)'; ctx.fillRect(0, waterLevel - ch * 0.22, cw, ch * 0.22);
-    // 远层（蓝绿）
-    ctx.fillStyle = '#5B8A6F'; this._drawMountainRange(ctx, cw, waterLevel, 0.04, 0.25, 4, 0.05);
-    ctx.fillStyle = 'rgba(180,210,190,0.2)'; ctx.fillRect(0, waterLevel - ch * 0.18, cw, ch * 0.18);
-    // 中层（翠绿）
-    ctx.fillStyle = '#3D7A52'; this._drawMountainRange(ctx, cw, waterLevel, 0.025, 0.28, 3, 0.08);
-    // 近层（深绿）
-    ctx.fillStyle = '#2B5E3A'; this._drawMountainRange(ctx, cw, waterLevel, 0.015, 0.22, 2, 0.12);
+    // ── Layer 4.2: 已删除 ──
+    //   原 ctx.stroke() 横向 Math.sin 波纹会形成工业斜纹/45°斜线感，
+    //   且与新版湖面 dither + 浅滩过渡 + 反光带冲突，故移除。
 
-    // ── Layer 3: 晨雾横带 ──────────────────────────────
-    const mistGrad = ctx.createLinearGradient(0, waterLevel - 35, 0, waterLevel + 8);
-    mistGrad.addColorStop(0, 'rgba(220,235,245,0)');
-    mistGrad.addColorStop(0.4, 'rgba(220,235,245,0.35)');
-    mistGrad.addColorStop(0.7, 'rgba(210,230,240,0.5)');
-    mistGrad.addColorStop(1, 'rgba(200,225,240,0)');
-    ctx.fillStyle = mistGrad; ctx.fillRect(0, waterLevel - 35, cw, 43);
-    // 浮雾横移
-    const fogDrift = (this.time * 12) % cw;
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = '#D8E8F0';
-    for (let i = 0; i < 3; i++) {
-      const fx = (fogDrift + i * cw * 0.45) % (cw + 300) - 150;
-      ctx.beginPath(); ctx.ellipse(fx, waterLevel - 8, 260, 22, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // ── Layer 4: 湖面（清澈渐变 + 光影）─────────────────
-    const lakeGrad = ctx.createLinearGradient(0, waterLevel, 0, ch);
-    lakeGrad.addColorStop(0, '#5DA5B8');     // 近水面：清澈蓝绿
-    lakeGrad.addColorStop(0.15, '#4A90A4');  // 过渡
-    lakeGrad.addColorStop(0.5, '#3A7A8F');   // 中层
-    lakeGrad.addColorStop(1, '#264D5E');      // 深层
-    ctx.fillStyle = lakeGrad; ctx.fillRect(0, waterLevel, cw, ch - waterLevel);
-
-    // ── Layer 4.1: 山体倒影 ────────────────────────────
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.translate(0, waterLevel * 2);
-    ctx.scale(1, -1);
-    ctx.fillStyle = '#5B8A6F'; this._drawMountainRange(ctx, cw, waterLevel, 0.04, 0.2, 4, 0.05);
-    ctx.fillStyle = '#3D7A52'; this._drawMountainRange(ctx, cw, waterLevel, 0.025, 0.22, 3, 0.08);
-    ctx.restore();
-
-    // ── Layer 4.2: 水面波纹 ────────────────────────────
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
-    for (let y = waterLevel + 18; y < ch; y += 30) {
-      const fadeAlpha = Math.max(0, 1 - (y - waterLevel) / (ch - waterLevel));
-      ctx.globalAlpha = fadeAlpha * 0.25;
-      ctx.beginPath();
-      for (let x = 0; x < cw; x += 4) {
-        const waveY = y + Math.sin((x + this.time * 55) / 55) * 4 + Math.sin((x + this.time * 30) / 90) * 3;
-        x === 0 ? ctx.moveTo(x, waveY) : ctx.lineTo(x, waveY);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // ── Layer 4.3: 水面光斑（阳光碎点）──────────────────
+    // ── Layer 4.3: 水面光斑（阳光碎点，动态，清晨柔白）──
     const sunSpotX = cw * 0.72;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 10; i++) {
       const sx = sunSpotX + Math.sin(this.time * 0.8 + i * 2.1) * 90;
-      const sy = waterLevel + 20 + i * 18 + Math.sin(this.time * 1.2 + i) * 6;
-      const sa = (0.15 + Math.sin(this.time * 2 + i * 1.5) * 0.1);
-      ctx.fillStyle = `rgba(255,255,230,${Math.max(0, sa)})`;
-      ctx.beginPath(); ctx.ellipse(sx, sy, 18 + Math.sin(this.time + i) * 6, 3, 0.15, 0, Math.PI * 2); ctx.fill();
+      const sy = waterLevel + 18 + i * 14 + Math.sin(this.time * 1.2 + i) * 5;
+      // 仅在水面层（湖面上 1/3）出现，避免穿到水底
+      if (sy > waterLevel + (ch - waterLevel) / 3) continue;
+      const sa = (0.12 + Math.sin(this.time * 2 + i * 1.5) * 0.08);
+      ctx.fillStyle = `rgba(255, 248, 224, ${Math.max(0, sa).toFixed(3)})`;
+      ctx.beginPath(); ctx.ellipse(sx, sy, 14 + Math.sin(this.time + i) * 4, 2, 0.15, 0, Math.PI * 2); ctx.fill();
     }
 
     // ── Layer 5: 近景植被 ──────────────────────────────
     this._renderShoreVegetation(ctx, cw, ch, waterLevel);
 
-    // ── Layer 6: 氛围动态元素 ──────────────────────────
+    // ── Layer 6: 氛围动态元素（飞鸟/落叶；动云已并入静态缓存，故不再调用 _renderEnvClouds）──
     this._renderEnvBirds(ctx);
     this._renderEnvLeaves(ctx);
   }
