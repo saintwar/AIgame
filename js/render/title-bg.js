@@ -143,16 +143,56 @@ function _buildCache(w, h) {
 
   drawCloud(Math.floor(w * 0.18), Math.floor(h * 0.10), 3);
   drawCloud(Math.floor(w * 0.55), Math.floor(h * 0.06), 2);
-  drawCloud(Math.floor(w * 0.78), Math.floor(h * 0.14), 3);
   drawCloud(Math.floor(w * 0.38), Math.floor(h * 0.20), 2);
 
   // ═══════════════════════════════════════
-  // 层 2：远山（中部 ~15%）像素锯齿山脉
+  // 层 1.5：夕阳本体 + 光晕（在远山之前绘制，被山遮挡）
+  // ═══════════════════════════════════════
+  const sunCX = Math.floor(w * 0.70); // P1: 75% → 70% 左移避免被远山切边
+  const sunCY = Math.floor(h * 0.44);
+  const sunR = 36; // 圆盘半径
+
+  // 外圈光晕（由外到内）
+  const glowLayers = [
+    { r: sunR * 2.0, color: 'rgba(231, 111, 81, 0.15)' },   // #E76F51 红橙
+    { r: sunR * 1.6, color: 'rgba(244, 162, 97, 0.30)' },   // #F4A261 橙
+    { r: sunR * 1.3, color: 'rgba(255, 232, 176, 0.60)' },  // #FFE8B0 亮黄白
+  ];
+  for (const gl of glowLayers) {
+    const gr = Math.floor(gl.r);
+    c.fillStyle = gl.color;
+    // 像素圆光晕（用 fillRect 逐像素）
+    for (let dy = -gr; dy <= gr; dy += 2) {
+      const halfW = Math.floor(Math.sqrt(Math.max(0, gr * gr - dy * dy)));
+      c.fillRect(sunCX - halfW, sunCY + dy, halfW * 2, 2);
+    }
+  }
+
+  // 夕阳圆盘本体（像素阶梯圆）
+  c.fillStyle = '#FFD580';
+  for (let dy = -sunR; dy <= sunR; dy += 2) {
+    const halfW = Math.floor(Math.sqrt(Math.max(0, sunR * sunR - dy * dy)));
+    c.fillRect(sunCX - halfW, sunCY + dy, halfW * 2, 2);
+  }
+  // 圆盘亮心
+  c.fillStyle = '#FFE8B0';
+  const innerR = Math.floor(sunR * 0.6);
+  for (let dy = -innerR; dy <= innerR; dy += 2) {
+    const halfW = Math.floor(Math.sqrt(Math.max(0, innerR * innerR - dy * dy)));
+    c.fillRect(sunCX - halfW, sunCY + dy, halfW * 2, 2);
+  }
+
+  // ═══════════════════════════════════════
+  // 层 2：远山（中部 ~15%）像素锯齿山脉 — 四层空气透视
   // ═══════════════════════════════════════
   const mtBase = skyH;
   const mtH = Math.floor(h * 0.15);
 
-  // 远山（最浅紫）
+  // 最远后山（浅紫，低矮平缓，仅露山尖）
+  c.fillStyle = '#6B5B85';
+  _drawMountain(c, 0, mtBase + mtH * 0.15, w, mtH * 0.25, 4, 88);
+
+  // 远山（浅紫）
   c.fillStyle = '#8C7BA6';
   _drawMountain(c, 0, mtBase + mtH * 0.3, w, mtH * 0.7, 4, 42);
 
@@ -160,9 +200,9 @@ function _buildCache(w, h) {
   c.fillStyle = '#6B5C8C';
   _drawMountain(c, 0, mtBase + mtH * 0.4, w, mtH * 0.6, 3, 53);
 
-  // 近山（深紫）
+  // 近山（深紫）— P1: peaks×0.7 减密 30%，节奏更松弛
   c.fillStyle = '#4A3F6B';
-  _drawMountain(c, 0, mtBase + mtH * 0.55, w, mtH * 0.45, 2, 64);
+  _drawMountain(c, 0, mtBase + mtH * 0.55, w, mtH * 0.45, 2, 64, 0.7);
 
   // ═══════════════════════════════════════
   // 层 3：日月潭湖面（下半屏 ~30%）暖紫蓝 + 夕阳反光
@@ -170,12 +210,12 @@ function _buildCache(w, h) {
   const lakeY = mtBase + mtH;
   const lakeH = h - lakeY - Math.floor(h * 0.05);
 
-  // 湖面横条纹渐变（暖紫蓝色系）
+  // 湖面横条纹渐变（暖紫蓝色系）— P1: 加大主色↔过渡色阶差，颗粒更可见
   const lakeBands = [
     { color: '#FF8E5C', h: Math.floor(lakeH * 0.05) },  // 地平线倒映橙
     { color: '#6A7BA0', h: Math.floor(lakeH * 0.10) },  // 过渡（偏暖）
     { color: '#5A6B95', h: Math.floor(lakeH * 0.35) },  // 暖紫蓝（主色）
-    { color: '#5E7598', h: Math.floor(lakeH * 0.25) },  // 过渡
+    { color: '#3F5078', h: Math.floor(lakeH * 0.25) },  // P1: #5E7598 → #3F5078 拉大色差
     { color: '#4E6488', h: 0 },                           // 深紫蓝
   ];
   lakeBands[4].h = lakeH - lakeBands[0].h - lakeBands[1].h - lakeBands[2].h - lakeBands[3].h;
@@ -184,7 +224,7 @@ function _buildCache(w, h) {
     [255, 142, 92],   // #FF8E5C 倒映橙
     [106, 123, 160],  // #6A7BA0 过渡
     [90,  107, 149],  // #5A6B95 暖紫蓝
-    [94,  117, 152],  // #5E7598 过渡
+    [63,  80,  120],  // #3F5078 深紫蓝（P1 加大色差）
     [78,  100, 136],  // #4E6488 深紫蓝
   ];
 
@@ -232,18 +272,63 @@ function _buildCache(w, h) {
     c.fillRect(reflX, reflBaseY + ry, reflW, Math.min(bandH, reflZoneH - ry));
   }
 
-  // 拉鲁岛剪影（中央偏左）
-  const islandX = Math.floor(w * 0.38);
-  const islandY = lakeY + Math.floor(lakeH * 0.02);
-  c.fillStyle = '#5A8B5A';
-  // 岛体
-  c.fillRect(islandX, islandY, 20, 5);
-  c.fillRect(islandX + 2, islandY - 3, 16, 3);
-  c.fillRect(islandX + 5, islandY - 5, 10, 2);
-  // 小树
-  c.fillStyle = '#4A7B4A';
-  c.fillRect(islandX + 8, islandY - 8, 4, 3);
-  c.fillRect(islandX + 9, islandY - 10, 2, 2);
+  // 拉鲁岛中景剪影（中央偏左，深紫黑 + 树木 + 倒影）
+  // P1: 放大 + 上移避免被"开始游戏"按钮压住
+  const islCX = Math.floor(w * 0.38);
+  const islW = 116; // P1: 68 → 116（按钮宽度的约 1/3）
+  const islH = 24;  // P1: 16 → 24
+  const islX = islCX - Math.floor(islW / 2);
+  // 上移约 30px：原 lakeY + lakeH*0.02 ≈ 上 1/3 处 → 改为更靠近湖面顶部并往上 30px
+  const islY = lakeY - 30 + Math.floor(lakeH * 0.02);
+
+  // 倒影（先画，在本体下方）— 同步放大 + 加强 dither 抖动
+  const reflIslH = Math.floor(islH * 0.55);
+  c.fillStyle = 'rgba(58, 53, 80, 0.50)'; // #3A3550 50% 透明
+  for (let ry = 0; ry < reflIslH; ry++) {
+    // 越往下越散：上半每像素都画，下半 1-2px 跳
+    const skip = ry < reflIslH * 0.5 ? 1 : (ry % 2 === 0 ? 1 : 2);
+    // 椭圆宽度（上宽下窄）
+    const rowRatio = 1 - ry / reflIslH * 0.5;
+    const rowW = Math.floor(islW * rowRatio);
+    const rowX0 = islCX - Math.floor(rowW / 2);
+    for (let rx = 0; rx < rowW; rx += skip) {
+      // 横向 dither 抖动：每隔 2 个像素随机跳过一个
+      if ((rx + ry) % 3 === 2) continue;
+      c.fillRect(rowX0 + rx, islY + islH + ry, 1, 1);
+    }
+  }
+  // 树冠倒影（5 棵树，更宽）
+  c.fillStyle = 'rgba(58, 53, 80, 0.35)';
+  const treeReflY = islY + islH + 1;
+  const treeReflXs = [14, 36, 58, 80, 100];
+  for (const tx of treeReflXs) {
+    for (let dy = 0; dy < 5; dy++) {
+      if (dy % 2 === 1 && dy > 1) continue; // dither 跳行
+      const tw = Math.max(1, 4 - Math.floor(dy / 2));
+      c.fillRect(islX + tx - tw, treeReflY + dy, tw * 2 + 1, 1);
+    }
+  }
+
+  // 岛体本体（深紫黑剪影）
+  c.fillStyle = '#2A2540';
+  // 椭圆岛体（像素方块拼接）
+  for (let dy = 0; dy < islH; dy++) {
+    const t = dy / islH;
+    // 椭圆宽度：中间最宽，上下窄
+    const rowRatio = Math.sin(t * Math.PI);
+    const rowW = Math.floor(islW * rowRatio);
+    const rowX = islCX - Math.floor(rowW / 2);
+    c.fillRect(rowX, islY + dy, rowW, 1);
+  }
+
+  // 小树剪影（5 棵，三角形树冠 + 方形树干，每棵 6×10 像素）
+  c.fillStyle = '#2A2540';
+  // 高度从左到右起伏：低-高-中-高-低
+  _drawPixelTree(c, islX + 14, islY - 1, 5, 8);
+  _drawPixelTree(c, islX + 36, islY - 3, 6, 10);
+  _drawPixelTree(c, islX + 58, islY - 2, 5, 9);
+  _drawPixelTree(c, islX + 80, islY - 3, 6, 10);
+  _drawPixelTree(c, islX + 100, islY - 1, 4, 7);
 
   // 像素波纹（白色单像素点散布）
   c.fillStyle = '#FFFFFF';
@@ -310,6 +395,27 @@ function _buildCache(w, h) {
 }
 
 /**
+ * 画一棵像素树剪影（三角形树冠 + 方形树干）
+ * @param {CanvasRenderingContext2D} c
+ * @param {number} cx  树中心 x
+ * @param {number} baseY  树根 y
+ * @param {number} crownW  树冠底宽
+ * @param {number} treeH  总高
+ */
+function _drawPixelTree(c, cx, baseY, crownW, treeH) {
+  const trunkH = Math.max(2, Math.floor(treeH * 0.3));
+  const crownH = treeH - trunkH;
+  // 树干
+  c.fillRect(cx - 1, baseY, 2, trunkH);
+  // 树冠（逐行三角形）
+  for (let dy = 0; dy < crownH; dy++) {
+    const ratio = 1 - dy / crownH;
+    const halfW = Math.floor((crownW / 2) * ratio);
+    c.fillRect(cx - halfW, baseY - crownH + dy, halfW * 2 + 1, 1);
+  }
+}
+
+/**
  * 画一座像素锯齿山脉
  * @param {number} x  起始 x
  * @param {number} baseY  山脚 y
@@ -318,9 +424,10 @@ function _buildCache(w, h) {
  * @param {number} step  台阶像素宽度（2-4）
  * @param {number} seed  随机种子
  */
-function _drawMountain(c, x, baseY, totalW, maxH, step, seed) {
+function _drawMountain(c, x, baseY, totalW, maxH, step, seed, peakScale) {
   const rng = _seededRand(seed);
-  const peaks = Math.floor(totalW / (step * 12));
+  const ps = typeof peakScale === 'number' ? peakScale : 1;
+  const peaks = Math.max(1, Math.floor((totalW / (step * 12)) * ps));
   for (let px = 0; px < totalW; px += step) {
     // 多峰叠加
     const nx = px / totalW;
