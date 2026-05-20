@@ -119,7 +119,11 @@ const TILE = {
   FISHING: 9
 };
 
-const WALKABLE = new Set([TILE.GRASS, TILE.DIRT, TILE.STONE, TILE.WOOD, TILE.FISHING]);
+// PHASE 13-6：钓鱼场景碰撞修复 —— FISHING tile 从"可走"移除，让三个圆圈（水波纹钓点）也成为碰撞墙
+//   背景：旧版玩家能从栈桥 WOOD([8][9..11]) 一步迈到水中钓点 FISHING([9][9..11])，视觉是"人站湖里"，逻辑不合理
+//   正确语义：栈桥（WOOD）才是合法站位 + 钓鱼触发区；湖水（DEEP）+ 钓点（FISHING）全部是不可达
+//   ⚠️ WOOD（栈桥）依然可走 —— 玩家在栈桥上按 F 即可钓鱼，钓向南侧（y+1 行）的圆圈
+const WALKABLE = new Set([TILE.GRASS, TILE.DIRT, TILE.STONE, TILE.WOOD]);
 
 const BUILDINGS = [
   { tx: 4, ty: 1, name: '村长家' },
@@ -147,7 +151,10 @@ class VillageScene {
     this.ch = 720;
 
     this.player = {
-      tx: 4, ty: 5,
+      // PHASE 13-9-fix：constructor 默认值与 init() 中 spawnAt fallback 同步为 (4, 7)
+      //   真正生效的是 init() 第 ~243 行的 spawnAt fallback（前 2 仗失败的真正根因）
+      //   这里仅作占位/兜底，避免后续误读
+      tx: 4, ty: 7,
       px: 0, py: 0,
       direction: 'down',
       frame: 0,
@@ -221,7 +228,14 @@ class VillageScene {
   init(params) {
     this._generateMap();
 
-    const spawn = params?.spawnAt || { x: 4, y: 5 };
+    // PHASE 13-9-fix：spawnAt 默认值 y: 5 → 7（前 2 仗失败的真正根因）
+    //   旧 bug：13-8/13-9 改的是 constructor 中 this.player = { tx, ty } 的默认值，
+    //          但 init() 此处会用 spawnAt 覆写！main.js 进入村庄时不传 spawnAt，
+    //          就走 fallback {x:4, y:5} → 永远落在村长家墙身 [5][4] WALL 上 → 开局卡墙
+    //   修复：把 fallback 的 y 从 5 改为 7（任务推荐 +2 格），落到 [7][4]=GRASS 安全格
+    //         位置：村长家正南 2 格（屋檐外的草地），叙事上像"刚从家门口走出来"
+    //   ⚠️ 同时同步 constructor 默认值（行 153~167）以保持代码一致，避免后续误读
+    const spawn = params?.spawnAt || { x: 4, y: 7 };
     this.player.tx = spawn.x;
     this.player.ty = spawn.y;
     this._syncPlayerPixel();
@@ -789,6 +803,33 @@ class VillageScene {
     this.villageMap[5][15] = TILE.ROOF;
     this.villageMap[5][16] = TILE.ROOF;
 
+    // PHASE 13-8：建筑物碰撞「高度 50%」补丁（取代 13-7 的整体 sprite 覆盖）
+    //   13-7 旧策略：把每个房子 sprite 视觉占的 2×2 = 4 格全部标 WALL
+    //               → 房子上半（屋顶/装饰）也被封死，紧邻房子的出生点 / NPC 互动位被覆盖
+    //               → 阿明开局卡在村长家右下角 [5][4]，按方向键纹丝不动
+    //   13-8 新策略：2D 像素游戏通用做法 —— 碰撞只覆盖 sprite 的「下半墙身」
+    //               每个房子视觉占 [上半行][下半行][左..右]，仅在「下半行」打 WALL
+    //               上半行（屋顶/高墙）保持原 tile（GRASS/DIRT），玩家可走入但视觉被屋顶遮挡
+    //   留口规则保留：林师傅 NPC 站位 [5][13] 不封 / 阿明家下半墙身已是 TREE 无需重复
+    // 村长家 sprite 视觉占格：[4..5][4..5]，墙身 = [5][4..5]
+    this.villageMap[5][4] = TILE.WALL;
+    this.villageMap[5][5] = TILE.WALL;
+    // 钓具店 sprite 视觉占格：[4..5][13..14]，墙身 = [5][13..14]
+    //   ⚠️ [5][13] 留给林师傅 NPC（13-7 同样规则）—— 商店门口可走 + NPC 不卡墙
+    this.villageMap[5][14] = TILE.WALL;
+    // 阿明家 sprite 视觉占格：[7..8][1..2]，墙身 = [8][1..2]
+    //   ⚠️ [8][1]/[8][2] 已是 TREE（行 848-849），TREE 本身不可走 → 墙身碰撞天然成立，无需追加
+    // 7-11 sprite 视觉占格：[7..8][15..16]，墙身 = [8][15..16]
+    this.villageMap[8][15] = TILE.WALL;
+    this.villageMap[8][16] = TILE.WALL;
+
+    // PHASE 13-7：栈桥踩水说明
+    //   13-6 已将 FISHING 移出 WALKABLE，[9][9..11] 三格在 _canMoveTo 中返回 false，玩家无法移入
+    //   若仍有"视觉穿模"感（角色 sprite 高度 > 1 tile，头/脚溢出），属 sprite 渲染问题而非碰撞缺陷
+    //   现有碰撞盒 hbHalf=8 (16×16，半格)，中心位于 (px, py+24)；走到栈桥前缘 ty=8 时
+    //   下一步目标 ty=9 = FISHING/DEEP 全不可走 → canY=false → 停在栈桥边界，符合"移动死边界"
+    //   故本次不再追加格子碰撞，避免影响 13-6 已稳定的 FISHING tile 视觉
+
     this.villageMap[2][8] = TILE.STONE;
     this.villageMap[2][9] = TILE.STONE;
     this.villageMap[3][8] = TILE.STONE;
@@ -1168,6 +1209,10 @@ class VillageScene {
     }
 
     this.pause();
+    // PHASE 13-6：进入钓鱼前强制阿明朝下（朝向湖面/南方）
+    //   栈桥 ty=8、钓点 ty=9 在其正南方，物理上抛竿就是朝下
+    //   保证 FishingScene Casting 状态从"朝下抛竿"开始，视觉连贯
+    this.player.direction = 'down';
     SceneManager.switchTo('fishing', params);
   }
 
@@ -1523,11 +1568,11 @@ class VillageScene {
     if (this.player.ty < 0) this.player.ty = 0;
     if (this.player.ty >= 11) this.player.ty = 10;
 
-    // 钓点扩大：2x2 区域 (9-10, 9-10)
-    this.onFishingSpot = (
-      this.player.tx >= 9 && this.player.tx <= 10 &&
-      this.player.ty >= 9 && this.player.ty <= 10
-    );
+    // PHASE 13-6：钓鱼触发区从"钓点 FISHING tile"改为"栈桥 WOOD tile"
+    //   语义：玩家站在栈桥任意一格（WOOD）即触发钓鱼提示；按 F 开始钓鱼
+    //   栈桥位置：[8][9..11]（3 格），村庄内 WOOD 只此一处，直接查 tile id 最稳
+    //   ⚠️ FISHING tile 现在已被移出 WALKABLE（见顶部 WALKABLE 定义），玩家根本踩不到水中钓点，旧判定永远 false
+    this.onFishingSpot = (this._getTileAt(this.player.tx, this.player.ty) === TILE.WOOD);
 
     for (const npc of this.npcs) {
       npc.bobOffset = Math.sin(this.time * 10) * 2;
@@ -1860,7 +1905,11 @@ class VillageScene {
         const px = x * T;
         const py = y * T;
 
-        if (tile === TILE.GRASS) {
+        if (tile === TILE.GRASS || tile === TILE.WALL) {
+          // PHASE 13-7：WALL 是建筑物碰撞标记（4 个房子 sprite 视觉占格）
+          //   渲染时按 GRASS 处理（画草地贴图）—— 因为房子 sprite 是不规则形状（屋顶斜面），
+          //   sprite 内部有透明像素，需要底层是草地以保持视觉一致；
+          //   _drawTileColor 中 WALL 颜色 #F4E4C1 米黄色仅作 fallback，本路径不会触发
           ctx.drawImage(getGrassTile(), px, py);
         } else {
           this._drawTileColor(ctx, tile, px, py);
@@ -2102,6 +2151,17 @@ class VillageScene {
 
     const ctx = this.ctx;
 
+    // PHASE 13-6：栈桥金色脉冲外框（玩家站栈桥时强化"这里可以钓鱼"视觉引导）
+    //   栈桥像素范围：x=[9*64, 12*64)=[576, 768)，y=[8*64, 9*64)=[512, 576)，整体 192×64
+    //   2Hz 脉冲：透明度在 0.30~0.90 之间正弦振荡（基础 rgba(255,215,128,0.6) ± 0.3）
+    //   只画 stroke 不 fill —— 不会盖住站在栈桥上的阿明像素
+    const dockX = 9 * 64, dockY = 8 * 64, dockW = 3 * 64, dockH = 64;
+    const pulse = 0.6 + 0.3 * Math.sin(this.time * 2 * Math.PI * 2); // 2Hz
+    ctx.strokeStyle = `rgba(255, 215, 128, ${pulse})`;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(dockX - 1, dockY - 1, dockW + 2, dockH + 2);
+    ctx.lineWidth = 1;
+
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 680, 1280, 40);
 
@@ -2157,6 +2217,7 @@ class VillageScene {
           case TILE.DEEP: color = '#2B4F6B'; break;
           case TILE.FISHING: color = '#7AB8C4'; break;
           case TILE.ROOF: color = '#A83C3C'; break;
+          case TILE.WALL: color = '#5C8A4C'; break;   // PHASE 13-7：WALL 为建筑物碰撞标记，minimap 按草地色显示，不破坏原有小地图外观
           case TILE.TREE: color = '#3D2B1F'; break;
           default: color = '#3D2B1F';
         }
