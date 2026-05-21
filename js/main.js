@@ -205,4 +205,53 @@ function showErrorOverlay(msg) {
 // 启动游戏
 // ========================================================
 createMuteButton();
+
+/**
+ * PHASE 16-2：进入村庄前确保有昵称
+ *   - 已有 → 直接放行
+ *   - 没有 → 弹窗强制输入（不可取消）
+ *   - PlayerProfile / NicknameDialog 由 profile-system.js / nickname-dialog.js 注入到 window，
+ *     在 index.html 中早于本 module 加载，此处可直接使用
+ */
+async function ensureNickname() {
+  // 防御：若 IIFE 未加载（罕见），直接跳过避免阻塞主线
+  if (!window.PlayerProfile || !window.NicknameDialog) {
+    console.warn('[Bootstrap] PlayerProfile/NicknameDialog 未就绪，跳过昵称检查');
+    return;
+  }
+
+  // 1. 加载档案（本地 + 云端兜底）
+  await window.PlayerProfile.load();
+
+  // 2. 已有昵称 → 直接通过
+  if (window.PlayerProfile.hasNickname()) {
+    console.log('[Profile] 已有昵称:', window.PlayerProfile.nickname);
+    return;
+  }
+
+  // 3. 没有昵称 → 弹窗（不可取消）
+  console.log('[Profile] 无昵称，弹窗收集中...');
+  const nickname = await window.NicknameDialog.open({
+    title: '🎣 欢迎来到日月潭！',
+    canCancel: false,
+  });
+
+  // 4. 保存（云端失败不阻塞）
+  if (nickname) {
+    try {
+      await window.PlayerProfile.saveNickname(nickname);
+      console.log('[Profile] 昵称已保存:', nickname);
+    } catch (e) {
+      console.error('[Profile] 保存昵称失败:', e && e.message);
+      // 仅本地校验类错误（如 ">12 字"）才会到这；UI 已经拦截，此处兜底
+    }
+  }
+}
+
+// PHASE 16-2 修复：昵称弹窗时机改为"点击开始游戏后"才触发，
+//   故这里不再于 bootstrap 阶段调用 ensureNickname，
+//   而是由 village-scene._skipIntro 在玩家点击开始游戏时统一调用。
+//   暴露到全局供 village-scene.js 调用：
+window.ensureNickname = ensureNickname;
+
 SceneManager.switchToInstant('village');

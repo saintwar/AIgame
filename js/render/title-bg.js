@@ -59,7 +59,11 @@ function _buildCache(w, h) {
   const oc = document.createElement('canvas');
   oc.width = w;
   oc.height = h;
-  const c = oc.getContext('2d');
+  // willReadFrequently: true —— 告诉浏览器这块离屏 canvas 会被频繁 getImageData
+  // 读取（_ditherRect 里每次都读），让其使用 CPU 后端而不是 GPU，避免 Chrome 警告：
+  // "Multiple readback operations using getImageData are faster with the
+  //  willReadFrequently attribute set to true."
+  const c = oc.getContext('2d', { willReadFrequently: true });
   c.imageSmoothingEnabled = false;
 
   // ═══════════════════════════════════════

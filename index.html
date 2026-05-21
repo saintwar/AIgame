@@ -7,11 +7,16 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>宝岛钓手 · 水社村 [720p HD]</title>
-  <!-- PHASE 16-1：腾讯云 CloudBase JS SDK（排行榜功能依赖）
-       ⚠️ 任务规格里写的 tcbjs/2.6.5/tcb.js 在 imgcache CDN 上已下架（实测 404），
-          改用官方现行包 @cloudbase/js-sdk 在 imgcache 镜像上的最高稳定版 1.6.0，
-          全局变量名为 cloudbase（不是 tcb），见 js/cloudbase.js 适配 -->
-  <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.6.0/cloudbase.full.js"></script>
+  <!-- PHASE 16-1 紧急补丁：升级 @cloudbase/js-sdk 到 2.x（修复 ACCESS_TOKEN_DISABLED）
+       官方真实 CDN：static.cloudbase.net/cloudbase-js-sdk/<version>/cloudbase.full.js
+       （来源：docs.cloudbase.net/api-reference/webv2/initialization，实测 200）
+       注意：任务规格给的 web.sdk.qcloud.com 是错的（NoSuchKey）；
+             imgcache CDN 上 2.x 全部 404；
+             npm 包内无 UMD 全量包；
+             只有 static.cloudbase.net 才托管 2.x UMD。
+       版本：2.17.3（npm 当前稳定版，实测可达；规格里写的 2.13.1 在官方 CDN 上 404）
+       全局变量名仍为 cloudbase（小写），见 js/cloudbase.js 适配 -->
+  <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.17.3/cloudbase.full.js"></script>
   <!-- 内联 SVG favicon：像素小鱼（避免根目录 favicon.ico 0 字节导致的 404） -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%231a3a5c'/><path fill='%23e76f51' d='M3 7h1v1H3zm1 0h1v1H4zm1-1h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 1h1v1h-1zM5 8h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zM4 8h1v1H4zm0 1h1v1H4zm1-1h1v1H5zm1 1h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 0h1v1h-1zm1-2h1v1h-1zm0 2h1v1h-1zm0 1h1v1h-1zm0-2h1v1h-1z'/><rect x='9' y='6' width='1' height='1' fill='%23ffffff'/></svg>">
   <style>
@@ -81,6 +86,9 @@
   </div>
   <!-- PHASE 16-1：CloudBase 初始化（IIFE，必须在 main.js 之前加载） -->
   <script src="js/cloudbase.js"></script>
+  <!-- PHASE 16-2：玩家档案系统 + 昵称弹窗（IIFE，依赖 cloudbase.js，先于 main.js） -->
+  <script src="js/profile-system.js"></script>
+  <script src="js/ui/nickname-dialog.js"></script>
   <script>
     // 强制清除 ES 模块缓存（开发模式）
     const cacheBust = '?v=' + Date.now();

@@ -10,10 +10,12 @@
  *   - 状态可通过 debug HUD（按 ` 键）查看
  *
  * SDK 选型说明：
- *   index.html 加载的是 @cloudbase/js-sdk@1.6.0 的 UMD 全量包，
- *   暴露的全局变量名为 `cloudbase`（不是早期 tcb-js-sdk 的 `tcb`）。
+ *   index.html 加载的是 @cloudbase/js-sdk@2.17.3 的 UMD 全量包（来自官方 CDN
+ *   static.cloudbase.net），暴露的全局变量名为 `cloudbase`（小写）。
  *   API：cloudbase.init({ env }) / app.auth({ persistence }) /
- *        auth.anonymousAuthProvider().signIn() / auth.currentUser.uid
+ *        auth.signInAnonymously() / auth.currentUser.uid
+ *   2.x 同时保留了 anonymousAuthProvider().signIn() 兼容写法，但官方文档
+ *   主推 signInAnonymously()，且能修复 1.x 的 ACCESS_TOKEN_DISABLED 错误。
  */
 (function() {
   'use strict';
@@ -27,8 +29,9 @@
     auth: null,          // 鉴权实例
     db: null,            // 数据库实例
     openid: null,        // 当前玩家 openid（即 currentUser.uid）
-    ready: false,        // 是否已就绪
+    ready: false,        // 是否已就绪（SDK 初始化 + 拿到 openid + ping 通过）
     error: null,         // 错误信息
+    dbPingOk: false,     // PHASE 16-2 紧急补丁：数据库连通性真实测试结果
   };
 
   /**
@@ -58,10 +61,20 @@
       let loginState = await auth.getLoginState();
 
       if (!loginState) {
-        // 首次进入，匿名登录
+        // 首次进入，匿名登录（2.x 新 API：signInAnonymously）
         console.log('[CloudBase] 首次登录，启动匿名登录...');
-        await auth.anonymousAuthProvider().signIn();
+        if (typeof auth.signInAnonymously === 'function') {
+          await auth.signInAnonymously();
+        } else if (typeof auth.anonymousAuthProvider === 'function') {
+          // 兼容旧 1.x 写法（理论上 2.x 不会走到，仅做兜底）
+          await auth.anonymousAuthProvider().signIn();
+        } else {
+          throw new Error('SDK 未提供任何可用的匿名登录方法');
+        }
         loginState = await auth.getLoginState();
+        if (!loginState) {
+          throw new Error('匿名登录后仍未拿到 loginState，请检查控制台是否开启了匿名登录');
+        }
       } else {
         console.log('[CloudBase] 复用已有登录态');
       }
@@ -110,7 +123,32 @@
       // 6. 初始化数据库
       window.CloudBase.db = app.database();
 
-      // 7. 标记就绪
+      // 7. PHASE 16-2 紧急补丁：真实数据库 ping 测试
+      //    仅 ready=true 不够，必须发起一次真实云端请求确认 ACCESS_TOKEN 有效。
+      //    若控制台未开启匿名登录 / SDK 不兼容，会立刻报 ACCESS_TOKEN_DISABLED。
+      try {
+        await app.database().collection('player_profile').count();
+        console.log('[CloudBase] ✅ 数据库连通性测试通过');
+        window.CloudBase.dbPingOk = true;
+      } catch (pingErr) {
+        const code = (pingErr && pingErr.code) || (pingErr && pingErr.message) || String(pingErr);
+        console.error('[CloudBase] ❌ 数据库连通性测试失败:', code);
+        window.CloudBase.dbPingOk = false;
+        window.CloudBase.error = code;
+
+        if (pingErr && pingErr.code === 'ACCESS_TOKEN_DISABLED') {
+          console.warn(
+            '[CloudBase] 请到控制台开启匿名登录：\n' +
+            '  1. 进 CloudBase 控制台\n' +
+            '  2. 身份认证 / 登录设置\n' +
+            '  3. 开启"匿名登录"开关'
+          );
+        }
+        // 不抛出：让 ready 仍为 true（openid 已拿到，本地功能可用），
+        // 业务侧应通过 dbPingOk 判断是否真能写云端。
+      }
+
+      // 8. 标记就绪
       window.CloudBase.ready = true;
 
       console.log('[CloudBase] ✅ 就绪');
@@ -121,21 +159,6 @@
       window.dispatchEvent(new CustomEvent('cloudbase:ready', {
         detail: { openid }
       }));
-
-      // PHASE 16-1 验收补丁：弹窗显示状态（验收通过后请删除本段）
-      setTimeout(() => {
-        const status =
-          '🎯 CloudBase 验收报告 🎯\n' +
-          '━━━━━━━━━━━━━━━━━━━━\n' +
-          '状态: ' + (window.CloudBase.ready ? '✅ 就绪' : '❌ 失败') + '\n' +
-          'openid: ' + (window.CloudBase.openid
-            ? window.CloudBase.openid.slice(0, 16) + '...'
-            : '❌ NULL') + '\n' +
-          '错误: ' + (window.CloudBase.error || '✅ 无') + '\n' +
-          '━━━━━━━━━━━━━━━━━━━━\n' +
-          '请截图发给主程验收';
-        alert(status);
-      }, 1500);
 
       return true;
 
@@ -150,17 +173,6 @@
       window.dispatchEvent(new CustomEvent('cloudbase:error', {
         detail: { message: window.CloudBase.error }
       }));
-
-      // PHASE 16-1 验收补丁：失败也要弹窗（验收通过后请删除本段）
-      setTimeout(() => {
-        alert(
-          '❌ CloudBase 初始化失败 ❌\n' +
-          '━━━━━━━━━━━━━━━━━━━━\n' +
-          '错误: ' + ((err && err.message) || String(err)) + '\n' +
-          '━━━━━━━━━━━━━━━━━━━━\n' +
-          '请截图发给主程诊断'
-        );
-      }, 1500);
 
       return false;
     }

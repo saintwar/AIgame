@@ -102,7 +102,9 @@ function _buildCache(w, h) {
   const oc = document.createElement('canvas');
   oc.width = w;
   oc.height = h;
-  const c = oc.getContext('2d');
+  // willReadFrequently: true —— 离屏 canvas 会被 _ditherRect 频繁 getImageData，
+  // 让浏览器走 CPU 后端避免"Multiple readback operations"性能警告
+  const c = oc.getContext('2d', { willReadFrequently: true });
   c.imageSmoothingEnabled = false;
 
   const waterLevel = Math.floor(h * 0.5);

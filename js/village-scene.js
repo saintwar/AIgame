@@ -371,7 +371,21 @@ class VillageScene {
     }
   }
 
-  _skipIntro() {
+  async _skipIntro() {
+    // PHASE 16-2 修复：进入正式游戏前先收集昵称（已有昵称会直接放行）
+    //   - 防重入：弹窗期间多次点击/按键不重复触发
+    //   - 弹窗期间不切换 introState，登录页保持显示与 BGM 不中断
+    if (this._skipping) return;
+    this._skipping = true;
+    try {
+      if (typeof window.ensureNickname === 'function') {
+        await window.ensureNickname();
+      }
+    } catch (e) {
+      console.error('[VillageScene] ensureNickname 出错（已忽略）:', e && e.message);
+    }
+    this._skipping = false;
+
     window.Save?.set('flags.intro_played', true);
     window.Save?.commit();
 
@@ -2465,6 +2479,34 @@ class VillageScene {
     ctx.fillText(`Frame: ${(1000 / fps).toFixed(1)}ms`, panelX + 16, y);
     y += 18;
     ctx.fillText(`Time: ${this.time.toFixed(1)}s`, panelX + 16, y);
+    y += 18;
+
+    // PHASE 16-1：CloudBase 登录状态指示
+    //   绿色 ☁ + openid 前 8 位 = 已就绪
+    //   红色 ☁ 离线           = 初始化失败（游戏仍正常）
+    //   黄色 ☁ 连接中...        = SDK 加载中或登录请求中
+    //   ⚠️ openid 完整值仅在 console 输出，HUD 仅显示前 8 位避免泄露
+    const cb = window.CloudBase;
+    if (cb && cb.ready && cb.openid) {
+      ctx.fillStyle = '#5FAE3D';
+      ctx.fillText(`\u2601 ${cb.openid.slice(0, 8)}`, panelX + 16, y);
+    } else if (cb && cb.error) {
+      ctx.fillStyle = '#E74C3C';
+      ctx.fillText('\u2601 \u79bb\u7ebf', panelX + 16, y);
+    } else {
+      ctx.fillStyle = '#F39C12';
+      ctx.fillText('\u2601 \u8fde\u63a5\u4e2d...', panelX + 16, y);
+    }
+    y += 18;
+
+    // PHASE 16-2：玩家昵称（橙金色，与主题色一致）
+    const pp = window.PlayerProfile;
+    if (pp && pp.nickname) {
+      ctx.fillStyle = '#FFD580';
+      // 🎣 + 昵称；云端未同步时加 (本地) 后缀
+      const suffix = pp.cloudSynced ? '' : ' (\u672c\u5730)';
+      ctx.fillText(`\ud83c\udfa3 ${pp.nickname}${suffix}`, panelX + 16, y);
+    }
     y += 22;
 
     // 分隔线
