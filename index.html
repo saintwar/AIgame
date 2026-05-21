@@ -7,6 +7,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>宝岛钓手 · 水社村 [720p HD]</title>
+  <!-- PHASE 16-1：腾讯云 CloudBase JS SDK（排行榜功能依赖）
+       ⚠️ 任务规格里写的 tcbjs/2.6.5/tcb.js 在 imgcache CDN 上已下架（实测 404），
+          改用官方现行包 @cloudbase/js-sdk 在 imgcache 镜像上的最高稳定版 1.6.0，
+          全局变量名为 cloudbase（不是 tcb），见 js/cloudbase.js 适配 -->
+  <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.6.0/cloudbase.full.js"></script>
   <!-- 内联 SVG favicon：像素小鱼（避免根目录 favicon.ico 0 字节导致的 404） -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%231a3a5c'/><path fill='%23e76f51' d='M3 7h1v1H3zm1 0h1v1H4zm1-1h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 1h1v1h-1zM5 8h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zM4 8h1v1H4zm0 1h1v1H4zm1-1h1v1H5zm1 1h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 0h1v1h-1zm1-2h1v1h-1zm0 2h1v1h-1zm0 1h1v1h-1zm0-2h1v1h-1z'/><rect x='9' y='6' width='1' height='1' fill='%23ffffff'/></svg>">
   <style>
@@ -74,6 +79,8 @@
     <div id="debug-bar">DEBUG MODE</div>
     <div id="transition-overlay"></div>
   </div>
+  <!-- PHASE 16-1：CloudBase 初始化（IIFE，必须在 main.js 之前加载） -->
+  <script src="js/cloudbase.js"></script>
   <script>
     // 强制清除 ES 模块缓存（开发模式）
     const cacheBust = '?v=' + Date.now();
