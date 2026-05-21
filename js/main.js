@@ -72,6 +72,17 @@ SceneManager.on('fish_caught', ({ species, weight, price, rarity }) => {
   Save.set('inventory', inventory);
   Save.set('player.money', (Save.get('player.money') || 0) + price);
   Save.commit();
+
+  // 🆕 PHASE 16-3：异步提交到云端排行榜（fire-and-forget，失败不阻塞游戏）
+  // 注意单位换算：fishing-scene.js emit 的 weight 是 kg（如 0.35），而 leaderboard
+  // schema 里 weight 单位是克，所以 ×1000 再传。species → name 字段名映射。
+  if (window.Leaderboard && typeof weight === 'number' && weight > 0) {
+    window.Leaderboard.submitFish({
+      name: species,
+      weight: Math.round(weight * 1000),
+      rarity: rarity || 'common',
+    }).catch(e => console.warn('[Leaderboard] 提交失败:', e));
+  }
 });
 
 // ========================================================

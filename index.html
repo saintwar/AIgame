@@ -89,6 +89,10 @@
   <!-- PHASE 16-2：玩家档案系统 + 昵称弹窗（IIFE，依赖 cloudbase.js，先于 main.js） -->
   <script src="js/profile-system.js"></script>
   <script src="js/ui/nickname-dialog.js"></script>
+  <!-- PHASE 16-3：排行榜系统（IIFE，依赖 cloudbase.js + profile-system.js，先于 main.js） -->
+  <script src="js/leaderboard-system.js"></script>
+  <!-- PHASE 16-4：排行榜 UI 面板（IIFE，依赖 leaderboard-system.js，自带样式 + HUD 按钮） -->
+  <script src="js/ui/leaderboard-panel.js"></script>
   <script>
     // 强制清除 ES 模块缓存（开发模式）
     const cacheBust = '?v=' + Date.now();
