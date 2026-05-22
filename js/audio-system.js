@@ -10,24 +10,85 @@ class AudioSystem {
     this.sfxVolume = 0.4;
     this.ambientNodes = [];
     this._pendingBGM = null;   // 因自动播放策略被挂起的 BGM
+    this._gestureWaiters = []; // init() 在首次手势前调用时被挂起的 Promise resolve
+    this._gestureBound = false;
+  }
+
+  /**
+   * 同步创建 AudioContext + GainNodes（仅在手势事件回调同步代码中调用，
+   * 这样浏览器才会把 ctx 直接置为 'running'，不打 autoplay warning）
+   */
+  _createCtxSync() {
+    if (this.ctx) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.bgmGain = this.ctx.createGain();
+    this.bgmGain.gain.value = this.bgmVolume;
+    this.bgmGain.connect(this.ctx.destination);
+    this.sfxGain = this.ctx.createGain();
+    this.sfxGain.gain.value = this.sfxVolume;
+    this.sfxGain.connect(this.ctx.destination);
+  }
+
+  /**
+   * 绑定一次性的"首次手势"监听器（pointerdown / keydown）
+   * 监听器内同步执行 _createCtxSync，避免 autoplay warning
+   */
+  _bindFirstGestureOnce() {
+    if (this._gestureBound) return;
+    this._gestureBound = true;
+
+    const onGesture = () => {
+      // 必须在事件回调"同步"代码里就 new AudioContext（不能 await 后再创建）
+      this._createCtxSync();
+      // 关键：resume() 也必须在同一个手势同步栈内调用，否则浏览器仍会打 warning。
+      //   即使 ctx 是新建的，某些浏览器/版本会把 state 初始置为 'suspended'，
+      //   必须当场 resume 才能保证不再触发 autoplay 警告。
+      if (this.ctx && this.ctx.state === 'suspended') {
+        // 不 await，直接发起；resume 是同步地"把请求登记到手势上下文"，
+        // 后续 Promise resolve 异步完成即可。
+        this.ctx.resume().catch(() => {});
+      }
+      // 解锁所有等待中的 init() 调用
+      const waiters = this._gestureWaiters.slice();
+      this._gestureWaiters.length = 0;
+      // 异步唤醒，让 init() 的剩余逻辑（pending BGM 等）继续执行
+      Promise.resolve().then(() => {
+        for (const resolve of waiters) resolve();
+      });
+      // 一次性
+      window.removeEventListener('pointerdown', onGesture, true);
+      window.removeEventListener('keydown', onGesture, true);
+      window.removeEventListener('touchstart', onGesture, true);
+    };
+    // capture=true 抢在业务监听器之前，确保 ctx 一定先建好
+    window.addEventListener('pointerdown', onGesture, true);
+    window.addEventListener('keydown', onGesture, true);
+    window.addEventListener('touchstart', onGesture, true);
   }
 
   /**
    * 必须在用户首次交互时调用（浏览器策略）
+   *   - 若已在手势回调内调用 → 直接同步创建 ctx，无 warning
+   *   - 若在手势前调用（如模块加载阶段误调用）→ 挂起，等首次手势后再创建
    */
   async init() {
+    // 在手势事件同步链路上调用：直接 new 即可（state 会是 running）
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.bgmGain = this.ctx.createGain();
-      this.bgmGain.gain.value = this.bgmVolume;
-      this.bgmGain.connect(this.ctx.destination);
-      this.sfxGain = this.ctx.createGain();
-      this.sfxGain.gain.value = this.sfxVolume;
-      this.sfxGain.connect(this.ctx.destination);
+      // 检测是否处于"用户激活"上下文：navigator.userActivation.isActive（现代浏览器支持）
+      // 退化策略：直接尝试同步创建；若浏览器后续把 state 置 suspended，
+      // 我们在 _bindFirstGestureOnce 兜底里再 resume。
+      const inUserGesture = !!(navigator.userActivation && navigator.userActivation.isActive);
+      if (inUserGesture) {
+        this._createCtxSync();
+      } else {
+        // 未在手势中：注册首次手势监听 + 挂起本次 init
+        this._bindFirstGestureOnce();
+        await new Promise(resolve => this._gestureWaiters.push(resolve));
+      }
     }
     // 浏览器自动播放策略：必须在用户手势后 resume
-    if (this.ctx.state === 'suspended') {
-      await this.ctx.resume();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try { await this.ctx.resume(); } catch (_) { /* 仍未 ready，下次手势会再触发 */ }
     }
     // 恢复后尝试播放之前被阻止的 BGM
     if (this._pendingBGM) {

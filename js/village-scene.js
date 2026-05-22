@@ -300,10 +300,21 @@ class VillageScene {
     this.tutorialCardActive = false;
 
     const introPlayed = window.Save?.get('flags.intro_played') || false;
+    // 判定是否"从其他场景返回村庄"（如钓鱼场景回村）：
+    //   场景已 enter 过一次后，此后 start() 都是返场，应保持游戏内状态、不要再弹标题。
+    //   首次硬刷新时 _hasEnteredVillage 不存在 → 一定走标题分支。
+    const isReturning = !!this._hasEnteredVillage;
+    this._hasEnteredVillage = true;
+
     if (!introPlayed) {
+      // 全新存档：完整开场（旁白 → 标题）
       this._startIntroSequence();
+    } else if (!isReturning) {
+      // 老玩家、刚硬刷新：直接进入标题画面（"开始游戏"按钮），不放旁白。
+      // 点按钮后 _skipIntro() 会统一处理 BGM、妈妈对话、箭头状态，与全新存档汇合。
+      this._startTitleCard();
     } else {
-      // 非开场场景：始终确保村庄 BGM 播放（从钓鱼场景返回时 BGM 可能已停止）
+      // 从其他场景（钓鱼等）返回村庄：恢复正常游戏状态，确保村庄 BGM 播放
       this._audioStarted = true;
       AudioSystem.init();
       AudioSystem.playBGM('music/village_bgm.mp3');

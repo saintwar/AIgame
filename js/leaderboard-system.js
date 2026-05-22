@@ -44,13 +44,46 @@
         console.warn('[Leaderboard] CloudBase 未就绪，跳过云端提交');
         return { success: false, error: 'CloudBase 未就绪' };
       }
-      if (!window.PlayerProfile?.hasNickname?.()) {
-        console.warn('[Leaderboard] 玩家无昵称，跳过云端提交');
-        return { success: false, error: '玩家无昵称' };
+      // 昵称获取（三级降级，绝不丢分）：
+      //   1) PlayerProfile.nickname（正常路径）
+      //   2) localStorage 备份（PlayerProfile 未及时初始化时兜底）
+      //   3) 匿名_xxxx（openid 后 4 位，最后兜底）
+      // 后续 update 每次都覆盖 nickname 字段，玩家正式填昵称后会自动同步。
+      const openid = window.CloudBase.openid;
+      let nickname = window.PlayerProfile?.nickname;
+      let nicknameSource = 'profile';
+      if (!nickname || !String(nickname).trim()) {
+        // 兜底 1：localStorage
+        try {
+          const raw = localStorage.getItem('bdds_player_profile_v1');
+          if (raw) {
+            const data = JSON.parse(raw);
+            if (data && data.nickname && String(data.nickname).trim()) {
+              nickname = data.nickname;
+              nicknameSource = 'localStorage';
+            }
+          }
+        } catch (_) { /* 忽略解析错误 */ }
+      }
+      if (!nickname || !String(nickname).trim()) {
+        // 兜底 2：匿名_<openid 后 4 位>
+        const tail = String(openid).slice(-4) || '0000';
+        nickname = `匿名_${tail}`;
+        nicknameSource = 'fallback';
+        console.warn(
+          '[Leaderboard] 玩家无昵称，使用匿名兜底提交。诊断信息:',
+          {
+            'PlayerProfile.nickname': window.PlayerProfile?.nickname,
+            'PlayerProfile.openid': window.PlayerProfile?.openid,
+            'PlayerProfile.cloudSynced': window.PlayerProfile?.cloudSynced,
+            'CloudBase.openid': openid,
+            fallback: nickname,
+          }
+        );
+      } else if (nicknameSource === 'localStorage') {
+        console.warn('[Leaderboard] PlayerProfile.nickname 为空，已从 localStorage 兜底:', nickname);
       }
 
-      const openid = window.CloudBase.openid;
-      const nickname = window.PlayerProfile.nickname;
       const date = todayStr();
       // 极简评分公式：score = weight（克）
       const incScore = Math.round(fish.weight);

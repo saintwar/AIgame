@@ -265,4 +265,20 @@ async function ensureNickname() {
 //   暴露到全局供 village-scene.js 调用：
 window.ensureNickname = ensureNickname;
 
-SceneManager.switchToInstant('village');
+// PHASE 16-3 修复：PlayerProfile.load() 必须在场景启动前就执行，
+//   否则任何"绕过开始按钮"的路径（GM 命令、调试入口、热刷新后 Save 已存在等）
+//   都会让 PlayerProfile.nickname 一直是 null，导致 Leaderboard.submitFish
+//   走入"无昵称"分支、丢失分数。
+//   load() 内部会兼容 localStorage 已有数据（直接读出），无昵称时不会弹窗
+//   （弹窗仍由 ensureNickname 在点击"开始游戏"时触发），故这里 fire-and-forget
+//   也安全；但用 await 更稳，能保证 nickname 在场景渲染第一帧前已就绪。
+(async () => {
+  try {
+    if (window.PlayerProfile && typeof window.PlayerProfile.load === 'function') {
+      await window.PlayerProfile.load();
+    }
+  } catch (e) {
+    console.warn('[Bootstrap] PlayerProfile.load() 失败（不阻塞游戏）:', e && e.message);
+  }
+  SceneManager.switchToInstant('village');
+})();
