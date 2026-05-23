@@ -101,14 +101,14 @@ class DialogueSystem {
       ctx.fillRect(0, 0, 1280, 720);
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 48px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = 'bold 48px "TencentSansW7", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(currentLine.text.substring(0, this.charIdx), 640, 360);
 
       // 底部提示
       if (this.charIdx >= currentLine.text.length) {
-        ctx.font = '24px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = '24px "TencentSansW7", sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         const showArrow = this._arrowTimer < 0.25;
         if (showArrow) {
@@ -147,14 +147,14 @@ class DialogueSystem {
       ctx.fill();
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 28px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = 'bold 28px "TencentSansW7", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(currentLine.speaker, 128, boxY + 32);
 
       // 对话文字
       ctx.fillStyle = '#3D2B1F';
-      ctx.font = '32px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '32px "TencentSansW7", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       const displayText = currentLine.text.substring(0, this.charIdx);
@@ -162,7 +162,7 @@ class DialogueSystem {
 
       // 继续提示箭头
       if (this.charIdx >= currentLine.text.length) {
-        ctx.font = '24px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = '24px "TencentSansW7", sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
 
@@ -173,7 +173,7 @@ class DialogueSystem {
         ctx.fillText('▼', 1216, boxY + boxH - 16);
 
         // 按键提示文字
-        ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = '16px "TencentSansW7", sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillStyle = 'rgba(61,43,31,0.45)';

@@ -22,8 +22,17 @@ export class InventoryUI {
     if (key === 'escape' || key === 'b') {
       this.hide(); return true;
     }
-    // Tab 切换
-    if (key === 'tab') {
+    // ← / → 循环切换分类（PHASE 16-5 改造：原 TAB 键 → 方向键，与图鉴键位对齐）
+    //   说明：village-scene 派发本函数前已 toLowerCase()，
+    //   故这里匹配 'arrowleft' / 'arrowright'。
+    //   一旦消费方向键即 return true，village-scene 会跳过后续
+    //   `this.keys.left/right = true` 的赋值，从而不会触发玩家移动 → 零冲突。
+    if (key === 'arrowleft') {
+      const idx = this.tabs.findIndex(t => t.key === this.currentTab);
+      this.currentTab = this.tabs[(idx - 1 + this.tabs.length) % this.tabs.length].key;
+      return true;
+    }
+    if (key === 'arrowright') {
       const idx = this.tabs.findIndex(t => t.key === this.currentTab);
       this.currentTab = this.tabs[(idx + 1) % this.tabs.length].key;
       return true;
@@ -53,13 +62,13 @@ export class InventoryUI {
 
     // 标题
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 32px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('🎒 阿明的背包', x + 30, y + 50);
 
     // 金币显示（右上）
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${this.inventory.getCoin()} 金`, x + w - 30, y + 50);
     ctx.textAlign = 'left';
@@ -72,7 +81,7 @@ export class InventoryUI {
       ctx.fillStyle = active ? '#d4a574' : '#5a3a1f';
       ctx.fillRect(tx, tabY, 175, 40);
       ctx.fillStyle = active ? '#2d1b0e' : '#d4a574';
-      ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.fillText(tab.label, tx + 15, tabY + 27);
     });
 
@@ -81,7 +90,7 @@ export class InventoryUI {
     const listY = tabY + 60;
     if (items.length === 0) {
       ctx.fillStyle = '#888';
-      ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.fillText('（这一类还没有物品）', x + 40, listY + 30);
     } else {
       items.forEach((item, i) => {
@@ -94,26 +103,26 @@ export class InventoryUI {
         ctx.fillText(item.icon, x + 45, iy + 40);
         // 名称
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 22px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = 'bold 22px "TencentSansW7", sans-serif';
         ctx.fillText(`${item.name} ×${item.count}`, x + 100, iy + 28);
         // 已装备标记
         if (item.category === 'rod' && window.equipment && window.equipment.getEquippedRod().id === item.id) {
           ctx.fillStyle = '#7CFC00';
-          ctx.font = 'bold 18px "Cubic 11", "Noto Sans TC", monospace';
+          ctx.font = 'bold 18px "TencentSansW7", sans-serif';
           ctx.textAlign = 'right';
           ctx.fillText('⚔️ 已装备', x + w - 40, iy + 28);
           ctx.textAlign = 'left';
         }
         // 描述
         ctx.fillStyle = '#bbb';
-        ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = '16px "TencentSansW7", sans-serif';
         ctx.fillText(item.desc, x + 100, iy + 48);
       });
     }
 
     // 底部提示
     ctx.fillStyle = '#888';
-    ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
-    ctx.fillText('Tab/1-4 切换分类   B/ESC 关闭', x + 30, y + h - 20);
+    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.fillText('← → / 1-4 切换分类   B/ESC 关闭', x + 30, y + h - 20);
   }
 }

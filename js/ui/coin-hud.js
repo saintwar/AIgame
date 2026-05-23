@@ -33,7 +33,7 @@ export class CoinHUD {
 
     // 文字
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 22px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
     ctx.fillText(`💰 ${Math.floor(this.displayCoin)}`, -65, 8);
     ctx.restore();
   }

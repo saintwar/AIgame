@@ -125,14 +125,14 @@ export class ShopUI {
 
     // 标题
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 32px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText('🎣 林师傅钓具店', x + 30, y + 50);
 
     // 金币
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${this.inventory.getCoin()} 金`, x + w - 30, y + 50);
     ctx.textAlign = 'left';
@@ -142,30 +142,30 @@ export class ShopUI {
     else if (this.mode === 'sell') this._renderSell(ctx, x, y, w, h);
 
     ctx.fillStyle = '#888';
-    ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '16px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('ESC/B 返回', x + 30, y + h - 20);
   }
 
   _renderMenu(ctx, x, y, w, h) {
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 28px "TencentSansW7", sans-serif';
     ctx.fillText('1. 🛒 购买装备', x + 80, y + 200);
     ctx.fillText('2. 🐟 出售鱼货', x + 80, y + 280);
 
     const fishBag = window.Save?.get('player.fishBag') || [];
     ctx.fillStyle = '#aaa';
-    ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '20px "TencentSansW7", sans-serif';
     ctx.fillText(`(当前鱼货 ${fishBag.length} 条)`, x + 380, y + 280);
 
     ctx.fillStyle = '#888';
-    ctx.font = '18px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '18px "TencentSansW7", sans-serif';
     ctx.fillText('按数字键选择', x + 80, y + 360);
   }
 
   _renderBuy(ctx, x, y, w, h) {
     ctx.fillStyle = '#aaccdd';
-    ctx.font = 'bold 22px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
     ctx.fillText('🛒 购买商品', x + 30, y + 90);
 
     this.linBuyList.forEach((itemId, i) => {
@@ -183,36 +183,36 @@ export class ShopUI {
       ctx.textBaseline = 'middle';
       ctx.fillText(item.icon, x + 35, iy + 30);
 
-      ctx.font = 'bold 22px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
       ctx.fillStyle = owned ? '#7CFC00' : '#fff';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(`${item.name}${owned ? ' ✅已拥有' : ''}`, x + 90, iy + 28);
 
       ctx.fillStyle = '#bbb';
-      ctx.font = '15px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '15px "TencentSansW7", sans-serif';
       ctx.fillText(item.desc, x + 90, iy + 50);
 
       ctx.fillStyle = '#ffd700';
-      ctx.font = 'bold 20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = 'bold 20px "TencentSansW7", sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(`${item.price} 金`, x + w - 40, iy + 38);
       ctx.textAlign = 'left';
     });
 
     ctx.fillStyle = '#888';
-    ctx.font = '14px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '14px "TencentSansW7", sans-serif';
     ctx.fillText('↑↓ 选择   Enter/Space 购买', x + 30, y + h - 50);
   }
 
   _renderSell(ctx, x, y, w, h) {
     ctx.fillStyle = '#aaccdd';
-    ctx.font = 'bold 22px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
     ctx.fillText('🐟 出售鱼货', x + 30, y + 90);
 
     const fishBag = window.Save?.get('player.fishBag') || [];
     if (fishBag.length === 0) {
       ctx.fillStyle = '#888';
-      ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.fillText('鱼篓空空，先去钓鱼吧～', x + 80, y + 200);
       return;
     }
@@ -240,18 +240,18 @@ export class ShopUI {
       ctx.fillRect(x + 20, iy, w - 40, 45);
 
       ctx.fillStyle = '#fff';
-      ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.fillText(`${fish.species} (${fish.size}cm)`, x + 40, iy + 30);
 
       ctx.fillStyle = mul >= 2.0 ? '#FF69B4' : (mul >= 1.5 ? '#7CFC00' : '#ffd700');
-      ctx.font = 'bold 20px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = 'bold 20px "TencentSansW7", sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(`${price} 金${mul > 1 ? ' ×' + mul.toFixed(1) : ''}`, x + w - 40, iy + 30);
       ctx.textAlign = 'left';
     }
 
     ctx.fillStyle = '#888';
-    ctx.font = '14px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '14px "TencentSansW7", sans-serif';
     ctx.fillText(`鱼篓 ${fishBag.length} 条   ↑↓ 选择   Enter 单卖   A 全卖`, x + 30, y + h - 50);
   }
 }

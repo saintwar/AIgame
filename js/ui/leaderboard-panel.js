@@ -46,7 +46,7 @@
         z-index: 9999;
         opacity: 0; pointer-events: none;
         transition: opacity 0.25s ease;
-        font-family: 'TencentSansW7', 'Cubic 11', 'Noto Sans TC', monospace;
+        font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
       }
       .leaderboard-overlay.show { opacity: 1; pointer-events: auto; }
 
@@ -130,6 +130,19 @@
         font-size: 12px; color: ${C_DIM};
         letter-spacing: 2px;
       }
+      .leaderboard-tip {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px dashed ${C_BORDER};
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: ${C_HIGHLIGHT};
+        text-align: center;
+        background: rgba(196, 154, 74, 0.12);
+        border-radius: 8px;
+        letter-spacing: 0.5px;
+        text-shadow: 1px 1px 0 #000;
+      }
 
       /* ─── HUD 排行榜按钮 ─── */
       .hud-leaderboard-btn {
@@ -144,7 +157,7 @@
         color: ${C_BG};
         cursor: pointer;
         box-shadow: 0 3px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
-        font-family: 'TencentSansW7', 'Cubic 11', 'Noto Sans TC', monospace;
+        font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
         letter-spacing: 1px;
         transition: transform 0.15s, box-shadow 0.15s;
       }
@@ -183,6 +196,7 @@
             <div class="leaderboard-loading">加载中...</div>
           </div>
           <div class="leaderboard-mine" id="leaderboard-mine"></div>
+          <div class="leaderboard-tip">☕ 每日 15:00 排名前两位，可找开发者兑换咖啡一杯。</div>
         </div>
       </div>
     `;

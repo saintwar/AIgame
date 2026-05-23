@@ -20,6 +20,28 @@
   <!-- 内联 SVG favicon：像素小鱼（避免根目录 favicon.ico 0 字节导致的 404） -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%231a3a5c'/><path fill='%23e76f51' d='M3 7h1v1H3zm1 0h1v1H4zm1-1h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 1h1v1h-1zM5 8h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zM4 8h1v1H4zm0 1h1v1H4zm1-1h1v1H5zm1 1h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 0h1v1h-1zm1-2h1v1h-1zm0 2h1v1h-1zm0 1h1v1h-1zm0-2h1v1h-1z'/><rect x='9' y='6' width='1' height='1' fill='%23ffffff'/></svg>">
   <style>
+    /* PHASE 16-7：全局字体 TencentSans-W7
+       - 路径相对 index.html（同源 font/ 目录，部署到 GitHub Pages 路径不变）
+       - font-display: swap 防止 FOIT 白屏；首屏先用兜底字体，字体加载完后无缝替换
+       - family 名统一为 'TencentSans'（散点处的 'TencentSansW7' 已一并对齐到此名）
+       - GitHub Pages 严格区分大小写，文件名 TencentSans-W7.ttf 必须完全一致 */
+    @font-face {
+      font-family: 'TencentSans';
+      src: url('font/TencentSans-W7.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    /* 别名：保持 Canvas 内大量历史 ctx.font 'TencentSansW7' 字面量也能命中
+       同一个 ttf 复用，无额外网络请求；这样 fishing-scene.js 的 ctx.fillText
+       不需要改动也能用上新字体（约束 4：不动 Canvas 内 ctx.fillText） */
+    @font-face {
+      font-family: 'TencentSansW7';
+      src: url('font/TencentSans-W7.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -28,7 +50,7 @@
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      font-family: 'TencentSansW7', 'Cubic 11', 'Noto Sans TC', monospace;
+      font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
       overflow: hidden;
     }
     #game-root {

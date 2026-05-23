@@ -279,7 +279,7 @@ class QuestSystem {
       transform: translate(-50%, -50%);
       font-size: 56px;
       color: #FFD700;
-      font-family: 'Cubic 11', 'Noto Sans TC', monospace;
+      font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
       text-shadow: 0 0 8px #000, 0 0 16px #000;
       pointer-events: none;
       z-index: 1000;

@@ -9,20 +9,40 @@ export class CodexUI {
     this.species = codex.getAllSpecies();
   }
 
-  toggle() { this.visible = !this.visible; if (this.visible) this.species = this.codex.getAllSpecies(); }
+  toggle() {
+    this.visible = !this.visible;
+    if (this.visible) {
+      this.species = this.codex.getAllSpecies();
+      // 打开时默认选中第 1 个槽位（PHASE 16-6 键位规范）
+      this.selectedIdx = 0;
+    }
+  }
   hide()   { this.visible = false; }
 
   handleKey(key) {
     if (!this.visible) return false;
-    if (key === 'Escape' || key === 't') {
+    // 注意：village-scene 派发本函数前已 toLowerCase()，
+    //   故 ESC / 方向键全部走小写匹配。
+    //   （历史 bug：原代码用 'Escape' / 'ArrowLeft' / 'ArrowRight' 大写
+    //   永远匹配不上，导致用户报告"ESC + 方向键无响应"。）
+    if (key === 'escape' || key === 't') {
       this.hide(); return true;
     }
-    if (key === 'ArrowLeft' || key === 'a') {
+    // ← / ↑ / A → 上一个；→ / ↓ / D → 下一个（与背包键位风格对齐）
+    //   单行循环切换，边界自动绕回。
+    if (key === 'arrowleft' || key === 'arrowup' || key === 'a') {
       this.selectedIdx = (this.selectedIdx - 1 + this.species.length) % this.species.length;
       return true;
     }
-    if (key === 'ArrowRight' || key === 'd') {
+    if (key === 'arrowright' || key === 'arrowdown' || key === 'd') {
       this.selectedIdx = (this.selectedIdx + 1) % this.species.length;
+      return true;
+    }
+    // Enter：当前选中物的"确认"反馈
+    //   现有 UI 是一体式（网格+详情卡同屏），选中即看详情，
+    //   故已解锁时 Enter 仅消费按键避免冒泡（视觉无变化）；
+    //   未解锁时同样消费（不弹提示，避免破坏现有架构）。
+    if (key === 'enter') {
       return true;
     }
     return false;
@@ -44,8 +64,11 @@ export class CodexUI {
     ctx.strokeRect(x, y, w, h);
 
     // 标题
+    //   PHASE 16-7：图鉴 Canvas 中文文字统一改用 TencentSansW7（别名已在 index.html 注册）。
+    //   原 'monospace' 在中文场景下会 fallback 到等宽中文字体，与 DOM 侧 TencentSans 视觉不统一。
+    //   注意：emoji（🐟📖等）和大字号问号仍保留 sans-serif，由系统 emoji 字体渲染。
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px monospace';
+    ctx.font = 'bold 32px TencentSansW7, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('📖 鱼类图鉴 · 日月潭', x + 30, y + 50);
 
@@ -53,7 +76,7 @@ export class CodexUI {
     const got = this.codex.getUnlockedCount();
     const total = this.codex.getTotalCount();
     ctx.fillStyle = '#aaccdd';
-    ctx.font = 'bold 22px monospace';
+    ctx.font = 'bold 22px TencentSansW7, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`已收集 ${got}/${total}`, x + w - 30, y + 50);
     ctx.textAlign = 'left';
@@ -119,12 +142,12 @@ export class CodexUI {
 
       // 名称
       ctx.fillStyle = '#ffd700';
-      ctx.font = 'bold 28px monospace';
+      ctx.font = 'bold 28px TencentSansW7, sans-serif';
       ctx.fillText(data.name, cardX + 20, cardY + 140);
 
       // 稀有度
       ctx.fillStyle = '#ffaa44';
-      ctx.font = '20px monospace';
+      ctx.font = '20px TencentSansW7, sans-serif';
       ctx.fillText('★'.repeat(data.rarity) + '☆'.repeat(5 - data.rarity), cardX + 20, cardY + 170);
 
       // 信息行
@@ -137,17 +160,17 @@ export class CodexUI {
         `📅 首次：${new Date(entry.firstAt).toLocaleDateString()}`
       ];
       ctx.fillStyle = '#cce0ee';
-      ctx.font = '18px monospace';
+      ctx.font = '18px TencentSansW7, sans-serif';
       info.forEach(line => { ctx.fillText(line, cardX + 20, yy); yy += 28; });
 
       // 描述
       ctx.fillStyle = '#aaccdd';
-      ctx.font = '16px monospace';
+      ctx.font = '16px TencentSansW7, sans-serif';
       this._wrapText(ctx, data.desc, cardX + 20, yy + 10, cardW - 40, 22);
 
       // 传说
       ctx.fillStyle = '#ffaa44';
-      ctx.font = 'italic 16px monospace';
+      ctx.font = 'italic 16px TencentSansW7, sans-serif';
       this._wrapText(ctx, '💭 ' + data.legend, cardX + 20, yy + 80, cardW - 40, 22);
     } else {
       // 未解锁
@@ -155,18 +178,18 @@ export class CodexUI {
       ctx.font = '120px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('?', cardX + cardW / 2, cardY + 200);
-      ctx.font = 'bold 24px monospace';
+      ctx.font = 'bold 24px TencentSansW7, sans-serif';
       ctx.fillText('???', cardX + cardW / 2, cardY + 280);
-      ctx.font = '18px monospace';
+      ctx.font = '18px TencentSansW7, sans-serif';
       ctx.fillText('钓到这种鱼来解锁吧～', cardX + cardW / 2, cardY + 320);
       ctx.textAlign = 'left';
     }
 
     // 底部提示
     ctx.fillStyle = '#888';
-    ctx.font = '16px monospace';
+    ctx.font = '16px TencentSansW7, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('← → / A D 切换鱼种   T / ESC 关闭', x + 30, y + h - 20);
+    ctx.fillText('← → ↑ ↓ / A D 切换鱼种   Enter 确认   T / ESC 关闭', x + 30, y + h - 20);
   }
 
   _wrapText(ctx, text, x, y, maxW, lineH) {

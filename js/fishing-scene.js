@@ -309,7 +309,7 @@ class FishingScene {
   _showEscapeConfirm() {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;';
-    overlay.innerHTML = `<div style="width:500px;height:200px;background:#F4E4C1;border:2px solid #3D2B1F;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:"TencentSansW7", sans-serif;color:#3D2B1F;font-size:24px;font-weight:bold;">
+    overlay.innerHTML = `<div style="width:500px;height:200px;background:#F4E4C1;border:2px solid #3D2B1F;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'TencentSans','Noto Sans TC',sans-serif;color:#3D2B1F;font-size:24px;font-weight:bold;">
       <p style="margin:0 0 24px">要回村庄吗？任务进度已保存</p>
       <div style="display:flex;gap:24px;">
         <button id="esc-yes" style="padding:12px 32px;font-size:20px;background:#4CAF50;color:#fff;border:none;border-radius:8px;cursor:pointer;">Y - 确认</button>
@@ -541,7 +541,7 @@ class FishingScene {
     this.paused = true;
     const panel = document.createElement('div');
     panel.id = 'fishing-tutorial-panel';
-    panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;background:rgba(0,0,0,0.92);border:2px solid #4FC3F7;border-radius:16px;padding:28px;color:#fff;font-family:"TencentSansW7", sans-serif;z-index:1000;text-align:center;';
+    panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;background:rgba(0,0,0,0.92);border:2px solid #4FC3F7;border-radius:16px;padding:28px;color:#fff;font-family:"TencentSans","Noto Sans TC",sans-serif;z-index:1000;text-align:center;';
     panel.innerHTML = `
       <h2 style="margin:0 0 16px;color:#FFD700;font-size:26px;">🎣 钓鱼技巧</h2>
       <p style="margin:0 0 12px;font-size:16px;line-height:1.6;color:#ddd;">
@@ -829,7 +829,7 @@ class FishingScene {
   _toggleAtlas() {
     const isOpen = document.getElementById('atlas-panel'); if (isOpen) { isOpen.remove(); return; }
     const panel = document.createElement('div'); panel.id = 'atlas-panel';
-    panel.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:600px;max-height:80%;background:rgba(0,0,0,0.9);border:2px solid #4FC3F7;border-radius:16px;padding:24px;color:#fff;font-family:"TencentSansW7", sans-serif;overflow-y:auto;z-index:100;';
+    panel.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:600px;max-height:80%;background:rgba(0,0,0,0.9);border:2px solid #4FC3F7;border-radius:16px;padding:24px;color:#fff;font-family:"TencentSans","Noto Sans TC",sans-serif;overflow-y:auto;z-index:100;';
     let html = '<h2 style="text-align:center;color:#FFD700;font-size:28px;margin:0 0 20px">📖 鱼获图鉴</h2><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">';
     FISH_POOL.forEach(f => { const owned = this.atlas.has(f.id); html += `<div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:16px;text-align:center;${owned ? '' : 'opacity:0.4'}">
       <div style="font-size:48px">${owned ? '🐟' : '🔒'}</div><div style="font-size:18px;font-weight:bold;color:${f.color}">${f.name}</div><div style="font-size:14px;color:#aaa">${'★'.repeat(f.rarity)} | $${f.price}</div></div>`; });
@@ -1273,7 +1273,7 @@ class FishingScene {
       ctx.shadowColor = cfg.shadowColor;
       ctx.shadowBlur = cfg.shadowBlur;
     }
-    ctx.font = `bold ${cfg.fontSize}px \"Cubic 11\", \"TencentSansW7\", \"Noto Sans TC\", sans-serif`;
+    ctx.font = `bold ${cfg.fontSize}px "TencentSansW7", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (cfg.strokeWidth > 0 && cfg.strokeColor) {
@@ -1645,7 +1645,10 @@ class FishingScene {
   // ════════════════════════════════════════════════════════
   // PHASE 13-2 像素 HUD 辅助函数
   //   _drawWoodPlaque  木牌底板（棕 + 深棕 2px 像素描边，无圆角）
-  //   _drawPixelText   像素字（monospace bold + 深棕 2px 描边 + 米白填充）
+  //   _drawPixelText   木牌文字（TencentSansW7 bold + 深棕 2px 描边 + 米白填充）
+  //     PHASE 16-7 收尾：原 'Courier New' 等宽像素风与 TencentSans 全局字体不统一，
+  //     用户验收意见统一改用 TencentSansW7。粗体 + 米白填充 + 深棕 miter 描边
+  //     的视觉效果在木牌底板上仍然保留了像素 HUD 的厚重感。
   //   _drawPixelIcon   像素图标（coin / fish / target / rod）
   //   _drawPixelBob    像素浮漂（红白方块拼接）
   // ════════════════════════════════════════════════════════
@@ -1666,7 +1669,7 @@ class FishingScene {
   }
   _drawPixelText(text, x, y, size, fill, stroke) {
     const ctx = this.ctx;
-    ctx.font = `bold ${size}px "Courier New", "Consolas", monospace`;
+    ctx.font = `bold ${size}px "TencentSansW7", sans-serif`;
     ctx.textBaseline = 'middle';
     if (stroke) {
       ctx.strokeStyle = stroke;

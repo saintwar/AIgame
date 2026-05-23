@@ -180,7 +180,7 @@ export function drawChiefHouse(ctx, x, y) {
   ctx.fillStyle = '#8B2A2A';
   ctx.fillRect(x + 40, y + 30, 40, 12);
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 10px "Cubic 11", "Noto Sans TC", monospace';
+  ctx.font = 'bold 10px "TencentSansW7", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('村', x + 60, y + 36);
@@ -240,7 +240,7 @@ export function drawFishingShop(ctx, x, y) {
   // ===== 鱼形木招牌 =====
   ctx.fillStyle = '#5C3A1A';
   ctx.fillRect(x + 30, y + 18, 60, 20);
-  ctx.font = 'bold 12px "Cubic 11", "Noto Sans TC", monospace';
+  ctx.font = 'bold 12px "TencentSansW7", sans-serif';
   ctx.fillStyle = '#F4E4C1';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -413,7 +413,7 @@ export function draw711Store(ctx, x, y, time) {
 
   // ===== "7" "11" Logo（带闪烁 + 描边） =====
   const flashAlpha = 0.7 + 0.3 * Math.sin(time / 300);
-  ctx.font = 'bold 16px "Cubic 11", "Noto Sans TC", monospace';
+  ctx.font = 'bold 16px "TencentSansW7", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 

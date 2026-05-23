@@ -95,7 +95,7 @@ class ArrowGuide {
       ctx.fillStyle = '#FFD700';
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 2;
-      ctx.font = '14px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '14px "TencentSansW7", sans-serif';
       ctx.textAlign = 'center';
       ctx.strokeText(this.targetTile.label, arrowX, arrowY - 18);
       ctx.fillText(this.targetTile.label, arrowX, arrowY - 18);
@@ -448,7 +448,7 @@ class VillageScene {
     const titleY = titleBaseY + floatY;
     const titleText = '宝岛钓手';
 
-    ctx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 96px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -469,7 +469,7 @@ class VillageScene {
       octx.clearRect(0, 0, ocW, ocH);
 
       // ⚠️ 必须在绘制前设置字体（oc.width 重置了上下文，font 回到默认值）
-      octx.font = 'bold 96px "Cubic 11", "Noto Sans TC", monospace';
+      octx.font = 'bold 96px "TencentSansW7", sans-serif';
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
 
@@ -521,7 +521,7 @@ class VillageScene {
       ctx.fillText(titleText, cw / 2, titleY);
     }
 
-    ctx.font = '48px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '48px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // 副标题描边（深紫，保证在山脉背景上可读）
@@ -545,7 +545,7 @@ class VillageScene {
     ctx.fillRect(cw / 2 - 120, ch / 2 + 70, 240, 4);
 
     ctx.fillStyle = '#888';
-    ctx.font = '16px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '16px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('v1.1 · 720p HD', 20, ch - 40);
     ctx.textAlign = 'right';
@@ -604,7 +604,7 @@ class VillageScene {
     // 按钮文字（亮金色 + 阴影）
     const textBright = h > 0.3 ? '#FFE8A8' : '#FFD166';
     ctx.fillStyle = textBright;
-    ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = h > 0.3 ? 'rgba(255,224,138,0.5)' : 'rgba(0,0,0,0.8)';
@@ -618,7 +618,7 @@ class VillageScene {
     ctx.restore();
 
     // 提示文字（白字 + 黑描边）
-    ctx.font = '14px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '14px "TencentSansW7", sans-serif';
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
@@ -1418,7 +1418,7 @@ class VillageScene {
       padding: 16px 32px;
       background: rgba(0,0,0,0.8);
       color: #FFD700;
-      font: bold 32px "Cubic 11","Noto Sans TC",sans-serif;
+      font: bold 32px "TencentSans","Noto Sans TC",sans-serif;
       border: 3px solid #FFD700;
       border-radius: 10px;
       z-index: 500;
@@ -1454,7 +1454,7 @@ class VillageScene {
       padding: 16px 32px;
       background: rgba(0,0,0,0.8);
       color: #7CFC00;
-      font: bold 28px "Cubic 11","Noto Sans TC",sans-serif;
+      font: bold 28px "TencentSans","Noto Sans TC",sans-serif;
       border: 3px solid #7CFC00;
       border-radius: 10px;
       z-index: 500;
@@ -1770,7 +1770,7 @@ class VillageScene {
 
       ctx.globalAlpha = this.narrOpacity;
       ctx.fillStyle = '#F4E4C1';
-      ctx.font = '48px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '48px "TencentSansW7", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(INTRO_NARRATIONS[this.currentNarrLine], cw / 2, ch / 2);
@@ -1835,7 +1835,7 @@ class VillageScene {
 
     // 标题文字
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 36px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('📖 操作指南', cardX + cardW / 2, cardY + 32);
@@ -1852,7 +1852,7 @@ class VillageScene {
     ];
 
     let y = cardY + 110;
-    ctx.font = '32px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '32px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#3D2B1F';
 
@@ -1864,7 +1864,7 @@ class VillageScene {
 
     // 底部提示
     ctx.fillStyle = '#888888';
-    ctx.font = '28px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '28px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('按 任意键 关闭', cardX + cardW / 2, cardY + cardH - 40);
   }
@@ -2009,7 +2009,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = '#FFD700';
-      ctx.font = '20px "Cubic 11","Noto Sans TC",monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(`🎯 奇力鱼 ${count}/3`, x + 12, y + 20);
@@ -2025,7 +2025,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = isReady ? '#7CFC00' : '#FFD700';
-      ctx.font = '20px "Cubic 11","Noto Sans TC",monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + 12, y + 20);
@@ -2041,7 +2041,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = isReady ? '#7CFC00' : '#FFD700';
-      ctx.font = '20px "Cubic 11","Noto Sans TC",monospace';
+      ctx.font = '20px "TencentSansW7", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + 12, y + 20);
@@ -2163,7 +2163,7 @@ class VillageScene {
         ctx.stroke();
 
         ctx.fillStyle = '#3D2B1F';
-        ctx.font = 'bold 20px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = 'bold 20px "TencentSansW7", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('E', hintX, hintY);
@@ -2191,7 +2191,7 @@ class VillageScene {
     ctx.fillRect(0, 680, 1280, 40);
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('🎣 按 F 开始钓鱼', 640, 700);
@@ -2328,7 +2328,7 @@ class VillageScene {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 11px "Cubic 11", "Noto Sans TC", sans-serif';
+    ctx.font = 'bold 11px "TencentSansW7", sans-serif';
 
     for (const d of dirs) {
       const dx = centerX + d.x;
@@ -2368,7 +2368,7 @@ class VillageScene {
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
     ctx.fillStyle = '#3D2B1F';
-    ctx.font = 'bold 40px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = 'bold 40px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('📋 任务面板', panelX + panelW / 2, panelY + 50);
@@ -2376,7 +2376,7 @@ class VillageScene {
     const activeQuests = questSystem.getActiveQuests();
 
     if (activeQuests.length === 0) {
-      ctx.font = '28px "Cubic 11", "Noto Sans TC", monospace';
+      ctx.font = '28px "TencentSansW7", sans-serif';
       ctx.fillStyle = '#888';
       ctx.fillText('暂无进行中的任务', panelX + panelW / 2, panelY + 200);
     } else {
@@ -2384,7 +2384,7 @@ class VillageScene {
       for (const q of activeQuests) {
         const tpl = window.QUESTS?.[q.id] || { name: q.id, description: '' };
 
-        ctx.font = 'bold 24px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = 'bold 24px "TencentSansW7", sans-serif';
         ctx.fillStyle = '#3D2B1F';
         ctx.textAlign = 'left';
         ctx.fillText(tpl.name, panelX + 40, y);
@@ -2401,12 +2401,12 @@ class VillageScene {
         const badgeX = panelX + panelW - 120;
         ctx.fillRect(badgeX, y - 14, 80, 28);
         ctx.fillStyle = '#FFF';
-        ctx.font = 'bold 16px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = 'bold 16px "TencentSansW7", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(badgeText, badgeX + 40, y + 1);
 
         y += 40;
-        ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+        ctx.font = '20px "TencentSansW7", sans-serif';
         ctx.fillStyle = '#666';
         ctx.textAlign = 'left';
         const questTpl = QUESTS[q.id];
@@ -2421,7 +2421,7 @@ class VillageScene {
       }
     }
 
-    ctx.font = '20px "Cubic 11", "Noto Sans TC", monospace';
+    ctx.font = '20px "TencentSansW7", sans-serif';
     ctx.fillStyle = '#888';
     ctx.textAlign = 'center';
     ctx.fillText('按 Q 关闭', panelX + panelW / 2, panelY + panelH - 30);
@@ -2458,7 +2458,7 @@ class VillageScene {
 
     // === 标题 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 16px "Cubic 11", monospace';
+    ctx.font = 'bold 16px "TencentSansW7", sans-serif';
     ctx.fillText('🐛 DEBUG MODE', panelX + 12, y);
     y += 28;
 
@@ -2473,7 +2473,7 @@ class VillageScene {
 
     // === 性能 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "Cubic 11", monospace';
+    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
     ctx.fillText('📊 性能', panelX + 12, y);
     y += 20;
 
@@ -2530,7 +2530,7 @@ class VillageScene {
 
     // === 玩家 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "Cubic 11", monospace';
+    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
     ctx.fillText('🎮 玩家', panelX + 12, y);
     y += 20;
 
@@ -2555,7 +2555,7 @@ class VillageScene {
 
     // === 任务 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "Cubic 11", monospace';
+    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
     ctx.fillText('📋 任务', panelX + 12, y);
     y += 20;
 
@@ -2589,7 +2589,7 @@ class VillageScene {
 
     // === 存档 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "Cubic 11", monospace';
+    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
     ctx.fillText('💾 存档', panelX + 12, y);
     y += 20;
 
@@ -2616,7 +2616,7 @@ class VillageScene {
 
     // === 热键 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "Cubic 11", monospace';
+    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
     ctx.fillText('🔧 热键', panelX + 12, y);
     y += 20;
 
@@ -2747,7 +2747,7 @@ class VillageScene {
       padding: 18px 36px;
       background: rgba(0,0,0,0.75);
       color: #FFD700;
-      font: bold 28px "Cubic 11","Noto Sans TC",sans-serif;
+      font: bold 28px "TencentSans","Noto Sans TC",sans-serif;
       border: 3px solid #FFD700;
       border-radius: 12px;
       z-index: 300;
