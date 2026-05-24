@@ -20,6 +20,11 @@ PHASE 16-7-PERF：字体子集化构建脚本（一次性使用）
 依赖：
   pip install --user fonttools brotli
   pyftsubset 默认在 ~/Library/Python/3.9/bin/，脚本里自动找
+
+⚠️ PHASE 16-9 注意：
+  仓库里已删除 font/TencentSans-W7.ttf（8.1MB）以减小仓库体积。
+  本脚本若要重新生成 woff2 子集，需先把源 ttf 放回 font/ 目录再运行。
+  源字体可从腾讯字体官方 / 内部资产库重新获取。
 """
 import os
 import re

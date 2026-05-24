@@ -26,21 +26,28 @@
              npm 包内无 UMD 全量包；
              只有 static.cloudbase.net 才托管 2.x UMD。
        版本：2.17.3（npm 当前稳定版，实测可达；规格里写的 2.13.1 在官方 CDN 上 404）
-       全局变量名仍为 cloudbase（小写），见 js/cloudbase.js 适配 -->
-  <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.17.3/cloudbase.full.js"></script>
+       全局变量名仍为 cloudbase（小写），见 js/cloudbase.js 适配
+       PHASE 16-9：加 defer。SDK 体积 537KB，海外 CDN 下载需 1~3s，无 defer 时
+                  会完全阻塞 HTML 解析，splash CSS / splash-loader.js 都会被卡。
+                  defer 后下载与 HTML 解析并行，且执行顺序仍按 DOM 出现顺序，
+                  保证后续 cloudbase.js 拿到 window.cloudbase 的时序不变。 -->
+  <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.17.3/cloudbase.full.js" defer></script>
   <!-- 内联 SVG favicon：像素小鱼（避免根目录 favicon.ico 0 字节导致的 404） -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%231a3a5c'/><path fill='%23e76f51' d='M3 7h1v1H3zm1 0h1v1H4zm1-1h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 1h1v1h-1zM5 8h1v1H5zm1 0h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zM4 8h1v1H4zm0 1h1v1H4zm1-1h1v1H5zm1 1h1v1H6zm1 0h1v1H7zm1 0h1v1H8zm1 0h1v1H9zm1 0h1v1h-1zm1-2h1v1h-1zm0 2h1v1h-1zm0 1h1v1h-1zm0-2h1v1h-1z'/><rect x='9' y='6' width='1' height='1' fill='%23ffffff'/></svg>">
   <style>
     /* PHASE 16-7-PERF：全局字体 TencentSans-W7（已子集化为 woff2）
-       - 双 src：woff2 优先（235KB），ttf 兜底（8.1MB，理论上不会触发，老浏览器才用）
-       - 现代浏览器（Chrome 36+/Firefox 39+/Safari 12+）全部支持 woff2，覆盖 99%+ 用户
+       - 仅 woff2（235KB），覆盖现代浏览器（Chrome 36+/Firefox 39+/Safari 12+ ≈ 99% 用户）
+       - PHASE 16-9：移除 ttf 兜底（8.1MB，理论上不会触发）。
+         理由：① 现代浏览器全部支持 woff2，ttf 路径只有 IE/极老 Safari 才会走；
+              ② 文件 8.1MB 占用 git 仓库空间且 GH Pages 不开 br/gzip 时是潜在抖动源；
+              ③ 留 ttf 让浏览器在 src 列表里多解析一项，无收益。
+         极老浏览器降级到 font-family 列表的下一个（Noto Sans TC / 微软雅黑）即可。
        - font-display: swap 防止 FOIT 白屏；首屏先用兜底字体，字体加载完后无缝替换
        - family 名统一为 'TencentSans'（散点处的 'TencentSansW7' 已一并对齐到此名）
        - GitHub Pages 严格区分大小写，文件名必须完全一致 */
     @font-face {
       font-family: 'TencentSans';
-      src: url('font/TencentSans-W7.woff2?v=20260524') format('woff2'),
-           url('font/TencentSans-W7.ttf?v=20260524') format('truetype');
+      src: url('font/TencentSans-W7.woff2?v=20260524') format('woff2');
       font-weight: normal;
       font-style: normal;
       font-display: swap;
@@ -50,8 +57,7 @@
        的 ctx.fillText 不需要改动也能用上新字体（约束 4：不动 Canvas 内 ctx.fillText） */
     @font-face {
       font-family: 'TencentSansW7';
-      src: url('font/TencentSans-W7.woff2?v=20260524') format('woff2'),
-           url('font/TencentSans-W7.ttf?v=20260524') format('truetype');
+      src: url('font/TencentSans-W7.woff2?v=20260524') format('woff2');
       font-weight: normal;
       font-style: normal;
       font-display: swap;
@@ -130,22 +136,28 @@
     <div id="debug-bar">DEBUG MODE</div>
     <div id="transition-overlay"></div>
   </div>
-  <!-- PHASE 16-1：CloudBase 初始化（IIFE，必须在 main.js 之前加载） -->
-  <script src="js/cloudbase.js"></script>
-  <!-- PHASE 16-2：玩家档案系统 + 昵称弹窗（IIFE，依赖 cloudbase.js，先于 main.js） -->
-  <script src="js/profile-system.js"></script>
-  <script src="js/ui/nickname-dialog.js"></script>
+  <!-- PHASE 16-1：CloudBase 初始化（IIFE，必须在 main.js 之前加载）
+       PHASE 16-9：加 defer，与上面 SDK 的 defer 配对——defer 脚本按 DOM 出现顺序
+                  顺序执行，所以本文件一定在 cloudbase.full.js 之后跑，能拿到
+                  window.cloudbase 全局。 -->
+  <script src="js/cloudbase.js" defer></script>
+  <!-- PHASE 16-2：玩家档案系统 + 昵称弹窗（IIFE，依赖 cloudbase.js，先于 main.js）
+       PHASE 16-9：加 defer，链式延后到 cloudbase.js 之后执行。 -->
+  <script src="js/profile-system.js" defer></script>
+  <script src="js/ui/nickname-dialog.js" defer></script>
   <!-- PHASE 16-3：排行榜系统（IIFE，依赖 cloudbase.js + profile-system.js，先于 main.js） -->
-  <script src="js/leaderboard-system.js"></script>
+  <script src="js/leaderboard-system.js" defer></script>
   <!-- PHASE 16-4：排行榜 UI 面板（IIFE，依赖 leaderboard-system.js，自带样式 + HUD 按钮） -->
-  <script src="js/ui/leaderboard-panel.js"></script>
-  <script>
-    // 强制清除 ES 模块缓存（开发模式）
-    const cacheBust = '?v=' + Date.now();
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.src = 'js/main.js' + cacheBust;
-    document.body.appendChild(script);
-  </script>
+  <script src="js/ui/leaderboard-panel.js" defer></script>
+  <!-- PHASE 16-9：main.js 改用 <script type="module" defer src="...">
+       原本走 inline 注入 + ?v=Date.now() 的写法是历史调试遗留，
+       后果：① ?v=Date.now() 让 main.js 永远不命中浏览器缓存，
+             二次访问也得重拉整张 ES module 依赖图（43 个 JS）；
+             ② inline 注入比静态 <script> 晚一个 task，瀑布更深。
+       改用静态 <script type="module" defer>，固定版本号 ?v=20260524，
+       浏览器二次访问直接命中 304/缓存，并且 module 默认就是 defer 行为，
+       与上面所有 defer 脚本一并按 DOM 顺序在 DOMContentLoaded 前执行完。
+       如需强刷，把 ?v=20260524 升一位（与字体一致的版本号语义）。 -->
+  <script type="module" src="js/main.js?v=20260524" defer></script>
 </body>
 </html>

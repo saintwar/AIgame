@@ -281,4 +281,14 @@ window.ensureNickname = ensureNickname;
     console.warn('[Bootstrap] PlayerProfile.load() 失败（不阻塞游戏）:', e && e.message);
   }
   SceneManager.switchToInstant('village');
+
+  // PHASE 16-9：村庄场景已就绪，主动通知 splash 隐藏
+  //   原本 splash-loader.js 通过轮询 SceneManager.current === 'village' 自行收尾，
+  //   但海外网络下 main.js booted 时刻可能已经接近 / 超过全局兜底时长，
+  //   主动 hide 能确保 splash 在"游戏真正可玩"那一刻精准消失，
+  //   而不是被全局 setTimeout 兜底提前 / 延后触发。
+  //   带 isHidden 守卫避免与轮询路径重复 hide（hide 自身也已幂等）。
+  if (window.SplashLoader && !window.SplashLoader.isHidden()) {
+    window.SplashLoader.hide();
+  }
 })();

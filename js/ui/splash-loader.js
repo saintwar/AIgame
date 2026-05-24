@@ -15,7 +15,10 @@
  *   阶段 3 (60 → 85%)  "唤醒沉睡的鱼群..." ← 玩家档案就绪（轮询 PlayerProfile）
  *   阶段 4 (85 → 100%) "准备出航..."       ← 场景就绪（轮询 SceneManager + 'village'）
  *
- * 5 秒兜底：无论上述钩子是否齐全，splash 5 秒后强制 hide，绝不卡死玩家。
+ * 12 秒兜底：无论上述钩子是否齐全，splash 12 秒后强制 hide，绝不卡死玩家。
+ * （PHASE 16-9：从 5s 提到 12s——GitHub Pages 海外 CDN + 首次冷启动时
+ *  43 个 ES module + CloudBase SDK 537KB 的下载 + 解析峰值能到 6~10s，
+ *  5s 经常误触发兜底，导致 splash 提前消失而 main.js 还没 booted。）
  */
 (function () {
   'use strict';
@@ -34,14 +37,21 @@
     { upTo: 100, text: '准备出航...' }
   ];
 
-  // 5 秒兜底：硬上限，超时无论如何都强制 hide（约束 4）
-  const FAILSAFE_MS = 5000;
+  // 全局兜底：硬上限，超时无论如何都强制 hide
+  // PHASE 16-9：5000 → 12000。GitHub Pages 海外 CDN + 43 个 ES module + CloudBase
+  //            SDK 537KB 的弱网首次访问，实测 6~10s 是正常区间；5s 会在 main.js
+  //            booted 之前误触发，导致 splash 提前消失，玩家黑屏 1~2s。
+  //            提到 12s 兜住极端情况；正常路径下方案 3（main.js 主动 hide）
+  //            会比这个兜底先触发，所以这个值再大也不会拖慢正常流程。
+  const FAILSAFE_MS = 12000;
   // 阶段 1 兜底：旧浏览器 document.fonts.ready 可能不存在，1.2s 后强推 30%
   const STAGE1_FALLBACK_MS = 1200;
-  // 阶段 2 兜底：万一 CloudBase 事件丢失（罕见），3s 后强推 60%
-  const STAGE2_FALLBACK_MS = 3000;
-  // 阶段 3 兜底：PlayerProfile 也可能因 IIFE 异常缺失，4s 后强推 85%
-  const STAGE3_FALLBACK_MS = 4000;
+  // 阶段 2 兜底：万一 CloudBase 事件丢失（罕见），4s 后强推 60%
+  // PHASE 16-9：3000 → 4000，给海外 CDN 拉 SDK 多留 1s
+  const STAGE2_FALLBACK_MS = 4000;
+  // 阶段 3 兜底：PlayerProfile 也可能因 IIFE 异常缺失，8s 后强推 85%
+  // PHASE 16-9：4000 → 8000，与 FAILSAFE_MS 12s 拉开档次
+  const STAGE3_FALLBACK_MS = 8000;
 
   /* ─────────────────── DOM 创建 ─────────────────── */
 
@@ -214,9 +224,9 @@
         clearInterval(timer);
         finish();
       } else if (Date.now() - start > FAILSAFE_MS) {
-        // 5 秒兜底：约束 4 — 无论如何强制 hide
+        // 兜底（PHASE 16-9 已提到 12s）：无论如何强制 hide，避免玩家卡死
         clearInterval(timer);
-        console.warn('[Splash] 5s 兜底触发，强制隐藏（场景未就绪信号丢失）');
+        console.warn('[Splash] ' + (FAILSAFE_MS / 1000) + 's 兜底触发，强制隐藏（场景未就绪信号丢失）');
         finish();
       }
     }, 100);
@@ -234,10 +244,10 @@
   hookStage3Profile();
   hookStage4Scene();
 
-  // 全局兜底：哪怕所有钩子都失败，5 秒后也强制结束
+  // 全局兜底：哪怕所有钩子都失败，FAILSAFE_MS 后也强制结束
   setTimeout(function () {
     if (!hidden) {
-      console.warn('[Splash] 全局 5s 兜底：强制隐藏 splash');
+      console.warn('[Splash] 全局 ' + (FAILSAFE_MS / 1000) + 's 兜底：强制隐藏 splash');
       hide();
     }
   }, FAILSAFE_MS);
