@@ -112,8 +112,18 @@
       z-index: 998;
     }
   </style>
+  <!-- PHASE 16-8：启动 Loading 条样式
+       必须在 splash-loader.js 之前加载，否则 splash DOM 创建时会有未样式化闪烁。
+       该 CSS 体积极小（~1KB），与 @font-face 一同在 <head> 内并行下载。 -->
+  <link rel="stylesheet" href="css/splash-loader.css">
 </head>
 <body>
+  <!-- PHASE 16-8：启动 Loading 条（IIFE，必须在所有业务 script 之前加载）
+       职责：覆盖首屏白屏 / 字体闪烁，事件驱动 4 阶段进度（字体 → CloudBase →
+            玩家档案 → 场景就绪），5 秒兜底强制隐藏。
+       零侵入：监听 cloudbase.js 已抛出的 'cloudbase:ready' / 'cloudbase:error' 事件
+              + 轮询 PlayerProfile / SceneManager 既有字段，业务代码零改动。 -->
+  <script src="js/ui/splash-loader.js"></script>
   <div id="game-root">
     <div id="village-scene" style="width:100%;height:100%;display:none"></div>
     <div id="fishing-scene" style="width:100%;height:100%;display:none"></div>
