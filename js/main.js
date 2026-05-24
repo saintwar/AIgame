@@ -12,6 +12,7 @@ import GMUI from './gm-ui.js';
 import { InventorySystem } from './inventory-system.js';
 import { CodexSystem } from './codex-system.js';
 import { EquipmentSystem } from './equipment-system.js';
+import dialogueSystem from './dialogue-system.js';
 
 console.log('🎮 宝岛钓手 booted @ 1280x720 HD 16:9');
 console.log('📐 Tile: 64px | Map: 20x11 | Player Start: (4,5)');
@@ -39,6 +40,10 @@ window.FishingScene = FishingScene;
 window.AudioSystem = AudioSystem;
 window.GM = GM;
 window.GMUI = GMUI;
+// PHASE 16-4.8 仗1：dialogueSystem 暴露到全局，供 click-to-move.js 在
+//   isSceneInteractive() 中判定对话状态（对话进行时鼠标点击不响应）。
+//   对话系统是单例，window.dialogueSystem 与 import 的引用同源。
+window.dialogueSystem = dialogueSystem;
 
 // 注册场景
 SceneManager.register('village', VillageScene);

@@ -283,6 +283,15 @@ class VillageScene {
     this.shopUI = new ShopUI(this.canvas, window.inventory, window.equipment, questSystem);
 
     this._bindInput();
+
+    // PHASE 16-4.8 仗1：鼠标点击寻路（仅村庄场景，钓鱼场景不挂）
+    //   click-to-move.js 是 IIFE 已在 index.html 内 defer 加载完毕，
+    //   通过 window.ClickToMove.attach(this) 把本场景实例（含 canvas/player/keys/
+    //   _canMoveTo/_tryInteract/_showQuestToast）传过去。
+    //   若 ClickToMove 缺失（CDN 失败或脚本未加载），守卫保证 WASD 零回归。
+    if (window.ClickToMove && typeof window.ClickToMove.attach === 'function') {
+      window.ClickToMove.attach(this);
+    }
   }
 
   // 启动
@@ -761,6 +770,14 @@ class VillageScene {
   destroy() {
     this.pause();
     this._unbindInput();
+
+    // PHASE 16-4.8 仗1：解绑鼠标点击寻路（必须在 canvas 被移除前调用）
+    //   detach 内部会从 canvas 上 removeEventListener，等 canvas.parentNode.removeChild
+    //   后再解绑就无效了，会泄漏一组监听器到下一次 init。
+    if (window.ClickToMove && typeof window.ClickToMove.detach === 'function') {
+      window.ClickToMove.detach();
+    }
+
     AudioSystem.stopAmbient();
     AudioSystem.stopBGM();
     if (this.canvas && this.canvas.parentNode) {
@@ -1532,6 +1549,35 @@ class VillageScene {
 
     // 金币 HUD 更新
     if (this.coinHUD) this.coinHUD.update(dt);
+
+    // PHASE 16-4.8 仗1：鼠标点击寻路推进（必须在 WASD 段之前）
+    //   - 返回 true：本帧由寻路控制玩家移动 → 跳过 WASD 段，避免 else 分支把 frame=0
+    //     重置导致行走动画静止
+    //   - 返回 false：未寻路 / 已被 WASD 接管 / 已抵达终点 → 走 WASD 流程（原逻辑零回归）
+    //   ClickToMove.update 内部已处理"WASD 任一键按下 → 主动 cancelPath 后返回 false"
+    //   的接管逻辑，因此 WASD 永远优先生效（约束 1 键盘零回归）。
+    let pathDriven = false;
+    if (window.ClickToMove && typeof window.ClickToMove.update === 'function') {
+      pathDriven = window.ClickToMove.update(dt) === true;
+    }
+    if (pathDriven) {
+      // 寻路控制中：onFishingSpot / NPC bob / 箭头 / FPS 仍要刷新（原 _update 末段逻辑）
+      this.onFishingSpot = (this._getTileAt(this.player.tx, this.player.ty) === TILE.WOOD);
+      for (const npc of this.npcs) {
+        npc.bobOffset = Math.sin(this.time * 10) * 2;
+      }
+      this._updateArrowState();
+      this.arrow.update(this.player);
+      this.fpsTimer += dt;
+      this.frameCount++;
+      if (this.fpsTimer >= 1.0) {
+        this.fps = Math.round(this.frameCount / this.fpsTimer);
+        this.frameCount = 0;
+        this.fpsTimer = 0;
+      }
+      return;
+    }
+
     let dx = 0, dy = 0;
     if (this.keys.up) dy -= 1;
     if (this.keys.down) dy += 1;
@@ -1759,6 +1805,17 @@ class VillageScene {
     // Layer 9: UI 面板
     if (this.questPanelOpen) this._renderQuestPanel();
     if (this.tutorialCardActive) this._renderTutorialCard(ctx, cw, ch);
+
+    // PHASE 16-4.8 仗1：鼠标点击寻路 overlay（hover 边框 + 点击波纹）
+    //   插入位置：UI 面板之后、对话框之前。
+    //   - 在 UI 面板（任务/教程卡）之后：避免边框画在面板上方造成视觉干扰
+    //     （ClickToMove.renderOverlay 内部已用 isSceneInteractive 守卫，UI 打开时
+    //      hover 不绘制，但点击波纹的 200ms 余晖可能仍在 → 显式排序更稳）
+    //   - 在 dialogueSystem.render 之前：对话框是最高优先级 UI，必须盖住所有叠加层
+    if (window.ClickToMove && typeof window.ClickToMove.renderOverlay === 'function') {
+      window.ClickToMove.renderOverlay(ctx);
+    }
+
     dialogueSystem.render(ctx);
   }
 

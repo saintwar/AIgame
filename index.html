@@ -149,6 +149,15 @@
   <script src="js/leaderboard-system.js" defer></script>
   <!-- PHASE 16-4：排行榜 UI 面板（IIFE，依赖 leaderboard-system.js，自带样式 + HUD 按钮） -->
   <script src="js/ui/leaderboard-panel.js" defer></script>
+  <!-- PHASE 16-4.8 仗1-HOTFIX2：村庄场景鼠标点击寻路（IIFE，A* 已内嵌，零外部依赖）
+       - 仅在 SceneManager.currentScene === 'village' 时响应
+       - 钓鱼场景 / 登录页 / 标题画面 / 对话 / 任意 UI 面板 全部不响应（约束 2/3）
+       - 4 处 hook 由 village-scene.js 内部主动调用（约束 6）
+       - 注：原方案曾用 pathfinding@0.4.18 第三方库，但该 npm 包未发布 UMD bundle，
+         切换到 jsdelivr-gh 的 release dist 后又发现 bundle 自身坏（browserify 0.x
+         产物运行时报 "Cannot read properties of undefined (reading '4')"）。
+         决策：209 格的网格无需第三方寻路库，60 行手写 A* 性能秒过，永不抖动。 -->
+  <script src="js/click-to-move.js" defer></script>
   <!-- PHASE 16-9：main.js 改用 <script type="module" defer src="...">
        原本走 inline 注入 + ?v=Date.now() 的写法是历史调试遗留，
        后果：① ?v=Date.now() 让 main.js 永远不命中浏览器缓存，
