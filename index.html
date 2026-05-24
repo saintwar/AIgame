@@ -122,6 +122,12 @@
        必须在 splash-loader.js 之前加载，否则 splash DOM 创建时会有未样式化闪烁。
        该 CSS 体积极小（~1KB），与 @font-face 一同在 <head> 内并行下载。 -->
   <link rel="stylesheet" href="css/splash-loader.css">
+  <!-- PHASE 16-4.8 仗2：全局光标策略 + HUD 通用 hover/active 反馈
+       - 全局规则：button/.btn/.hud-btn → cursor: pointer
+       - input[type=text]/textarea → cursor: text（兜底排除按钮规则误伤）
+       - .hud-btn → 1px 上浮 + 微亮 hover/active（吉卜力风克制反馈）
+       - 体积极小（~2KB），不影响首屏 -->
+  <link rel="stylesheet" href="css/main.css?v=20260524">
 </head>
 <body>
   <!-- PHASE 16-8：启动 Loading 条（IIFE，必须在所有业务 script 之前加载）
@@ -141,6 +147,11 @@
                   顺序执行，所以本文件一定在 cloudbase.full.js 之后跑，能拿到
                   window.cloudbase 全局。 -->
   <script src="js/cloudbase.js" defer></script>
+  <!-- PHASE 16-4.8 仗2：InputManager 雏形（IIFE，零依赖，可放在所有业务 script 之前/之后均可）
+       - 暴露 window.InputManager 供后续仗 3/4 使用
+       - 不接管现有事件代码（约束 1：雏形阶段）
+       - 与 ClickToMove（canvas 内点击）零冲突：作用域是 document 委托 -->
+  <script src="js/input-manager.js" defer></script>
   <!-- PHASE 16-2：玩家档案系统 + 昵称弹窗（IIFE，依赖 cloudbase.js，先于 main.js）
        PHASE 16-9：加 defer，链式延后到 cloudbase.js 之后执行。 -->
   <script src="js/profile-system.js" defer></script>

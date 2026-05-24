@@ -1,12 +1,36 @@
 import { FISH_CODEX } from '../data/fish-codex.js';
 
+/**
+ * 鱼类图鉴 UI（Canvas 绘制）
+ *
+ * PHASE 16-4.8 仗3：鼠标化改造
+ *   原始结构 Canvas 绘制（非 DOM），故 CSS hover 不生效。
+ *   改造方案：在 Canvas 内做坐标命中检测 + 维护 mouseHovered* 字段。
+ *
+ *   - mouseHoveredSlot   网格槽位 hover（独立于 selectedIdx，hover 不修改键盘选中）
+ *   - mouseHoveredClose  ✕ 按钮 hover
+ *
+ *   外部驱动接口：
+ *     handleMouseMove(x, y)  → 更新 hover 字段，返回 'pointer' | 'not-allowed' | 'default'
+ *     handleMouseClick(x, y) → 命中 ✕ → 关闭；命中槽位 → 直接 selectedIdx = idx（即点即看，行为与键盘 Enter 一致）
+ *
+ *   ⚠️ 与策划任务原文的差异：
+ *     原文要求"单击 = 选中、双击 = 打开详情卡"，但本图鉴架构是"网格 + 详情卡同屏"，
+ *     selectedIdx 改变即看到详情，没有"打开详情卡"的额外动作（见 handleKey 注释）。
+ *     故本仗采用"单击即选中即看详情"，与现有 Enter 等效，不引入双击。
+ *     未发现的鱼仍允许选中（与键盘行为一致），但 cursor 显示 not-allowed 暗示"无更多内容"。
+ */
 export class CodexUI {
   constructor(canvas, codex) {
     this.canvas = canvas;
     this.codex = codex;
     this.visible = false;
-    this.selectedIdx = 0;       // 当前选中鱼的索引
+    this.selectedIdx = 0;       // 当前选中鱼的索引（键盘 + 鼠标共享）
     this.species = codex.getAllSpecies();
+
+    // 鼠标 hover 状态（仗3 新增，与 selectedIdx 独立）
+    this.mouseHoveredSlot = -1;
+    this.mouseHoveredClose = false;
   }
 
   toggle() {
@@ -15,9 +39,16 @@ export class CodexUI {
       this.species = this.codex.getAllSpecies();
       // 打开时默认选中第 1 个槽位（PHASE 16-6 键位规范）
       this.selectedIdx = 0;
+    } else {
+      this._resetHover();
     }
   }
-  hide()   { this.visible = false; }
+  hide()   { this.visible = false; this._resetHover(); }
+
+  _resetHover() {
+    this.mouseHoveredSlot = -1;
+    this.mouseHoveredClose = false;
+  }
 
   handleKey(key) {
     if (!this.visible) return false;
@@ -48,6 +79,77 @@ export class CodexUI {
     return false;
   }
 
+  // ─────────────────────────────────────────
+  // 鼠标接入（仗 3 新增）
+  // ─────────────────────────────────────────
+
+  /**
+   * 命中检测（与 render() 几何同步）
+   * 主面板 x=160, y=60, w=960, h=600
+   * 网格 gridX = x+30, gridY = y+100；slotSize=80, slotGap=12，每行 4 列
+   * ✕ 按钮：右上角 30×30，位于 (x+w-40, y+10)
+   */
+  _hitTest(mx, my) {
+    if (!this.visible) return { type: null, idx: -1 };
+    const x = 160, y = 60, w = 960, h = 600;
+
+    // ✕ 按钮命中
+    const cx = x + w - 40, cy = y + 10, cw = 30, ch = 30;
+    if (mx >= cx && mx <= cx + cw && my >= cy && my <= cy + ch) {
+      return { type: 'close', idx: -1 };
+    }
+
+    // 网格槽位命中
+    const gridX = x + 30, gridY = y + 100;
+    const slotSize = 80, slotGap = 12;
+    for (let i = 0; i < this.species.length; i++) {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const sx = gridX + col * (slotSize + slotGap);
+      const sy = gridY + row * (slotSize + slotGap);
+      if (mx >= sx && mx <= sx + slotSize && my >= sy && my <= sy + slotSize) {
+        return { type: 'slot', idx: i };
+      }
+    }
+
+    return { type: null, idx: -1 };
+  }
+
+  handleMouseMove(mx, my) {
+    if (!this.visible) return 'default';
+    const hit = this._hitTest(mx, my);
+    this.mouseHoveredClose = hit.type === 'close';
+    this.mouseHoveredSlot = hit.type === 'slot' ? hit.idx : -1;
+    if (hit.type === 'close') return 'pointer';
+    if (hit.type === 'slot') {
+      // 未发现的鱼：cursor 提示 not-allowed（但仍允许点选，保持与键盘一致）
+      const sp = this.species[hit.idx];
+      return this.codex.isUnlocked(sp) ? 'pointer' : 'not-allowed';
+    }
+    return 'default';
+  }
+
+  handleMouseClick(mx, my) {
+    if (!this.visible) return false;
+    const hit = this._hitTest(mx, my);
+    if (hit.type === 'close') {
+      this.hide();
+      return true;
+    }
+    if (hit.type === 'slot') {
+      // 单击即选中即看详情（与键盘方向键行为等价）
+      // 未发现的鱼也允许选中——会显示"???"详情，与原键盘体验一致
+      this.selectedIdx = hit.idx;
+      return true;
+    }
+    // 点面板内空白：消费点击避免穿透到 ClickToMove
+    const x = 160, y = 60, w = 960, h = 600;
+    if (mx >= x && mx <= x + w && my >= y && my <= y + h) return true;
+    // 点蒙层 → 关闭
+    this.hide();
+    return true;
+  }
+
   render(ctx) {
     if (!this.visible) return;
 
@@ -72,13 +174,26 @@ export class CodexUI {
     ctx.textAlign = 'left';
     ctx.fillText('📖 鱼类图鉴 · 日月潭', x + 30, y + 50);
 
-    // 进度
+    // 进度（右移留 ✕ 空间）
     const got = this.codex.getUnlockedCount();
     const total = this.codex.getTotalCount();
     ctx.fillStyle = '#aaccdd';
     ctx.font = 'bold 22px TencentSansW7, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`已收集 ${got}/${total}`, x + w - 30, y + 50);
+    ctx.fillText(`已收集 ${got}/${total}`, x + w - 60, y + 50);
+    ctx.textAlign = 'left';
+
+    // ✕ 关闭按钮（右上角 30×30；hover 时高亮）
+    const cx = x + w - 40, cy = y + 10, cw = 30, ch = 30;
+    ctx.fillStyle = this.mouseHoveredClose ? 'rgba(95, 179, 217, 0.3)' : 'transparent';
+    ctx.fillRect(cx, cy, cw, ch);
+    ctx.strokeStyle = this.mouseHoveredClose ? '#ffd700' : '#5fb3d9';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx, cy, cw, ch);
+    ctx.fillStyle = this.mouseHoveredClose ? '#ffd700' : '#5fb3d9';
+    ctx.font = 'bold 22px TencentSansW7, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✕', cx + cw / 2, cy + 22);
     ctx.textAlign = 'left';
 
     // 进度条
@@ -98,12 +213,22 @@ export class CodexUI {
       const sy = gridY + row * (slotSize + slotGap);
       const unlocked = this.codex.isUnlocked(sp);
       const selected = i === this.selectedIdx;
+      const hovered = i === this.mouseHoveredSlot;
 
-      // 槽背景
+      // 槽背景：selected > unlocked > 普通
       ctx.fillStyle = selected ? '#5fb3d9' : (unlocked ? '#2a4a5a' : '#0a1525');
       ctx.fillRect(sx, sy, slotSize, slotSize);
-      ctx.strokeStyle = selected ? '#ffd700' : '#3a5a6a';
-      ctx.lineWidth = selected ? 3 : 1;
+      // 边框：selected > hovered > 普通
+      if (selected) {
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+      } else if (hovered) {
+        ctx.strokeStyle = '#f4d99a';  // hover 浅金色（吉卜力风）
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = '#3a5a6a';
+        ctx.lineWidth = 1;
+      }
       ctx.strokeRect(sx, sy, slotSize, slotSize);
 
       // 图标 / 问号
@@ -185,11 +310,11 @@ export class CodexUI {
       ctx.textAlign = 'left';
     }
 
-    // 底部提示
+    // 底部提示（仗 3 追加鼠标提示）
     ctx.fillStyle = '#888';
     ctx.font = '16px TencentSansW7, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('← → ↑ ↓ / A D 切换鱼种   Enter 确认   T / ESC 关闭', x + 30, y + h - 20);
+    ctx.fillText('← → ↑ ↓ / A D 切换鱼种   T / ESC 关闭   🖱️ 点格子查看 / 点 ✕ 关闭', x + 30, y + h - 20);
   }
 
   _wrapText(ctx, text, x, y, maxW, lineH) {

@@ -423,14 +423,50 @@
 
       ctx.save();
       if (isNpc) {
+        // PHASE 16-4.8 仗4：NPC 描金边升级 —— 加 shadowBlur 发光（吉卜力风）
+        // 约束 5：仅 hover 时启用；离开 NPC 自动清除（每帧重绘，无残留）
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#FFE4B5';
+        ctx.shadowColor = '#FFD76A';
+        ctx.shadowBlur = 8;
         ctx.strokeRect(hoverGridX * T + 1, hoverGridY * T + 1, T - 2, T - 2);
+        ctx.shadowBlur = 0;
+
+        // 头顶气泡 "💬 点击对话"（NPC 中心上方）
+        ctx.font = '14px "TencentSansW7", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const tipX = hoverGridX * T + T / 2;
+        const tipY = hoverGridY * T - 2;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText('💬 点击对话', tipX, tipY);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText('💬 点击对话', tipX, tipY);
+      } else if (isFishing) {
+        // PHASE 16-4.8 仗4：钓点 hover 升级 —— 头顶 "🎣 点击前往" 提示
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,224,138,0.9)';
+        ctx.shadowColor = '#FFD76A';
+        ctx.shadowBlur = 6;
+        ctx.strokeRect(hoverGridX * T + 1, hoverGridY * T + 1, T - 2, T - 2);
+        ctx.shadowBlur = 0;
+
+        ctx.font = '14px "TencentSansW7", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const tipX = hoverGridX * T + T / 2;
+        const tipY = hoverGridY * T - 2;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText('🎣 点击前往', tipX, tipY);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText('🎣 点击前往', tipX, tipY);
       } else {
         ctx.lineWidth = 2;
         ctx.strokeStyle = walkable
           ? 'rgba(95,174,61,0.6)'
-          : (isFishing ? 'rgba(255,224,138,0.7)' : 'rgba(220,80,80,0.6)');
+          : 'rgba(220,80,80,0.6)';
         ctx.strokeRect(hoverGridX * T + 1, hoverGridY * T + 1, T - 2, T - 2);
       }
       ctx.restore();

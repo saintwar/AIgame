@@ -114,7 +114,8 @@ class DialogueSystem {
         if (showArrow) {
           ctx.fillText('▼', 640, 440);
         }
-        ctx.fillText('按空格继续 / ESC跳过', 640, 480);
+        // PHASE 16-4.8 仗4：补"/ 点击"提示，告知玩家可鼠标点击推进
+        ctx.fillText('按空格 / 点击继续 · ESC跳过', 640, 480);
       }
     } else {
       // 对话模式
@@ -178,7 +179,8 @@ class DialogueSystem {
         ctx.textBaseline = 'bottom';
         ctx.fillStyle = 'rgba(61,43,31,0.45)';
         const isLastLine = this.currentLineIdx >= this.currentDialog.lines.length - 1;
-        const hintText = isLastLine ? '按空格结束' : '按空格继续';
+        // PHASE 16-4.8 仗4：补"/ 点击"提示
+        const hintText = isLastLine ? '按空格 / 点击 结束' : '按空格 / 点击 继续';
         ctx.fillText(hintText, 1216, boxY + boxH - 44);
       }
     }
@@ -207,6 +209,18 @@ class DialogueSystem {
       // ESC 跳过整段对话
       this._end();
     }
+  }
+
+  /**
+   * PHASE 16-4.8 仗4：鼠标点击 = 等同空格键（推进/跳过打字机）
+   * 设计协议（坑 2）：单击 = 立即展示完整文字（打字机中）/ 进入下一句（打字机完成后）
+   * 与 RPGMaker / 星露谷一致；旁白模式同样适用。
+   * @returns {boolean} 是否消费了点击（true：调用方应 stopPropagation）
+   */
+  handleClick() {
+    if (!this.active || !this.currentDialog) return false;
+    this.handleKey(' ');
+    return true;
   }
 
   _next() {

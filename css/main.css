@@ -1,0 +1,82 @@
+/* ============================================================
+ * css/main.css — 全局光标策略 + HUD 通用反馈
+ * PHASE 16-4.8 仗2：HUD 鼠标化 + 全局 hover 光标
+ * ============================================================
+ *
+ * 设计原则（与主美吉卜力风对齐）：
+ *   - 视觉反馈"克制"：transform: translateY(-1px) + filter: brightness(1.08)
+ *   - 不破坏现有布局：1px 上浮，不超过 3px
+ *   - 不污染输入框：明确 input[type=text]/textarea 走 cursor: text
+ *
+ * 加载顺序：在 <head> 内紧跟 splash-loader.css 之后引入。
+ * 业务影响范围：
+ *   - HUD 按钮（排行榜 .hud-leaderboard-btn / 静音 #mute-btn）
+ *   - 后续仗 3/4 的 UI 面板可直接复用 .hud-btn / .clickable 通用 class
+ *   - Canvas 内部的"虚拟按钮"（背包/图鉴/任务面板）不在本 CSS 作用域，由各场景自管
+ * ============================================================ */
+
+/* ─── 1. 全局光标策略 ─────────────────────────────────────── */
+
+/* 所有可点击 HUD / 通用按钮 */
+.hud-btn,
+.btn,
+button,
+.clickable,
+[role="button"] {
+  cursor: pointer;
+}
+
+/* 关闭按钮 × */
+.close-btn,
+.modal-close,
+[data-action="close"] {
+  cursor: pointer;
+}
+
+/* 输入框正常文本光标（必须放在 button 规则之后，确保覆盖） */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+textarea {
+  cursor: text;
+}
+
+/* 禁用态显示禁止光标 + 半透明 */
+button:disabled,
+.btn:disabled,
+.hud-btn:disabled,
+[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 拖拽手柄（预留 P2，本仗未启用，仅占位） */
+.draggable {
+  cursor: grab;
+}
+.draggable:active {
+  cursor: grabbing;
+}
+
+/* ─── 2. 通用 HUD 按钮 hover/active 反馈 ──────────────────── */
+
+/*
+ * 仅作用于"显式标了 .hud-btn"的元素，避免误伤所有 <button>。
+ * 已自带 hover 反馈的按钮（如 .hud-leaderboard-btn 内联了完整动画）
+ * 不会被影响——它们没有 .hud-btn class。
+ *
+ * 静音按钮 (#mute-btn) 在 main.js 里追加 .hud-btn class 后会命中本规则。
+ */
+.hud-btn {
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.hud-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+.hud-btn:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}

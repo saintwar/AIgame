@@ -107,6 +107,10 @@ document.addEventListener('keydown', initAudio);
 function createMuteButton() {
   const btn = document.createElement('button');
   btn.id = 'mute-btn';
+  // PHASE 16-4.8 仗2：加 .hud-btn class 接管 hover/active 反馈（css/main.css）
+  // 不去动下面的 inline style——inline cursor:pointer 与外部 .hud-btn 规则等价不冲突，
+  // 但 inline 没法定义 :hover 伪类，所以靠外部 CSS 通过 class 选择器追加 hover 动画。
+  btn.className = 'hud-btn';
   btn.textContent = '🔊';
   btn.style.cssText = `
     position: fixed;

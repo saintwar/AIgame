@@ -1109,41 +1109,117 @@ class VillageScene {
       else if (k === 'arrowright' || k === 'd') this.keys.right = false;
     };
 
-    // 点击"开始游戏"按钮（仅响应鼠标左键）
+    // ─────────────────────────────────────────
+    // 鼠标坐标转 Canvas 坐标（DPR 安全；与 ClickToMove 同款公式）
+    // ─────────────────────────────────────────
+    const toCanvasXY = (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const scaleX = this.canvas.width / rect.width;
+      const scaleY = this.canvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    };
+
+    // 点击：①title 阶段 → "开始游戏"按钮 ②玩法阶段 → 优先派给可见面板
     this._clickHandler = (e) => {
-      if (this.introState === 'title' && e.button === 0) {
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-        const btnW = 220, btnH = 56;
-        const btnX = cw / 2 - btnW / 2;
-        const btnY = ch / 2 + 100;
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
-          this._skipIntro();
+      if (e.button !== 0) return;
+
+      // PHASE 16-4.8 仗3：玩法阶段，面板可见时优先派发，并阻断冒泡
+      // （ClickToMove 已自带"面板 visible 时不寻路"守卫，但这里 stopPropagation
+      //  作为双保险，且未来若加新 canvas 监听也不会误触发。）
+      if (this.introState !== 'title') {
+        // PHASE 16-4.8 仗4：对话激活 → 整框 click = 等同空格（推进/跳过打字机）
+        // 必须放在所有面板派发之前，因为对话框覆盖在所有 UI 之上、且 isSceneInteractive
+        // 在对话激活时返回 false → ClickToMove 不会寻路；但 stopPropagation 双保险。
+        if (dialogueSystem.isActive()) {
+          if (dialogueSystem.handleClick()) {
+            e.stopPropagation();
+          }
+          return;
         }
+        if (this.inventoryUI && this.inventoryUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          if (this.inventoryUI.handleMouseClick(x, y)) {
+            e.stopPropagation();
+          }
+          return;
+        }
+        if (this.codexUI && this.codexUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          if (this.codexUI.handleMouseClick(x, y)) {
+            e.stopPropagation();
+          }
+          return;
+        }
+        // PHASE 16-4.8 仗4：在栈桥上 → 点击底部"🎣 按 F 开始钓鱼"提示条 = 启动钓鱼
+        // 提示条像素范围（与 _renderFishingHint 一致）：x=0..1280, y=680..720
+        if (this.onFishingSpot) {
+          const { x, y } = toCanvasXY(e);
+          if (x >= 0 && x <= 1280 && y >= 680 && y <= 720) {
+            this._tryFishing();
+            e.stopPropagation();
+            return;
+          }
+        }
+        return;  // 玩法阶段无面板 → 交给 ClickToMove 处理
+      }
+
+      // title 阶段："开始游戏"按钮
+      const cw = this.canvas.width;
+      const ch = this.canvas.height;
+      const btnW = 220, btnH = 56;
+      const btnX = cw / 2 - btnW / 2;
+      const btnY = ch / 2 + 100;
+      const { x, y } = toCanvasXY(e);
+      if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+        this._skipIntro();
       }
     };
 
-    // 鼠标移动 → 检测按钮悬停
+    // 鼠标移动：①title 阶段 → 按钮 hover ②玩法阶段 → 面板 hover 转发
     this._moveHandler = (e) => {
-      if (this.introState === 'title') {
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-        const btnW = 220, btnH = 56;
-        const btnX = cw / 2 - btnW / 2;
-        const btnY = ch / 2 + 100;
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        this._btnHoverTarget = (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) ? 1 : 0;
-        this.canvas.style.cursor = this._btnHoverTarget ? 'pointer' : 'default';
+      // PHASE 16-4.8 仗3：玩法阶段，面板可见时转发 mousemove，更新 hover 字段 + cursor
+      if (this.introState !== 'title') {
+        // PHASE 16-4.8 仗4：对话激活 → 整框可点 → cursor pointer
+        if (dialogueSystem.isActive()) {
+          this.canvas.style.cursor = 'pointer';
+          return;
+        }
+        if (this.inventoryUI && this.inventoryUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          this.canvas.style.cursor = this.inventoryUI.handleMouseMove(x, y);
+          return;
+        }
+        if (this.codexUI && this.codexUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          this.canvas.style.cursor = this.codexUI.handleMouseMove(x, y);
+          return;
+        }
+        // PHASE 16-4.8 仗4：栈桥上 → hover 底部钓鱼提示条 → cursor pointer
+        if (this.onFishingSpot) {
+          const { x, y } = toCanvasXY(e);
+          if (x >= 0 && x <= 1280 && y >= 680 && y <= 720) {
+            this.canvas.style.cursor = 'pointer';
+            this._fishingHintHover = true;
+            return;
+          }
+          this._fishingHintHover = false;
+        }
+        // 无面板：恢复默认（ClickToMove 自己会按 hover 网格设置 cursor）
+        return;
       }
+
+      // title 阶段：开始游戏按钮 hover
+      const cw = this.canvas.width;
+      const ch = this.canvas.height;
+      const btnW = 220, btnH = 56;
+      const btnX = cw / 2 - btnW / 2;
+      const btnY = ch / 2 + 100;
+      const { x, y } = toCanvasXY(e);
+      this._btnHoverTarget = (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) ? 1 : 0;
+      this.canvas.style.cursor = this._btnHoverTarget ? 'pointer' : 'default';
     };
 
     // 鼠标按下/抬起 → 按压反馈
@@ -2244,14 +2320,22 @@ class VillageScene {
     ctx.strokeRect(dockX - 1, dockY - 1, dockW + 2, dockH + 2);
     ctx.lineWidth = 1;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    // PHASE 16-4.8 仗4：底部提示条 hover 时整条加亮（视觉告知"可点击"）
+    const hovered = !!this._fishingHintHover;
+    ctx.fillStyle = hovered ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 680, 1280, 40);
+    if (hovered) {
+      ctx.strokeStyle = '#FFD76A';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 681, 1278, 38);
+    }
 
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = hovered ? '#FFE4B5' : '#FFFFFF';
     ctx.font = 'bold 24px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🎣 按 F 开始钓鱼', 640, 700);
+    // PHASE 16-4.8 仗4：补"或点击此处"，告知玩家可鼠标启动
+    ctx.fillText('🎣 按 F 开始钓鱼  ·  或点击此处', 640, 700);
   }
 
   _renderMinimap() {

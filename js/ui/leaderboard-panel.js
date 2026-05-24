@@ -111,6 +111,12 @@
         color: ${C_HIGHLIGHT};
         box-shadow: inset 0 0 0 1px ${C_BORDER};
       }
+      /* PHASE 16-4.8 仗3：mine 行 hover 加深（坑 3）。
+         普通 :hover 规则会被 .is-me 选择器(更高特异度)覆盖，所以这里单独加一条。 */
+      .leaderboard-row.is-me:hover {
+        background: rgba(255, 213, 128, 0.34);
+        box-shadow: inset 0 0 0 2px ${C_HIGHLIGHT};
+      }
       .col-rank { text-align: center; font-size: 16px; }
       .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .col-score, .col-fish {
