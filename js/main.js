@@ -76,6 +76,49 @@ SceneManager.on('fish_caught', ({ species, weight, price, rarity }) => {
   inventory.fish.push({ species, weight, price, rarity, caughtAt: Date.now() });
   Save.set('inventory', inventory);
   Save.set('player.money', (Save.get('player.money') || 0) + price);
+
+  // ─────────────────────────────────────────────────────────
+  // PHASE 16-5：历史最佳数据 + 称号升级（约束 1：仅扩展，不动核心玩法）
+  //   数据存放：Save.player.titleStats 子树（老档兼容由 TitleSystem 兜底）
+  //   单位约定：weight 此处是 kg（与 fishing-scene 的 emit 单位一致）
+  //              titleStats.bestSingleFishWeight / totalCaughtWeight 同步存 kg
+  //   字段：currentTitleId / bestSingleFishWeight / bestSingleFishName /
+  //         bestSingleFishDate / totalCaughtWeight
+  // ─────────────────────────────────────────────────────────
+  if (window.TitleSystem && typeof weight === 'number' && weight > 0) {
+    // 1. 读 + 兜底（getStatsContext 内部已老档兼容）
+    const ctx = window.TitleSystem.getStatsContext();
+    const stats = ctx.titleStats;
+
+    // 2. 累计重量
+    stats.totalCaughtWeight = +(stats.totalCaughtWeight + weight).toFixed(3);
+
+    // 3. 单条最重（仅当超过历史时刷新）
+    if (weight > stats.bestSingleFishWeight) {
+      stats.bestSingleFishWeight = weight;
+      stats.bestSingleFishName = species;
+      stats.bestSingleFishDate = new Date().toISOString();
+    }
+
+    // 4. 称号升级检查（仅升不降；升级后弹气泡）
+    //    注意：本回调先于 inventory.fish.push 持久化，但 calculateTitle 走的
+    //    是 Save.get('inventory.fish').length —— 上面的 Save.set 已生效在内存，
+    //    所以鱼数已是 +1 后的最新值。✅
+    const lastTitleId = stats.currentTitleId || 'newbie';
+    const newTitle = window.TitleSystem.checkTitleUpgrade(lastTitleId);
+    if (newTitle) {
+      stats.currentTitleId = newTitle.id;
+      console.log(`[TitleSystem] 🎉 称号升级：${lastTitleId} → ${newTitle.id}`);
+      if (typeof window.showTitleUpgradeToast === 'function') {
+        // 让升级气泡稍微延后到鱼信息淡出后呈现，避免堆叠
+        setTimeout(() => window.showTitleUpgradeToast(newTitle), 800);
+      }
+    }
+
+    // 5. 写回（与下面 Save.commit() 合并一次写盘）
+    Save.set('player.titleStats', stats);
+  }
+
   Save.commit();
 
   // 🆕 PHASE 16-3：异步提交到云端排行榜（fire-and-forget，失败不阻塞游戏）

@@ -128,6 +128,8 @@
        - .hud-btn → 1px 上浮 + 微亮 hover/active（吉卜力风克制反馈）
        - 体积极小（~2KB），不影响首屏 -->
   <link rel="stylesheet" href="css/main.css?v=20260524">
+  <!-- PHASE 16-5：个人主页面板（称号 + 历史最佳）样式 -->
+  <link rel="stylesheet" href="css/profile-panel.css?v=20260525">
 </head>
 <body>
   <!-- PHASE 16-8：启动 Loading 条（IIFE，必须在所有业务 script 之前加载）
@@ -160,6 +162,13 @@
   <script src="js/leaderboard-system.js" defer></script>
   <!-- PHASE 16-4：排行榜 UI 面板（IIFE，依赖 leaderboard-system.js，自带样式 + HUD 按钮） -->
   <script src="js/ui/leaderboard-panel.js" defer></script>
+  <!-- PHASE 16-5：称号系统（IIFE，零依赖，必须在 profile-panel.js 之前加载）
+       数据来源：复用 Save.inventory.fish.length + window.codex.getUnlockedCount()
+                + Save.player.titleStats（老档兼容由内部兜底） -->
+  <script src="js/title-system.js" defer></script>
+  <!-- PHASE 16-5：个人主页面板（IIFE，依赖 title-system.js + Save + codex + PlayerProfile）
+       入口：HUD 「👤 我的」按钮 / 键盘 V 键（注意 P 已被 _resetGame 占用） -->
+  <script src="js/ui/profile-panel.js" defer></script>
   <!-- PHASE 16-4.8 仗1-HOTFIX2：村庄场景鼠标点击寻路（IIFE，A* 已内嵌，零外部依赖）
        - 仅在 SceneManager.currentScene === 'village' 时响应
        - 钓鱼场景 / 登录页 / 标题画面 / 对话 / 任意 UI 面板 全部不响应（约束 2/3）
