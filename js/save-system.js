@@ -162,6 +162,29 @@ class Save {
         save.player.equippedBait = 'basic_bait';
       }
 
+      // ─────────────────────────────────────────────────────────
+      // PHASE 17 hotfix - 临时兜底：新手鱼饵死锁修复
+      //   背景：q001 卡 3 条奇力鱼期间，basic_bait 用光后无补给来源
+      //         （挖蚯蚓玩法未上线 / 林师傅店铺需 q003 后开放），
+      //         玩家无法继续钓鱼 → MVP 红线。
+      //   策略：basic_bait（普通蚯蚓）兜底到 999；advanced_bait /
+      //         legendary_bait 保持原值（稀缺资源，不通胀）。
+      //   同时命中：
+      //     - 全新存档（inventory: {}）→ 直接灌 999
+      //     - 老存档 basic_bait 缺失 / = 0 → 补到 999
+      //     - 老存档 basic_bait > 0 → 不动（玩家自己买的不覆盖）
+      //   PHASE 18 挖蚯蚓玩法上线后，本兜底应推翻删除。
+      // ─────────────────────────────────────────────────────────
+      if (!save.player.inventory || typeof save.player.inventory !== 'object') {
+        save.player.inventory = {};
+      }
+      const inv = save.player.inventory;
+      if (!inv.basic_bait || inv.basic_bait === 0) {
+        inv.basic_bait = 999;
+      }
+      if (inv.advanced_bait === undefined) inv.advanced_bait = 0;
+      if (inv.legendary_bait === undefined) inv.legendary_bait = 0;
+
       // PHASE 17 仗1：stamina 字段兜底
       //   - 老存档无 stamina → 注入默认值（满血 + 空 lastResetDate，首次登录会被
       //     StaminaSystem.checkDailyReset 静默初始化为今日，不弹"新的一天"飘字）

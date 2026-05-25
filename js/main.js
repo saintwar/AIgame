@@ -83,10 +83,12 @@ window.inventory = new InventorySystem(Save);
 }
 
 // 首次新建存档时给予初始物资
-if (Object.keys(Save.get('player.inventory') || {}).length === 0) {
+//   PHASE 17 hotfix - basic_bait 已由 save-system.migrate 兜底到 999（新手鱼饵死锁修复），
+//   所以此处不能再用"inventory 整体为空"判定首次新档（永远不为空）。
+//   改为按物品逐项判定缺失：basic_rod 没有就发，basic_bait 由 migrate 全权负责，不在此重复处理。
+if (window.inventory.getCount('basic_rod') === 0) {
   window.inventory.add('basic_rod', 1);
-  window.inventory.add('basic_bait', 5);
-  console.log('🎒 初始物资已发放：入门钓竿 ×1、初级鱼饵 ×5');
+  console.log('🎒 初始物资已发放：入门钓竿 ×1（basic_bait 由存档兜底，详见 save-system.migrate）');
 }
 
 // 初始化鱼类图鉴系统
