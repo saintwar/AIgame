@@ -1144,6 +1144,14 @@ class VillageScene {
           }
           return;
         }
+        // PHASE 16-6 仗3 UX：店铺面板优先派发（与键盘 handleKey 优先级一致）
+        if (this.shopUI && this.shopUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          if (this.shopUI.handleMouseClick(x, y)) {
+            e.stopImmediatePropagation();
+          }
+          return;
+        }
         if (this.inventoryUI && this.inventoryUI.visible) {
           const { x, y } = toCanvasXY(e);
           if (this.inventoryUI.handleMouseClick(x, y)) {
@@ -1192,6 +1200,12 @@ class VillageScene {
           this.canvas.style.cursor = 'pointer';
           return;
         }
+        // PHASE 16-6 仗3 UX：店铺面板优先派发 hover
+        if (this.shopUI && this.shopUI.visible) {
+          const { x, y } = toCanvasXY(e);
+          this.canvas.style.cursor = this.shopUI.handleMouseMove(x, y);
+          return;
+        }
         if (this.inventoryUI && this.inventoryUI.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.inventoryUI.handleMouseMove(x, y);
@@ -1233,9 +1247,24 @@ class VillageScene {
     };
     this._upHandler = () => { this._btnPressed = false; };
 
+    // PHASE 16-6 仗3 UX：双击仅店铺商品行使用（双击购买）
+    //   - 浏览器 dblclick 是 click 之后另发的事件，不会和单击 selected 冲突
+    //   - 仅在 buy 模式 + 命中商品行 时消费；其它面板透传给单击逻辑
+    this._dblClickHandler = (e) => {
+      if (e.button !== 0) return;
+      if (this.introState === 'title') return;
+      if (this.shopUI && this.shopUI.visible) {
+        const { x, y } = toCanvasXY(e);
+        if (this.shopUI.handleMouseDblClick(x, y)) {
+          e.stopImmediatePropagation();
+        }
+      }
+    };
+
     document.addEventListener('keydown', this._keyHandler);
     document.addEventListener('keyup', this._keyUpHandler);
     this.canvas.addEventListener('click', this._clickHandler);
+    this.canvas.addEventListener('dblclick', this._dblClickHandler);
     this.canvas.addEventListener('mousemove', this._moveHandler);
     this.canvas.addEventListener('mousedown', this._downHandler);
     window.addEventListener('mouseup', this._upHandler);
@@ -1255,6 +1284,10 @@ class VillageScene {
       this._clickHandler = null;
       this._moveHandler = null;
       this._downHandler = null;
+    }
+    if (this._dblClickHandler && this.canvas) {
+      this.canvas.removeEventListener('dblclick', this._dblClickHandler);
+      this._dblClickHandler = null;
     }
     if (this._upHandler) {
       window.removeEventListener('mouseup', this._upHandler);
@@ -2899,6 +2932,16 @@ class VillageScene {
   _checkDayNightPhase() {
     // 开场/教程/对话期间不显示
     if (this.introState || this.tutorialCardActive || dialogueSystem.isActive()) return;
+    // PHASE 16-6 仗3 UX：店铺/背包/图鉴/个人主页/排行榜面板打开时也不显示
+    //   原因：phase toast 是 fixed DOM（z-index:300），而店铺等是 Canvas 渲染（z-index:0），
+    //         一切 DOM 飘字都会盖在 Canvas 面板上 ——「华灯初上盖店铺」bug 就源于此。
+    //         不提 z-index 是因为 z-index 战争解不掉（Canvas 是单元素），跳过才是正解。
+    if (this.shopUI && this.shopUI.visible) return;
+    if (this.inventoryUI && this.inventoryUI.visible) return;
+    if (this.codexUI && this.codexUI.visible) return;
+    // 个人主页 / 排行榜是 DOM 面板（z-index:9000+），它们打开时玩家也不该被气泡打扰
+    if (document.querySelector('.profile-panel.show')) return;
+    if (document.querySelector('.leaderboard-overlay.show')) return;
 
     const time = performance.now();
     const phase = getDayNightPhase(time);

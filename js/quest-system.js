@@ -183,6 +183,18 @@ class QuestSystem {
         const coin = (Save.get('player.coin') || 0) + tpl.reward.coin;
         Save.set('player.coin', coin);
       }
+      // PHASE 16-6 仗3 补丁：q001 reward.bait 派发（历史遗留 bug —— 数据层声明了
+      //   `bait: 5` 但派发逻辑从未实现）。统一映射到 inventory 的 basic_bait 堆叠物。
+      //   严控范围：仅在此处加分支，不动其它 reward 派发逻辑。
+      if (tpl.reward.bait && tpl.reward.bait > 0) {
+        if (window.inventory) {
+          window.inventory.add('basic_bait', tpl.reward.bait);
+        } else {
+          const inv = Save.get('player.inventory') || {};
+          inv.basic_bait = (inv.basic_bait || 0) + tpl.reward.bait;
+          Save.set('player.inventory', inv);
+        }
+      }
       // 物品奖励 — 优先走 inventory，向下兼容
       if (tpl.reward.items) {
         if (window.inventory) {
