@@ -281,6 +281,8 @@ class VillageScene {
 
     // 初始化钓具店 UI
     this.shopUI = new ShopUI(this.canvas, window.inventory, window.equipment, questSystem);
+    // PHASE 16-6 仗2：挂全局，供 dialogue-system 的 'openXiulanShop' / 'openLinBuyOnly' 协议调用
+    window.shopUI = this.shopUI;
 
     this._bindInput();
 
@@ -1127,29 +1129,32 @@ class VillageScene {
       if (e.button !== 0) return;
 
       // PHASE 16-4.8 仗3：玩法阶段，面板可见时优先派发，并阻断冒泡
-      // （ClickToMove 已自带"面板 visible 时不寻路"守卫，但这里 stopPropagation
-      //  作为双保险，且未来若加新 canvas 监听也不会误触发。）
+      // PHASE 16-6 hotfix：必须用 stopImmediatePropagation，因为
+      //   ClickToMove.onClick 与本 _clickHandler 注册在同一个 canvas 元素上，
+      //   stopPropagation 仅阻冒泡、无法阻断同元素的其他监听器。
+      //   场景：点 ✕ 关闭面板 → handleMouseClick 内 hide() → visible=false →
+      //         随后 ClickToMove.onClick 跑、isSceneInteractive 已通过 → 角色误寻路。
       if (this.introState !== 'title') {
         // PHASE 16-4.8 仗4：对话激活 → 整框 click = 等同空格（推进/跳过打字机）
         // 必须放在所有面板派发之前，因为对话框覆盖在所有 UI 之上、且 isSceneInteractive
-        // 在对话激活时返回 false → ClickToMove 不会寻路；但 stopPropagation 双保险。
+        // 在对话激活时返回 false → ClickToMove 不会寻路；但 stopImmediatePropagation 双保险。
         if (dialogueSystem.isActive()) {
           if (dialogueSystem.handleClick()) {
-            e.stopPropagation();
+            e.stopImmediatePropagation();
           }
           return;
         }
         if (this.inventoryUI && this.inventoryUI.visible) {
           const { x, y } = toCanvasXY(e);
           if (this.inventoryUI.handleMouseClick(x, y)) {
-            e.stopPropagation();
+            e.stopImmediatePropagation();
           }
           return;
         }
         if (this.codexUI && this.codexUI.visible) {
           const { x, y } = toCanvasXY(e);
           if (this.codexUI.handleMouseClick(x, y)) {
-            e.stopPropagation();
+            e.stopImmediatePropagation();
           }
           return;
         }
@@ -1159,7 +1164,7 @@ class VillageScene {
           const { x, y } = toCanvasXY(e);
           if (x >= 0 && x <= 1280 && y >= 680 && y <= 720) {
             this._tryFishing();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             return;
           }
         }
@@ -1388,6 +1393,12 @@ class VillageScene {
       return;
     }
 
+    // PHASE 16-6 仗2：秀兰鱼贩分支（菜单：卖鱼 / 闲聊 / 离开）
+    if (npc.id === 'mom') {
+      this._interactMom();
+      return;
+    }
+
     const dialog = DIALOGUES[dialogId];
     if (dialog) {
       dialogueSystem.start(dialogId);
@@ -1444,14 +1455,19 @@ class VillageScene {
   }
 
   // 林师傅互动逻辑（q003 状态分支）
+  // PHASE 16-6 仗2：剥离 sell 入口 —— 林师傅只卖钓具，不再收鱼。
+  //   收鱼业务完整迁移到秀兰阿姨（_interactMom + openXiulanShop）。
+  //   实现：调用 openLinShop({ buyOnly: true }) 让菜单不再出现"出售鱼货"。
+  //   注：q003「累计卖出 300 金鱼货」依然由 inventory.sellFish 触发的
+  //       fish_sold 事件统计，所以无论玩家把鱼卖给谁，q003 都会推进，零回归。
   _interactLin() {
     const q002 = questSystem.getQuest('q002');
     const q003 = questSystem.getQuest('q003');
 
-    // q003 完成 → 开店模式
+    // q003 完成 → 开店模式（仅购买）
     if (q003 && q003.status === 'completed') {
       dialogueSystem.start('lin_shop', {
-        onEnd: () => { if (this.shopUI) this.shopUI.openLinShop(); }
+        onEnd: () => { if (this.shopUI) this.shopUI.openLinShop({ buyOnly: true }); }
       });
       return;
     }
@@ -1473,12 +1489,12 @@ class VillageScene {
       return;
     }
 
-    // q003 进行中 → 进度对话 + 直接打开卖鱼界面
+    // q003 进行中 → 进度对话（不再自动开店；玩家想卖鱼请去找秀兰）
     if (q003 && q003.status === 'active') {
       const detail = QUESTS.q003.getDetailText(q003.progress);
       dialogueSystem.start('lin_q003_progress', {
-        replacements: { q003_detail: detail.replace(/\n/g, '；') },
-        onEnd: () => { if (this.shopUI) this.shopUI.openLinShop(); }
+        replacements: { q003_detail: detail.replace(/\n/g, '；') }
+        // PHASE 16-6 仗2：移除 onEnd 的 openLinShop（鱼让秀兰收）
       });
       return;
     }
@@ -1497,6 +1513,21 @@ class VillageScene {
 
     // q002 未完成 → 闲聊
     dialogueSystem.start('lin_idle');
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // PHASE 16-6 仗2：秀兰阿姨鱼贩互动
+  //   入口：进 mom_menu（带选项分支：卖鱼/闲聊/离开）。
+  //   流程：
+  //     选 "🐟 卖鱼给阿姨" → action: 'mom_sell_intro'
+  //                       → 该对话 onEnd: 'openXiulanShop' 协议
+  //                       → DialogueSystem._end 调 window.shopUI.openXiulanShop()
+  //     选 "💬 随便聊聊"   → action: 'mom_chat'（顺序对话）
+  //     选 "👋 先走了"     → action: { close: true }（直接关闭）
+  //   首次见面 mom_first_meet 走 _startMomDialog 老路径不变（autoTrigger）。
+  // ────────────────────────────────────────────────────────────
+  _interactMom() {
+    dialogueSystem.start('mom_menu');
   }
 
   // 奖励飘字

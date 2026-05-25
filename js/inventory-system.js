@@ -89,24 +89,76 @@ export class InventorySystem {
   }
   _emit(event, data) { this.listeners.filter(l => l.event === event).forEach(l => l.fn(data)); }
 
-  // 卖鱼专用方法（按尺寸加成）
-  sellFish({ species, size, rarity, basePrice }) {
-    const fishData = SHUISHE_FISH_POOL.find(f => f.species === species);
-    const sizeRange = fishData?.sizeRange || [10, 60];
-    const [minS, maxS] = sizeRange;
-    const sizeRatio = maxS > minS ? (size - minS) / (maxS - minS) : 0;
-    let mul = 1.0;
-    if (sizeRatio > 0.8) mul = 2.0;
-    else if (sizeRatio > 0.5) mul = 1.5;
-    else if (sizeRatio > 0.3) mul = 1.2;
-
-    const finalPrice = Math.round(basePrice * mul);
+  // 卖鱼专用方法（PHASE 16-6 仗2 修订：统一公式 ceil(basePrice × rarityMul × sizeMul)）
+  //
+  // 设计契约：
+  //   - 单一真理来源：本方法是全工程唯一的鱼价计算入口；
+  //     ShopUI 渲染显示价时也调 computeFishPrice()，避免显示价 ≠ 实卖价。
+  //   - rarityMul 三档（决策 C）：
+  //       rarity 1     → ×1 (普通)
+  //       rarity 2-3   → ×2 (稀有)
+  //       rarity 4-5   → ×4 (史诗)
+  //   - sizeMul = clamp(weight / 鱼种标准均重, 0.7, 2.0)
+  //       weight(g) = size(cm) × 10（沿用 fish-storage 的占位换算）
+  //       鱼种标准均重 = (sizeRange.min + sizeRange.max) / 2 × 10 (g)
+  //   - 最终向上取整 Math.ceil
+  //   - 老存档/无 sizeRange 鱼兜底：sizeMul = 1.0
+  sellFish(fish) {
+    const { species, size } = fish;
+    const finalPrice = this.computeFishPrice(fish);
     this.addCoin(finalPrice);
+    // 派发事件（保持原 mul 字段用于动画/任务回调，按"综合倍率"算）
+    const mul = (fish.basePrice && fish.basePrice > 0)
+      ? finalPrice / fish.basePrice
+      : 1.0;
     this._emit('fish_sold', { species, size, price: finalPrice, mul });
-    // 触发任务系统 onFishSold 钩子
     if (window.questSystem) {
       window.questSystem.onFishSold({ species, size, price: finalPrice, mul });
     }
     return finalPrice;
+  }
+
+  /**
+   * 估算单条鱼售价（不扣鱼、不加金、纯只读）。
+   * ShopUI 列表显示用；与 sellFish 共用同一公式。
+   */
+  computeFishPrice(fish) {
+    if (!fish) return 0;
+    const basePrice = fish.basePrice || 0;
+    if (basePrice <= 0) return 0;
+
+    // rarity 三档
+    const rarity = fish.rarity || 1;
+    let rarityMul = 1;
+    if (rarity >= 4)      rarityMul = 4;   // 史诗
+    else if (rarity >= 2) rarityMul = 2;   // 稀有
+    else                  rarityMul = 1;   // 普通
+
+    // size 相对鱼种标准均重的倍率
+    const fishData = SHUISHE_FISH_POOL.find(f => f.species === fish.species);
+    let sizeMul = 1.0;
+    if (fishData && Array.isArray(fishData.sizeRange) && fishData.sizeRange.length === 2) {
+      const [minS, maxS] = fishData.sizeRange;
+      const standardSize = (minS + maxS) / 2;
+      if (standardSize > 0 && fish.size > 0) {
+        sizeMul = fish.size / standardSize;
+        // clamp 0.7 ~ 2.0
+        if (sizeMul < 0.7) sizeMul = 0.7;
+        else if (sizeMul > 2.0) sizeMul = 2.0;
+      }
+    }
+
+    return Math.ceil(basePrice * rarityMul * sizeMul);
+  }
+
+  /**
+   * 鱼稀有度名称（UI 显示用）
+   * @param {number} rarity
+   * @returns {{ name:string, color:string }}
+   */
+  static rarityInfo(rarity) {
+    if (rarity >= 4) return { name: '史诗', color: '#A06CD5' }; // 紫
+    if (rarity >= 2) return { name: '稀有', color: '#4FC3F7' }; // 蓝
+    return { name: '普通', color: '#AAAAAA' };                  // 灰
   }
 }

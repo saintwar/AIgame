@@ -1,6 +1,20 @@
 import { ITEMS } from '../data/items.js';
-import { SHUISHE_FISH_POOL } from '../data/fish-pool.js';
+import { InventorySystem } from '../inventory-system.js';
+import { syncFishStorage } from '../fish-storage.js';
 
+/**
+ * ShopUI（PHASE 16-6 仗2 重构）
+ *
+ * 职责：村庄两家店铺的统一 UI
+ *   - 林师傅钓具店：openLinShop({ buyOnly: true })  → 仅卖钓具（决策 B 后只读购买）
+ *   - 秀兰阿姨鱼摊：openXiulanShop()                → 直进 sell 模式，专门收购鱼
+ *
+ * 关键约束（决策 B / C）：
+ *   1) 林师傅不再收鱼；卖鱼业务完整迁移到秀兰
+ *   2) 鱼价统一用 InventorySystem.computeFishPrice / sellFish，不再本地复算
+ *   3) 卖鱼后必须同步 fishStorage（仗 1 后不同步会导致渔获分类显示错）
+ *   4) 售出飘字用 _showCoinFloat（金色 +¥X 动画）
+ */
 export class ShopUI {
   constructor(canvas, inventory, equipment, questSystem) {
     this.canvas = canvas;
@@ -11,36 +25,66 @@ export class ShopUI {
     this.mode = 'menu';        // menu / buy / sell
     this.selectedIdx = 0;
 
+    // 店铺身份：'lin' | 'xiulan'
+    this.shopOwner = 'lin';
+    // 林师傅 buyOnly 模式（决策 B：林师傅不收鱼）
+    this.buyOnly = false;
+
     // 林师傅出售清单
     this.linBuyList = ['bamboo_rod', 'carbon_rod', 'advanced_bait', 'legendary_bait'];
   }
 
-  openLinShop() {
+  // ─── 店铺入口 ─────────────────────────────────────────────
+  /**
+   * 林师傅钓具店
+   * @param {{ buyOnly?: boolean }} opts buyOnly=true 时跳过 menu 直接进 buy 模式
+   */
+  openLinShop(opts = {}) {
+    this.shopOwner = 'lin';
+    this.buyOnly = !!opts.buyOnly;
     this.visible = true;
-    this.mode = 'menu';
+    // PHASE 16-6 仗2：林师傅 buyOnly → 直接进 buy；保留兼容路径（无参→menu，但 menu 也只剩购买项）
+    this.mode = this.buyOnly ? 'buy' : 'menu';
+    this.selectedIdx = 0;
+  }
+
+  /**
+   * 秀兰阿姨鱼摊（PHASE 16-6 仗2）
+   * 直进 sell 模式，跳过 menu —— 她不卖东西、只收鱼。
+   */
+  openXiulanShop() {
+    this.shopOwner = 'xiulan';
+    this.buyOnly = false;
+    this.visible = true;
+    this.mode = 'sell';
     this.selectedIdx = 0;
   }
 
   hide() { this.visible = false; }
 
+  // ─── 输入 ─────────────────────────────────────────────────
+  // 注意：village-scene 的 _keyHandler 已对 e.key 做 toLowerCase，
+  //       传入 handleKey 的 key 永远是小写串（'escape' / 'arrowup' / 'enter' / ' ' / '1' / 'a' / 'b'）。
+  //       本方法所有比较都用小写，避免历史上 'Escape' 永不匹配的 bug。
   handleKey(key) {
     if (!this.visible) return false;
-    if (key === 'Escape' || key === 'b') {
-      if (this.mode === 'menu') this.hide();
+    if (key === 'escape' || key === 'b') {
+      const menuLess = (this.shopOwner === 'xiulan') || (this.shopOwner === 'lin' && this.buyOnly);
+      if (this.mode === 'menu' || menuLess) this.hide();
       else this.mode = 'menu';
       return true;
     }
 
     if (this.mode === 'menu') {
       if (key === '1') { this.mode = 'buy';  this.selectedIdx = 0; return true; }
-      if (key === '2') { this.mode = 'sell'; this.selectedIdx = 0; return true; }
+      // PHASE 16-6 仗2：林师傅菜单移除"出售鱼货"（鱼让秀兰收）
       return false;
     }
 
     if (this.mode === 'buy') {
-      if (key === 'ArrowUp')   { this.selectedIdx = Math.max(0, this.selectedIdx - 1); return true; }
-      if (key === 'ArrowDown') { this.selectedIdx = Math.min(this.linBuyList.length - 1, this.selectedIdx + 1); return true; }
-      if (key === 'Enter' || key === ' ') {
+      if (key === 'arrowup')   { this.selectedIdx = Math.max(0, this.selectedIdx - 1); return true; }
+      if (key === 'arrowdown') { this.selectedIdx = Math.min(this.linBuyList.length - 1, this.selectedIdx + 1); return true; }
+      if (key === 'enter' || key === ' ') {
         this._buyItem();
         return true;
       }
@@ -50,9 +94,9 @@ export class ShopUI {
     if (this.mode === 'sell') {
       const fishBag = window.Save?.get('player.fishBag') || [];
       if (fishBag.length === 0) return false;
-      if (key === 'ArrowUp')   { this.selectedIdx = Math.max(0, this.selectedIdx - 1); return true; }
-      if (key === 'ArrowDown') { this.selectedIdx = Math.min(fishBag.length - 1, this.selectedIdx + 1); return true; }
-      if (key === 'Enter' || key === ' ') {
+      if (key === 'arrowup')   { this.selectedIdx = Math.max(0, this.selectedIdx - 1); return true; }
+      if (key === 'arrowdown') { this.selectedIdx = Math.min(fishBag.length - 1, this.selectedIdx + 1); return true; }
+      if (key === 'enter' || key === ' ') {
         this._sellOne();
         return true;
       }
@@ -65,6 +109,7 @@ export class ShopUI {
     return false;
   }
 
+  // ─── 业务 ─────────────────────────────────────────────────
   _buyItem() {
     const itemId = this.linBuyList[this.selectedIdx];
     const item = ITEMS[itemId];
@@ -90,8 +135,15 @@ export class ShopUI {
     fishBag.splice(this.selectedIdx, 1);
     if (this.selectedIdx >= fishBag.length) this.selectedIdx = Math.max(0, fishBag.length - 1);
     window.Save.set('player.fishBag', fishBag);
+
+    // PHASE 16-6 仗2：同步 fishStorage（仗 1 后必须）—— 全量重算最稳
+    const player = window.Save.get('player');
+    syncFishStorage(player);
+    window.Save.set('player', player);
     window.Save.commit();
-    this._toast(`💰 +${price} 金 (${fish.species} ${fish.size}cm)`);
+
+    // 飘字：金色 +¥X
+    this._showCoinFloat(`+¥${price}`, `${fish.species} ${fish.size}cm`);
   }
 
   _sellAll() {
@@ -101,15 +153,66 @@ export class ShopUI {
     fishBag.forEach(fish => { total += this.inventory.sellFish(fish); });
     window.Save.set('player.fishBag', []);
     this.selectedIdx = 0;
+
+    // PHASE 16-6 仗2：同步 fishStorage（清空所有 items）
+    const player = window.Save.get('player');
+    syncFishStorage(player);
+    window.Save.set('player', player);
     window.Save.commit();
-    this._toast(`💰 全部售出：+${total} 金`);
+
+    this._showCoinFloat(`+¥${total}`, '全部售出');
   }
 
+  // ─── 飘字 ─────────────────────────────────────────────────
   _toast(msg) {
     if (window.toastSystem) window.toastSystem.show(msg);
     else console.log(msg);
   }
 
+  /**
+   * 金币飘字（PHASE 16-6 仗2）
+   * 复用 village-scene._showRewardToast 的风格（金边/金字/居中弹跳）。
+   * 无依赖：直接 DOM 注入，不需要 scene 句柄。
+   */
+  _showCoinFloat(big, sub) {
+    const div = document.createElement('div');
+    div.style.cssText = `
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 14px 28px;
+      background: rgba(0,0,0,0.82);
+      border: 3px solid #FFD700;
+      border-radius: 12px;
+      z-index: 600;
+      pointer-events: none;
+      text-align: center;
+      animation: coinFloatFade 1.6s ease-out forwards;
+    `;
+    div.innerHTML = `
+      <div style="font:bold 36px 'TencentSans','Noto Sans TC',sans-serif;color:#FFD700;text-shadow:0 0 12px #FFD700;">${big}</div>
+      ${sub ? `<div style="font:18px 'TencentSans',sans-serif;color:#fff;opacity:.85;margin-top:4px">${sub}</div>` : ''}
+    `;
+    if (!document.getElementById('coin-float-style')) {
+      const style = document.createElement('style');
+      style.id = 'coin-float-style';
+      style.textContent = `
+        @keyframes coinFloatFade {
+          0%   { opacity: 0; transform: translate(-50%, -40%) scale(0.5); }
+          15%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+          30%  { transform: translate(-50%, -50%) scale(1); }
+          80%  { opacity: 1; }
+          100% { opacity: 0; transform: translate(-50%, -75%) scale(1); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 1600);
+  }
+
+  // ─── 渲染 ─────────────────────────────────────────────────
   render(ctx) {
     if (!this.visible) return;
 
@@ -123,12 +226,15 @@ export class ShopUI {
     ctx.lineWidth = 4;
     ctx.strokeRect(x, y, w, h);
 
-    // 标题
+    // 标题（按店主切换）
+    const title = (this.shopOwner === 'xiulan')
+      ? '🐟 秀兰阿姨鱼摊'
+      : '🎣 林师傅钓具店';
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 32px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('🎣 林师傅钓具店', x + 30, y + 50);
+    ctx.fillText(title, x + 30, y + 50);
 
     // 金币
     ctx.fillStyle = '#ffd700';
@@ -144,23 +250,27 @@ export class ShopUI {
     ctx.fillStyle = '#888';
     ctx.font = '16px "TencentSansW7", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('ESC/B 返回', x + 30, y + h - 20);
+    // 底部操作提示按 mode/owner 调整
+    let escHint = 'ESC/B 关闭';
+    if (this.shopOwner === 'lin' && !this.buyOnly && this.mode !== 'menu') {
+      escHint = 'ESC/B 返回菜单';
+    }
+    ctx.fillText(escHint, x + 30, y + h - 20);
   }
 
   _renderMenu(ctx, x, y, w, h) {
+    // PHASE 16-6 仗2：菜单只剩"购买装备"（决策 B：林师傅不收鱼）
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 28px "TencentSansW7", sans-serif';
     ctx.fillText('1. 🛒 购买装备', x + 80, y + 200);
-    ctx.fillText('2. 🐟 出售鱼货', x + 80, y + 280);
-
-    const fishBag = window.Save?.get('player.fishBag') || [];
-    ctx.fillStyle = '#aaa';
-    ctx.font = '20px "TencentSansW7", sans-serif';
-    ctx.fillText(`(当前鱼货 ${fishBag.length} 条)`, x + 380, y + 280);
 
     ctx.fillStyle = '#888';
     ctx.font = '18px "TencentSansW7", sans-serif';
-    ctx.fillText('按数字键选择', x + 80, y + 360);
+    ctx.fillText('按 [1] 进入购买', x + 80, y + 280);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.fillText('💡 卖鱼请去找村口的秀兰阿姨', x + 80, y + 360);
   }
 
   _renderBuy(ctx, x, y, w, h) {
@@ -205,9 +315,16 @@ export class ShopUI {
   }
 
   _renderSell(ctx, x, y, w, h) {
+    // PHASE 16-6 仗2：UI 重做
+    //   - 标题随店主切换（"鱼货收购" / "出售鱼货"）
+    //   - 每行：🐟 名 + 重量 + 稀有度色标 + 估价（统一公式）
+    //   - 底部"按 A 全部出售"提示固定显示
+    const subtitle = (this.shopOwner === 'xiulan') ? '🐟 鱼货收购' : '🐟 出售鱼货';
     ctx.fillStyle = '#aaccdd';
     ctx.font = 'bold 22px "TencentSansW7", sans-serif';
-    ctx.fillText('🐟 出售鱼货', x + 30, y + 90);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(subtitle, x + 30, y + 90);
 
     const fishBag = window.Save?.get('player.fishBag') || [];
     if (fishBag.length === 0) {
@@ -226,32 +343,63 @@ export class ShopUI {
       const iy = y + 120 + (i - visibleStart) * 50;
       const selected = i === this.selectedIdx;
 
-      // 估价
-      const fishData = SHUISHE_FISH_POOL.find(f => f.species === fish.species);
-      const sizeRange = fishData ? fishData.sizeRange : [10, 60];
-      const ratio = sizeRange[1] > sizeRange[0] ? (fish.size - sizeRange[0]) / (sizeRange[1] - sizeRange[0]) : 0;
-      let mul = 1.0;
-      if (ratio > 0.8) mul = 2.0;
-      else if (ratio > 0.5) mul = 1.5;
-      else if (ratio > 0.3) mul = 1.2;
-      const price = Math.round(fish.basePrice * mul);
-
-      ctx.fillStyle = selected ? 'rgba(212,165,116,0.3)' : (i % 2 === 0 ? 'rgba(212,165,116,0.05)' : 'transparent');
+      // 行背景
+      ctx.fillStyle = selected
+        ? 'rgba(212,165,116,0.3)'
+        : (i % 2 === 0 ? 'rgba(212,165,116,0.05)' : 'transparent');
       ctx.fillRect(x + 20, iy, w - 40, 45);
 
+      // 估价（统一公式）
+      const price = this.inventory.computeFishPrice(fish);
+
+      // 重量（g）
+      const weightG = Math.max(1, Math.round((fish.size || 0) * 10));
+
+      // 稀有度
+      const rInfo = InventorySystem.rarityInfo(fish.rarity || 1);
+
+      // 主行：🐟 名 重量
       ctx.fillStyle = '#fff';
       ctx.font = '20px "TencentSansW7", sans-serif';
-      ctx.fillText(`${fish.species} (${fish.size}cm)`, x + 40, iy + 30);
-
-      ctx.fillStyle = mul >= 2.0 ? '#FF69B4' : (mul >= 1.5 ? '#7CFC00' : '#ffd700');
-      ctx.font = 'bold 20px "TencentSansW7", sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${price} 金${mul > 1 ? ' ×' + mul.toFixed(1) : ''}`, x + w - 40, iy + 30);
       ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`🐟 ${fish.species}  ${weightG}g`, x + 40, iy + 22);
+
+      // 稀有度标签（色块）
+      const labelW = 56;
+      const labelH = 22;
+      const labelX = x + 40 + ctx.measureText(`🐟 ${fish.species}  ${weightG}g  `).width + 10;
+      const labelY = iy + 22 - labelH / 2;
+      ctx.fillStyle = rInfo.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(labelX, labelY, labelW, labelH);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px "TencentSansW7", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(rInfo.name, labelX + labelW / 2, iy + 22);
+
+      // 价格（右对齐）
+      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(`¥${price}`, x + w - 40, iy + 22);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     }
 
+    // 总价合计
+    let totalPrice = 0;
+    fishBag.forEach(f => { totalPrice += this.inventory.computeFishPrice(f); });
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`合计 ¥${totalPrice}（${fishBag.length} 条）`, x + w - 40, y + h - 70);
+    ctx.textAlign = 'left';
+
+    // 操作提示
     ctx.fillStyle = '#888';
     ctx.font = '14px "TencentSansW7", sans-serif';
-    ctx.fillText(`鱼篓 ${fishBag.length} 条   ↑↓ 选择   Enter 单卖   A 全卖`, x + 30, y + h - 50);
+    ctx.fillText('↑↓ 选择   Enter 单卖   A 全部出售', x + 30, y + h - 50);
   }
 }

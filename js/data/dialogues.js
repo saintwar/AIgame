@@ -37,6 +37,55 @@ export const DIALOGUES = {
     onEnd: null
   },
 
+  // ─────────────────────────────────────────────────────────
+  // PHASE 16-6 仗2：秀兰阿姨鱼贩主菜单（带选项分支）
+  //   入口：村庄 _interactMom() 直接调 dialogueSystem.start('mom_menu')
+  //   选项 action：
+  //     - 'mom_sell_intro'  → 进售鱼对话 → onEnd 打开 shopUI.openXiulanShop()
+  //     - 'mom_chat'        → 闲聊
+  //     - { close: true }   → 关闭对话
+  // ─────────────────────────────────────────────────────────
+  mom_menu: {
+    id: 'mom_menu',
+    npc: 'mom',
+    lines: [
+      {
+        speaker: '秀兰',
+        text: '回来啦阿明？要妈帮你做点啥？',
+        choices: [
+          { label: '🐟 卖鱼给阿姨',  action: 'mom_sell_intro' },
+          { label: '💬 随便聊聊',    action: 'mom_chat' },
+          { label: '👋 先走了',      action: { close: true } }
+        ]
+      }
+    ],
+    onEnd: null
+  },
+
+  // 秀兰售鱼介绍
+  // PHASE 16-6 仗2：onEnd 用 'openXiulanShop' 协议，对话播完自动开秀兰收购界面
+  mom_sell_intro: {
+    id: 'mom_sell_intro',
+    npc: 'mom',
+    lines: [
+      { speaker: '秀兰', text: '让阿姨看看你今天的渔获～' },
+      { speaker: '秀兰', text: '(阿姨会按市价收购，越大越稀有的鱼越值钱哦。)' }
+    ],
+    onEnd: 'openXiulanShop'
+  },
+
+  // 秀兰闲聊
+  mom_chat: {
+    id: 'mom_chat',
+    npc: 'mom',
+    lines: [
+      { speaker: '秀兰', text: '你阿爸啊，年轻时也是潭里数一数二的渔人。' },
+      { speaker: '秀兰', text: '他说过——「钓得多不算本事，钓得对才是真功夫。」' },
+      { speaker: '秀兰', text: '阿明你慢慢琢磨吧。' }
+    ],
+    onEnd: null
+  },
+
   // 村长默认对话（未接任务时）
   chief_default: {
     id: 'chief_default',
