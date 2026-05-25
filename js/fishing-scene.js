@@ -5,6 +5,11 @@ import questSystem from './quest-system.js';
 import { QUESTS } from './data/quests.js';
 import { rollFishWithRod, SHUISHE_FISH_POOL } from './data/fish-pool.js';
 import { drawFishingBg } from './render/fishing-bg.js';
+// PHASE 16-6 仗1：鱼篓双轨同步工具
+import {
+  checkFishStorageCapacity,
+  addFishToStorage as addFishToStorageStack
+} from './fish-storage.js';
 
 // ============================================================
 // CONFIG
@@ -672,13 +677,34 @@ class FishingScene {
       player.fishBag = player.fishBag || [];
       // 从 fish-pool 获取 basePrice/rarity
       const poolFish = SHUISHE_FISH_POOL.find(f => f.species === this.currentFish.name);
-      player.fishBag.push({
+
+      // ─────────────────────────────────────────────────────────
+      // PHASE 16-6 仗1：入篓前容量校验（双轨并存方案 v1.2）
+      //   单一真理来源 = fishBag；本次鱼若超条数/重量任一上限 → 拒收，
+      //   仅以 DOM 飘字提示「鱼篓已满，请先回村卖鱼」。
+      //   注意：容量满载不影响 codex 解锁、totalFishCount、称号系统、
+      //         q001/q002/q003 进度（这些已在前文 emit 时计入），
+      //         避免"钓上一条稀有鱼却因鱼篓满而图鉴丢失"的项目级灾难。
+      // ─────────────────────────────────────────────────────────
+      const fishProbe = {
         species: this.currentFish.name,
-        size: this.caughtFishSize,
-        rarity: poolFish ? poolFish.rarity : (this.currentFish.rarity || 1),
-        basePrice: poolFish ? poolFish.basePrice : (this.currentFish.price || 0),
-        caughtAt: Date.now()
-      });
+        size: this.caughtFishSize
+      };
+      const cap = checkFishStorageCapacity(player, fishProbe);
+      if (!cap.ok) {
+        this._showCodexToast('🪣 鱼篓已满，请先回村卖鱼');
+        // 拒收：不 push fishBag、不调 addFishToStorageStack
+      } else {
+        player.fishBag.push({
+          species: this.currentFish.name,
+          size: this.caughtFishSize,
+          rarity: poolFish ? poolFish.rarity : (this.currentFish.rarity || 1),
+          basePrice: poolFish ? poolFish.basePrice : (this.currentFish.price || 0),
+          caughtAt: Date.now()
+        });
+        // 双轨同步：往 fishStorage 堆叠副本里累加（UI 渲染用）
+        addFishToStorageStack(player, fishProbe);
+      }
       window.Save.set('player', player);
       window.Save.commit();
     }

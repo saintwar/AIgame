@@ -4,10 +4,29 @@
 
 const STORAGE_KEY = 'bdds_save_v1';
 
+/**
+ * PHASE 16-6 仗1：鱼篓默认配置（木竹篓）
+ *   bagLevel：1=木竹篓 / 2=藤编大篓 / 3=保鲜冰篓
+ *   maxSlots：条数上限；maxWeight：重量上限（克）
+ *   items：堆叠展示用，运行时由 fish-storage.js 维护
+ */
+const DEFAULT_FISH_STORAGE = {
+  items: [],
+  maxSlots: 8,
+  maxWeight: 5000,
+  bagLevel: 1
+};
+
 /** 默认存档数据 */
 const DEFAULT_SAVE = {
-  version: 1,
-  player: { name: '阿明', x: 4, y: 5, money: 0, coin: 0, inventory: {}, codex: {}, equipment: { rod: 'basic_rod' }, fishBag: [] },
+  version: 2,
+  player: {
+    name: '阿明', x: 4, y: 5, money: 0, coin: 0,
+    inventory: {}, codex: {}, equipment: { rod: 'basic_rod' },
+    fishBag: [],
+    // PHASE 16-6 仗1：鱼篓堆叠展示数据（与 fishBag 双轨并存）
+    fishStorage: { ...DEFAULT_FISH_STORAGE, items: [] }
+  },
   quests: {},
   inventory: { fish: [] },
   flags: { tutorial_done: false, intro_played: false, fishing_tutorial_shown: false },
@@ -97,7 +116,35 @@ class Save {
    * @returns {object}
    */
   migrate(save) {
-    // 当前 version=1，无需迁移
+    if (!save || typeof save !== 'object') {
+      return JSON.parse(JSON.stringify(DEFAULT_SAVE));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // PHASE 16-6 仗1：fishStorage 字段兜底
+    //   老存档可能没有 fishStorage（v1 → v2）→ 给默认值；
+    //   items 留空数组，由 fish-storage.js 在 InventorySystem 初始化时
+    //   通过 syncFishStorage(player) 从 fishBag 全量重算推导填充。
+    //   maxSlots / maxWeight / bagLevel 缺哪补哪，已有的不动（玩家可能已升级）。
+    // ─────────────────────────────────────────────────────────
+    if (save.player && typeof save.player === 'object') {
+      if (!save.player.fishStorage || typeof save.player.fishStorage !== 'object') {
+        save.player.fishStorage = { ...DEFAULT_FISH_STORAGE, items: [] };
+      } else {
+        const fs = save.player.fishStorage;
+        if (!Array.isArray(fs.items))     fs.items = [];
+        if (typeof fs.maxSlots !== 'number')  fs.maxSlots = DEFAULT_FISH_STORAGE.maxSlots;
+        if (typeof fs.maxWeight !== 'number') fs.maxWeight = DEFAULT_FISH_STORAGE.maxWeight;
+        if (typeof fs.bagLevel !== 'number')  fs.bagLevel = DEFAULT_FISH_STORAGE.bagLevel;
+      }
+      // fishBag 兜底（老老存档极端情况）
+      if (!Array.isArray(save.player.fishBag)) save.player.fishBag = [];
+    }
+
+    // 标记到新版本（不强校验，仅作记录）
+    if (typeof save.version !== 'number' || save.version < 2) {
+      save.version = 2;
+    }
     return save;
   }
 }

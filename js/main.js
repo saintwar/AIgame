@@ -13,6 +13,8 @@ import { InventorySystem } from './inventory-system.js';
 import { CodexSystem } from './codex-system.js';
 import { EquipmentSystem } from './equipment-system.js';
 import dialogueSystem from './dialogue-system.js';
+// PHASE 16-6 仗1：鱼篓双轨同步（兜底老存档）
+import { syncFishStorage } from './fish-storage.js';
 
 console.log('🎮 宝岛钓手 booted @ 1280x720 HD 16:9');
 console.log('📐 Tile: 64px | Map: 20x11 | Player Start: (4,5)');
@@ -55,6 +57,20 @@ console.log('📁 存档已加载:', saveData);
 
 // 初始化背包系统
 window.inventory = new InventorySystem(Save);
+
+// PHASE 16-6 仗1：鱼篓堆叠副本兜底
+//   - 老存档（v1）由 save.migrate 已注入空 fishStorage 字段；
+//     这里再做一次"从 fishBag 全量重算 items"，确保 UI 第一帧正确。
+//   - 新档 fishBag 为空 → items 也为空，无副作用。
+//   - 与 fishing-scene 的增量同步互不冲突（增量在 _onFishCaught 内执行）。
+{
+  const player = Save.get('player');
+  if (player) {
+    syncFishStorage(player);
+    Save.set('player', player);
+    Save.commit();
+  }
+}
 
 // 首次新建存档时给予初始物资
 if (Object.keys(Save.get('player.inventory') || {}).length === 0) {

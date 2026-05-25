@@ -4,6 +4,42 @@
 
 ---
 
+## [Unreleased] · PHASE 16-6 仗1 — 鱼篓数据 & 背包"渔获"分类
+
+### 新增
+- 🪣 **鱼篓数据结构（双轨并存方案 v1.2）**
+  - `player.fishStorage` = `{ items, maxSlots:8, maxWeight:5000, bagLevel:1 }`
+    - 默认木竹篓：8 条 / 5000g
+  - `player.fishBag` 保持不动（个体精确数据，卖鱼/任务依赖零回归）
+  - 新增工具模块 `js/fish-storage.js`：
+    - `syncFishStorage(player)`：从 fishBag 全量重算 items（老存档兜底）
+    - `addFishToStorage(player, fishData)`：增量累加（同种 +1 / 新种 push）
+    - `checkFishStorageCapacity(player, fish)`：入篓预检（条数+重量任一超限即拒）
+    - `computeBagWeight(bag)`：fishBag 实时聚合总重
+- 🎒 **背包「渔获」分类（首位、默认打开）**
+  - 顶部双轨容量条：条数 X/8 + 重量 Yg/5000g
+  - 满载（任一轨打满）→ 双轨变红 + 右上角"⚠ 鱼篓已满"提示
+  - 接近满（≥85%）→ 黄色警戒色
+  - 条目堆叠展示：图标 / 名称 ×count / 均重 / 总重
+  - 空状态文案："（鱼篓空空，去日月潭钓几条吧～）"
+
+### 改动
+- `js/save-system.js`：默认存档 `version: 1 → 2`，`migrate()` 兜底注入 fishStorage 字段（老档自动 from-fishBag 重算）
+- `js/fishing-scene.js` `_onFishCaught()`：入篓前调用 `checkFishStorageCapacity`
+  - 满载 → DOM 飘字"🪣 鱼篓已满，请先回村卖鱼"，本次鱼**不入 fishBag、不入 fishStorage**
+  - 通过 → fishBag.push（原逻辑保留）+ addFishToStorage 同步堆叠副本
+  - 满载**不影响** codex 解锁 / 称号 / q001/q002/q003 进度（避免稀有鱼图鉴丢失）
+- `js/main.js` 启动时调用 `syncFishStorage(player)` 一次性兜底老存档
+- `js/ui/inventory-ui.js`：tabs 4 → 5（渔获置首），数字键 1-5、tab 宽度 175 → 145、间距 185 → 152
+- 鼠标 hit-test 已同步新几何，hover/点击零回归
+
+### 不变（约束）
+- `shop-ui` / `quest-system` 完全不动，继续读 `fishBag` 个体数据
+- 卖鱼计价仍按个体 `size/rarity/basePrice`（仗 2 才扩展）
+- 满载决策弹窗（仗 2 引入）
+
+---
+
 ## [v2.0.0] - 2026-05 · 阶段二·水社村
 
 ### 新增
