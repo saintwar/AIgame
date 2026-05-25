@@ -2805,7 +2805,7 @@ class VillageScene {
     ctx.fillText('💾 存档', panelX + 12, y);
     y += 20;
 
-    const money = window.Save?.get('player.money') || 0;
+    const money = (window.inventory && window.inventory.getCoin()) ?? window.Save?.get('player.coin') ?? 0;
     const flags = Object.keys(window.Save?.get('flags') || {}).length;
     const readDialogues = (window.Save?.get('flags.readDialogues') || []).length;
 

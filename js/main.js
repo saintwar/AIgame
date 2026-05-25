@@ -91,7 +91,9 @@ SceneManager.on('fish_caught', ({ species, weight, price, rarity }) => {
   const inventory = Save.get('inventory') || { fish: [] };
   inventory.fish.push({ species, weight, price, rarity, caughtAt: Date.now() });
   Save.set('inventory', inventory);
-  Save.set('player.money', (Save.get('player.money') || 0) + price);
+  // PHASE 16-6 经济统一：钓鱼上钩不直发金币（鱼进鱼篓，卖给秀兰才变 coin）。
+  //   原 `Save.set('player.money', ...)` 是 PHASE 1 死代码，写到的是 HUD 不读的孤儿字段，
+  //   会导致 GM/debug 浮窗显示与 HUD 不一致。已移除。
 
   // ─────────────────────────────────────────────────────────
   // PHASE 16-5：历史最佳数据 + 称号升级（约束 1：仅扩展，不动核心玩法）

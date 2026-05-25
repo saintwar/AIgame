@@ -440,9 +440,17 @@ class CmdPlayerMoney extends GMCommand {
     const { error, named } = ArgParser.parse(args, this.schema);
     if (error) return makeResult(ResultType.ERROR, error);
 
-    const old = Save.get('player.money') || 0;
-    Save.set('player.money', named.amount);
-    Save.commit();
+    // PHASE 16-6 经济统一：金币以 player.coin 为唯一数据源（HUD 读这个）。
+    //   优先走 inventory.addCoin/setCoin，老路径作为兜底。
+    const old = (window.inventory && window.inventory.getCoin())
+      ?? (Save.get('player.coin') || 0);
+    if (window.inventory) {
+      // setCoin 直接置数（差值通过 addCoin 实现以触发事件 + bump 动画）
+      window.inventory.addCoin(named.amount - old);
+    } else {
+      Save.set('player.coin', named.amount);
+      Save.commit();
+    }
     return makeResult(ResultType.SUCCESS, `💰 金币: ${old} → ${named.amount}`);
   }
 }
@@ -484,7 +492,9 @@ class CmdPlayerStatus extends GMCommand {
   }
 
   execute() {
-    const money = Save.get('player.money') || 0;
+    // PHASE 16-6 经济统一：读 player.coin（HUD 唯一数据源）
+    const money = (window.inventory && window.inventory.getCoin())
+      ?? (Save.get('player.coin') || 0);
     const inv = Save.get('player.inventory') || {};
     const flags = Save.get('flags') || {};
     const lastScene = Save.get('lastScene') || 'unknown';

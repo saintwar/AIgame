@@ -146,6 +146,14 @@ class Save {
       if (typeof save.player.equippedBait !== 'string') {
         save.player.equippedBait = 'basic_bait';
       }
+
+      // PHASE 16-6 经济统一：回收孤儿 player.money（早期任务奖励误写字段，HUD 不读）
+      //   一次性归并到 player.coin，并清零 money 防止重复迁移。
+      if (typeof save.player.money === 'number' && save.player.money > 0) {
+        save.player.coin = (save.player.coin || 0) + save.player.money;
+        console.log(`[migrate] 回收孤儿 player.money=${save.player.money} → player.coin=${save.player.coin}`);
+        save.player.money = 0;
+      }
     }
 
     // 标记到新版本（不强校验，仅作记录）

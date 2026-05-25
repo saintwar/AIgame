@@ -7,7 +7,7 @@ export const QUESTS = {
     giver: 'chief',
     description: '帮村长阿土伯钓 3 条奇力鱼',
     target: { fish: '奇力鱼', count: 0, need: 3 },
-    reward: { money: 50, bait: 5 },
+    reward: { coin: 50, bait: 5 },
     onCompleteFlag: 'q001_done'
   },
 

@@ -172,16 +172,16 @@ class QuestSystem {
 
     // 发奖励
     if (tpl.reward) {
-      // q001 老奖励 — money 字段走 Save，coin 字段走 inventory
-      if (tpl.reward.money) {
-        const money = (Save.get('player.money') || 0) + tpl.reward.money;
-        Save.set('player.money', money);
-      }
-      if (tpl.reward.coin && window.inventory) {
-        window.inventory.addCoin(tpl.reward.coin);
-      } else if (tpl.reward.coin) {
-        const coin = (Save.get('player.coin') || 0) + tpl.reward.coin;
-        Save.set('player.coin', coin);
+      // 金币奖励 — 统一走 inventory.coin（HUD 唯一数据源）。
+      // 兼容历史 reward.money 字段：自动归并到 coin，不再写废弃 player.money。
+      const coinReward = (tpl.reward.coin || 0) + (tpl.reward.money || 0);
+      if (coinReward > 0) {
+        if (window.inventory) {
+          window.inventory.addCoin(coinReward);
+        } else {
+          const coin = (Save.get('player.coin') || 0) + coinReward;
+          Save.set('player.coin', coin);
+        }
       }
       // PHASE 16-6 仗3 补丁：q001 reward.bait 派发（历史遗留 bug —— 数据层声明了
       //   `bait: 5` 但派发逻辑从未实现）。统一映射到 inventory 的 basic_bait 堆叠物。
@@ -217,7 +217,7 @@ class QuestSystem {
     this._emit('quest_completed', { questId, reward: tpl.reward });
 
     console.log('✅ 任务完成:', tpl.name || tpl.title, '奖励：', tpl.reward);
-    this._showFloatText(`✅ 任务完成 +${tpl.reward.coin || tpl.reward.money || 0} 铜币`);
+    this._showFloatText(`✅ 任务完成 +${(tpl.reward.coin || 0) + (tpl.reward.money || 0)} 铜币`);
     AudioSystem.playQuestComplete();
   }
 

@@ -774,7 +774,7 @@ class GMUI {
       { label: '玩家Y', value: scene.player?.py ?? scene.characterY ?? 'N/A' },
       { label: '方向', value: scene.player?.direction ?? 'N/A' },
       { label: '时间', value: scene.time ? scene.time.toFixed(2) + 's' : 'N/A' },
-      { label: '金币', value: Save.get('player.money') ?? 0 },
+      { label: '金币', value: (window.inventory && window.inventory.getCoin()) ?? Save.get('player.coin') ?? 0 },
     ];
     let html = '<table style="width:100%;font-size:11px">';
     status.forEach(s => {
