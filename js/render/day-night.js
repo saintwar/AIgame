@@ -65,10 +65,10 @@ const DUSK_TOP    = [255, 176, 122];  // FFB07A
 const DUSK_MID    = [232, 149, 107];  // E8956B
 const DUSK_HOR    = [123, 111, 168];  // 7B6FA8
 
-// 夜晚：深紫蓝
-const NIGHT_TOP   = [25,  20,  60];
-const NIGHT_MID   = [40,  30,  80];
-const NIGHT_HOR   = [60,  50, 100];
+// 夜晚：深紫蓝（提亮一档，避免压抑）
+const NIGHT_TOP   = [40,  35,  85];
+const NIGHT_MID   = [60,  50, 110];
+const NIGHT_HOR   = [85,  75, 135];
 
 // ============================================================
 // 根据 phase 计算天空渐变三色 + 归一化混合参数 t
@@ -125,11 +125,11 @@ export function getDarkness(phase) {
     // 黄昏渐暗
     return lerp(0.05, 0.5, (phase - 0.50) / 0.20);
   } else if (phase < 0.85) {
-    // 夜晚前半段（继续变暗）
-    return lerp(0.5, 0.9, (phase - 0.70) / 0.15);
+    // 夜晚前半段（继续变暗，整体上限收一档）
+    return lerp(0.4, 0.7, (phase - 0.70) / 0.15);
   } else if (phase < 1.00) {
     // 夜晚后半段（最深→黎明前微微亮）
-    return lerp(0.9, 0.35, (phase - 0.85) / 0.15);
+    return lerp(0.7, 0.3, (phase - 0.85) / 0.15);
   }
   return 0;
 }
@@ -294,9 +294,9 @@ export function drawDynamicOverlay(ctx, time) {
     const alpha = 0.12 * t;
     ctx.fillStyle = `rgba(255, 165, 107, ${alpha})`;
   } else {
-    // 夜晚：冷蓝滤镜
-    const alpha = 0.10 + darkness * 0.35;
-    ctx.fillStyle = `rgba(20, 25, 60, ${Math.min(0.45, alpha)})`;
+    // 夜晚：冷蓝滤镜（强度下调，最高从 0.45 → 0.32）
+    const alpha = 0.06 + darkness * 0.28;
+    ctx.fillStyle = `rgba(20, 25, 60, ${Math.min(0.32, alpha)})`;
   }
   ctx.fillRect(0, 0, 1280, 720);
 }

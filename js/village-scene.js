@@ -2265,7 +2265,14 @@ class VillageScene {
   _renderPlayer() {
     const ctx = this.ctx;
     const time = this.time * 1000;
-    const isMoving = this.keys.up || this.keys.down || this.keys.left || this.keys.right;
+    // PHASE 16-4.8 仗1-FIX：行走动画判定要兼容鼠标点击寻路
+    //   原 bug：isMoving 只看 WASD → 鼠标寻路时角色双腿静止
+    //   修复：再叠加 ClickToMove.isWalking() 信号
+    const wasdMoving = this.keys.up || this.keys.down || this.keys.left || this.keys.right;
+    const clickMoving = !!(window.ClickToMove
+      && typeof window.ClickToMove.isWalking === 'function'
+      && window.ClickToMove.isWalking());
+    const isMoving = wasdMoving || clickMoving;
     drawAming(ctx, this.player.px, this.player.py, this.player.direction, time, isMoving);
     // Layer 6.2: 主角头顶名字标签（Billboard，最高层）
     this._renderPlayerNameTag();
