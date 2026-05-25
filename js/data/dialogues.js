@@ -40,10 +40,12 @@ export const DIALOGUES = {
   // ─────────────────────────────────────────────────────────
   // PHASE 16-6 仗2：秀兰阿姨鱼贩主菜单（带选项分支）
   //   入口：村庄 _interactMom() 直接调 dialogueSystem.start('mom_menu')
-  //   选项 action：
+  //   选项 action（PHASE 17 仗2 修订）：
   //     - 'mom_sell_intro'  → 进售鱼对话 → onEnd 打开 shopUI.openXiulanShop()
-  //     - 'mom_chat'        → 闲聊
+  //     - { callback }      → 关闭对话 + 打开秀兰民宿 RestPanel（PHASE 17 仗2 新增 ⭐）
   //     - { close: true }   → 关闭对话
+  //   注：原"💬 随便聊聊" → 'mom_chat' 选项被"住宿"替换。mom_chat 对话定义
+  //       本身保留（下方仍存在），未来若要复活闲聊，加回一行 choice 即可。
   // ─────────────────────────────────────────────────────────
   mom_menu: {
     id: 'mom_menu',
@@ -53,8 +55,11 @@ export const DIALOGUES = {
         speaker: '秀兰',
         text: '回来啦阿明？要妈帮你做点啥？',
         choices: [
-          { label: '🐟 卖鱼给阿姨',  action: 'mom_sell_intro' },
-          { label: '💬 随便聊聊',    action: 'mom_chat' },
+          { label: '🐟 卖鱼给阿姨', action: 'mom_sell_intro' },
+          // PHASE 17 仗2：住宿出口 —— 关闭对话后打开 RestPanel
+          //   action 协议：{ callback }，由 DialogueSystem._activateChoice 在清状态后调用
+          //   window.restPanel 由 main.js 启动时挂全局
+          { label: '🛏️ 我想休息一下', action: { callback: () => { if (window.restPanel) window.restPanel.open(); } } },
           { label: '👋 先走了',      action: { close: true } }
         ]
       }

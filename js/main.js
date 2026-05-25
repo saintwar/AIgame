@@ -15,6 +15,16 @@ import { EquipmentSystem } from './equipment-system.js';
 import dialogueSystem from './dialogue-system.js';
 // PHASE 16-6 仗1：鱼篓双轨同步（兜底老存档）
 import { syncFishStorage } from './fish-storage.js';
+// PHASE 17 仗1：体力系统
+//   - float-text 必须最先 import：注册 window.showFloatText（副作用），
+//     stamina-system 在 checkDailyReset 里会调用它弹"新的一天"飘字
+//   - StaminaSystem 单例（自带 window.StaminaSystem 全局，供 fishing-scene 跨模块引用）
+//   - PHASE 17 仗1 视觉补丁：体力 HUD 改由 fishing-scene._renderHUD 直接 Canvas 绘制，
+//     不再使用 DOM 浮层（已删除 stamina-hud.js 与对应 mount 调用）。
+//     设计依据：村庄场景（社交/经济）不需要体力信息密度；钓鱼场景才显示三件套
+//     金币 → 鱼数 → 体力，与星露谷 / 牧场物语 / 塞尔达"按场景调节 HUD 密度"一致。
+import './ui/float-text.js';
+import StaminaSystem from './stamina-system.js';
 
 console.log('🎮 宝岛钓手 booted @ 1280x720 HD 16:9');
 console.log('📐 Tile: 64px | Map: 20x11 | Player Start: (4,5)');
@@ -84,6 +94,12 @@ window.codex = new CodexSystem(Save.get('player'), Save);
 
 // 初始化装备系统
 window.equipment = new EquipmentSystem(Save.get('player'), window.inventory, Save);
+
+// PHASE 17 仗1：体力系统启动
+//   1) checkDailyReset：跨日重置 + 首次登录静默初始化 lastResetDate
+//      （必须在场景启动前调用，确保 fishing-scene 第一帧拿到的是已重置后的当日数值）
+//   2) HUD 渲染由 fishing-scene._renderHUD 接管（Canvas 木牌风），无独立 mount 步骤
+StaminaSystem.checkDailyReset();
 
 // 监听钓鱼事件（用于更新存档）
 SceneManager.on('fish_caught', ({ species, weight, price, rarity }) => {

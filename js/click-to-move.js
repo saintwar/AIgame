@@ -81,6 +81,8 @@
     if (scene.inventoryUI && scene.inventoryUI.visible) return false;
     if (scene.codexUI && scene.codexUI.visible) return false;
     if (scene.shopUI && scene.shopUI.visible) return false;
+    // PHASE 17 仗2：秀兰民宿面板打开时也阻塞寻路
+    if (scene.restPanel && scene.restPanel.visible) return false;
     return true;
   }
 

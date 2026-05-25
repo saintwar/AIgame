@@ -425,6 +425,16 @@ class FishingScene {
     console.log('[_updateIdle] 当前keys状态:', JSON.stringify(this.input.keys));
     
     if (spacePressed) {
+      // PHASE 17 仗1：抛竿前体力校验（最高优先级 — 比鱼饵校验更靠前）
+      //   规则：体力 < 2 时阻断抛竿（"成功入篓"会扣 2，连一次成功都顶不到的话直接禁出竿）
+      //   兜底：StaminaSystem 不存在时（理论不会，仗1 已挂全局）静默放行，避免阻断游戏
+      if (window.StaminaSystem && window.StaminaSystem.getCurrent() < 2) {
+        if (typeof window.showFloatText === 'function') {
+          window.showFloatText('💤 体力不足，去秀兰阿姨家休息吧', { color: '#FF6B6B' });
+        }
+        return;
+      }
+
       // PHASE 16-6 仗4：抛竿前校验当前鱼饵库存（严格消耗策略）
       //   当前鱼饵 = 0 时阻断抛竿（不允许"无饵钓鱼"）
       //   若当前装备的不是 basic_bait 且 basic_bait>0 → 自动切回 basic_bait 再抛
@@ -826,6 +836,16 @@ class FishingScene {
         });
         // 双轨同步：往 fishStorage 堆叠副本里累加（UI 渲染用）
         addFishToStorageStack(player, fishProbe);
+
+        // PHASE 17 仗1：成功入篓 → 扣 2 体力
+        //   只有真正入篓才扣（鱼篓满拒收的分支不扣，避免"空跑还罚体力"二次惩罚）。
+        //   抛竿前已校验 ≥2，理论上不会 false；兜底 false 时仅 console.warn，不阻塞流程。
+        if (window.StaminaSystem) {
+          const ok = window.StaminaSystem.consumeStamina(2, 'fishing');
+          if (!ok) {
+            console.warn('[fishing] 体力扣减失败（理论不应发生，抛竿前已校验）');
+          }
+        }
       }
       window.Save.set('player', player);
       window.Save.commit();
@@ -1895,6 +1915,29 @@ class FishingScene {
       px(2, 2, 4, 1, '#FFF4D6'); px(2, 5, 4, 1, '#FFF4D6');
       px(2, 3, 4, 2, '#E76F51');
       px(3, 3, 2, 2, '#1A1A2E'); // 中心黑点
+    } else if (type === 'heart') {
+      // ════════════════════════════════════════════════════════
+      // PHASE 17 仗1 视觉补丁：8x8 像素心形（经典 RPG 风）
+      //   - 红色基调 #E63946 / 高光 #FFFFFF / 描边 #1A1A2E（与 coin/fish 描边色一致，
+      //     更贴合 fishing-scene 像素 HUD 整体而非纯黑）
+      //   - 与 'coin'(8x8) 'fish'(8x6) 同尺寸级，s=2 时占 16x16 屏幕像素
+      //   - 主美裁定的 #000000 描边在 #5C3A1E 木牌上对比过强，统一为现有 #1A1A2E
+      // ════════════════════════════════════════════════════════
+      // 描边（顶部凹陷的双瓣轮廓）
+      px(1, 1, 2, 1, '#1A1A2E'); px(5, 1, 2, 1, '#1A1A2E');
+      px(0, 2, 1, 2, '#1A1A2E'); px(3, 2, 2, 1, '#1A1A2E'); px(7, 2, 1, 2, '#1A1A2E');
+      px(0, 4, 1, 1, '#1A1A2E'); px(7, 4, 1, 1, '#1A1A2E');
+      px(1, 5, 1, 1, '#1A1A2E'); px(6, 5, 1, 1, '#1A1A2E');
+      px(2, 6, 1, 1, '#1A1A2E'); px(5, 6, 1, 1, '#1A1A2E');
+      px(3, 7, 2, 1, '#1A1A2E');
+      // 红色主体
+      px(1, 2, 2, 1, '#E63946'); px(5, 2, 2, 1, '#E63946');
+      px(1, 3, 6, 1, '#E63946');
+      px(1, 4, 6, 1, '#E63946');
+      px(2, 5, 4, 1, '#E63946');
+      px(3, 6, 2, 1, '#E63946');
+      // 高光（左上小亮块）
+      px(1, 2, 1, 1, '#FFFFFF'); px(2, 3, 1, 1, '#FFFFFF');
     } else if (type === 'rod') {
       // 12x8 像素钓竿（左下到右上的斜杆 + 鱼线 + 红浮漂）
       // 棕色竿身（斜对角）
@@ -1955,6 +1998,45 @@ class FishingScene {
     this._drawWoodPlaque(fishX, fishY, fishW, fishH);
     this._drawPixelIcon('fish', fishX + 8, fishY + (fishH - 12) / 2, 2);
     this._drawPixelText(`${this.fishCount}`, fishX + 38, fishY + fishH / 2, 24, '#FFF4D6', '#5C3A1E');
+
+    // ════════════════════════════════════════════════════════
+    // PHASE 17 仗1 视觉补丁：体力木牌（💰 → 🐟 → ❤️ 第 3 位）
+    //   - 风格：与金币/鱼数完全一致的 _drawWoodPlaque + _drawPixelIcon('heart') + _drawPixelText
+    //   - 数据：每帧从 window.StaminaSystem 拉值（无副作用 getter）
+    //   - 文字三态（PRD v2.0）：
+    //       ratio >= 20%  → 米白 #FFF4D6（与金币一致）
+    //       ratio <  20%  → 暖橙 #FFA500 + 透明度 0.5↔1.0 闪烁（200ms 周期，正弦平滑）
+    //       cur === 0     → 灰阶（saturate(0)）+ 整体 opacity 0.4
+    //   - 整块用 ctx.save/restore 包裹，filter/globalAlpha 不污染外部渲染
+    // ════════════════════════════════════════════════════════
+    if (window.StaminaSystem) {
+      const cur = window.StaminaSystem.getCurrent();
+      const max = window.StaminaSystem.getMax();
+      const ratio = max > 0 ? cur / max : 0;
+      const stamX = Math.floor(cw * 0.236); // 鱼数右沿 + 间距（与金币-鱼数节奏一致）
+      const stamY = coinY;
+      const stamW = Math.floor(cw * 0.117);
+      const stamH = coinH;
+
+      ctx.save();
+      // 三态滤镜
+      let textFill = '#FFF4D6';
+      if (cur === 0) {
+        ctx.filter = 'saturate(0)';
+        ctx.globalAlpha = 0.4;
+      } else if (ratio < 0.2) {
+        // 200ms 周期透明度闪烁 0.5↔1.0（正弦，避免硬切）
+        const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 200;
+        ctx.globalAlpha = 0.75 + 0.25 * Math.sin(t * Math.PI * 2);
+        textFill = '#FFA500';
+      }
+
+      this._drawWoodPlaque(stamX, stamY, stamW, stamH);
+      // 心形 8x8 @ s=2 → 16x16 屏幕像素，与金币 icon 同尺寸 + 同左内边距 10px
+      this._drawPixelIcon('heart', stamX + 10, stamY + (stamH - 16) / 2, 2);
+      this._drawPixelText(`${cur}/${max}`, stamX + 36, stamY + stamH / 2, 22, textFill, '#5C3A1E');
+      ctx.restore();
+    }
 
     // —— 装备钓竿木牌（左下角）——
     if (window.equipment) {

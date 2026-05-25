@@ -17,6 +17,19 @@ const DEFAULT_FISH_STORAGE = {
   bagLevel: 1
 };
 
+/**
+ * PHASE 17 仗1：体力系统默认配置
+ *   current：当前体力（每日 0:00 自动重置到 max）
+ *   max：体力上限（PRD v2.0 = 100）
+ *   lastResetDate：上次重置日期 'YYYY-MM-DD'（空串 = 从未登录，首次进游戏会被
+ *                  StaminaSystem.checkDailyReset 设为今日，且不弹"新的一天"飘字）
+ */
+const DEFAULT_STAMINA = {
+  current: 100,
+  max: 100,
+  lastResetDate: ''
+};
+
 /** 默认存档数据 */
 const DEFAULT_SAVE = {
   version: 2,
@@ -27,7 +40,9 @@ const DEFAULT_SAVE = {
     equippedBait: 'basic_bait',
     fishBag: [],
     // PHASE 16-6 仗1：鱼篓堆叠展示数据（与 fishBag 双轨并存）
-    fishStorage: { ...DEFAULT_FISH_STORAGE, items: [] }
+    fishStorage: { ...DEFAULT_FISH_STORAGE, items: [] },
+    // PHASE 17 仗1：体力系统（钓鱼/未来玩法消耗、跨日重置）
+    stamina: { ...DEFAULT_STAMINA }
   },
   quests: {},
   inventory: { fish: [] },
@@ -145,6 +160,22 @@ class Save {
       // PHASE 16-6 仗4：equippedBait 字段兜底（老存档无此字段 → 默认 basic_bait）
       if (typeof save.player.equippedBait !== 'string') {
         save.player.equippedBait = 'basic_bait';
+      }
+
+      // PHASE 17 仗1：stamina 字段兜底
+      //   - 老存档无 stamina → 注入默认值（满血 + 空 lastResetDate，首次登录会被
+      //     StaminaSystem.checkDailyReset 静默初始化为今日，不弹"新的一天"飘字）
+      //   - 字段残缺（旧版本写过部分字段）→ 缺哪补哪
+      if (!save.player.stamina || typeof save.player.stamina !== 'object') {
+        save.player.stamina = { ...DEFAULT_STAMINA };
+      } else {
+        const st = save.player.stamina;
+        if (typeof st.max !== 'number' || st.max <= 0) st.max = DEFAULT_STAMINA.max;
+        if (typeof st.current !== 'number') st.current = st.max;
+        // current 不能超 max（防御 max 被外力下调的情况）
+        if (st.current > st.max) st.current = st.max;
+        if (st.current < 0) st.current = 0;
+        if (typeof st.lastResetDate !== 'string') st.lastResetDate = '';
       }
 
       // PHASE 16-6 经济统一：回收孤儿 player.money（早期任务奖励误写字段，HUD 不读）

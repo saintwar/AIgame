@@ -11,6 +11,7 @@ import { InventoryUI } from './ui/inventory-ui.js';
 import { CoinHUD } from './ui/coin-hud.js';
 import { CodexUI } from './ui/codex-ui.js';
 import { ShopUI } from './ui/shop-ui.js';
+import { RestPanel } from './ui/rest-panel.js';
 import {
   drawDuskSky, getGrassTile, drawLakeWaves,
   drawBuildingShadow, drawGoldRim, drawDuskOverlay,
@@ -222,6 +223,9 @@ class VillageScene {
 
     // 钓具店 UI
     this.shopUI = null;
+
+    // PHASE 17 仗2：秀兰民宿弹窗 UI
+    this.restPanel = null;
   }
 
   // 初始化
@@ -283,6 +287,11 @@ class VillageScene {
     this.shopUI = new ShopUI(this.canvas, window.inventory, window.equipment, questSystem);
     // PHASE 16-6 仗2：挂全局，供 dialogue-system 的 'openXiulanShop' / 'openLinBuyOnly' 协议调用
     window.shopUI = this.shopUI;
+
+    // PHASE 17 仗2：秀兰民宿弹窗
+    //   挂全局，供 dialogue-system 的 mom_menu 选项 callback 调用 window.restPanel.open()
+    this.restPanel = new RestPanel(this.canvas, window.inventory);
+    window.restPanel = this.restPanel;
 
     this._bindInput();
 
@@ -948,6 +957,11 @@ class VillageScene {
         if (this.shopUI.handleKey(k)) return;
       }
 
+      // PHASE 17 仗2：秀兰民宿弹窗按键处理（与 shopUI 同优先级，二者互斥不会同时打开）
+      if (this.restPanel && this.restPanel.visible) {
+        if (this.restPanel.handleKey(k)) return;
+      }
+
       // B 键打开背包（对话/任务面板关闭时才响应）
       if (!dialogueSystem.isActive() && !this.questPanelOpen && k === 'b') {
         if (this.inventoryUI) {
@@ -1152,6 +1166,14 @@ class VillageScene {
           }
           return;
         }
+        // PHASE 17 仗2：秀兰民宿弹窗鼠标点击派发
+        if (this.restPanel && this.restPanel.visible) {
+          const { x, y } = toCanvasXY(e);
+          if (this.restPanel.handleMouseClick(x, y)) {
+            e.stopImmediatePropagation();
+          }
+          return;
+        }
         if (this.inventoryUI && this.inventoryUI.visible) {
           const { x, y } = toCanvasXY(e);
           if (this.inventoryUI.handleMouseClick(x, y)) {
@@ -1204,6 +1226,12 @@ class VillageScene {
         if (this.shopUI && this.shopUI.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.shopUI.handleMouseMove(x, y);
+          return;
+        }
+        // PHASE 17 仗2：秀兰民宿弹窗 hover 派发
+        if (this.restPanel && this.restPanel.visible) {
+          const { x, y } = toCanvasXY(e);
+          this.canvas.style.cursor = this.restPanel.handleMouseMove(x, y);
           return;
         }
         if (this.inventoryUI && this.inventoryUI.visible) {
@@ -1687,6 +1715,12 @@ class VillageScene {
       return;
     }
 
+    // PHASE 17 仗2：秀兰民宿弹窗打开时锁定移动
+    if (this.restPanel && this.restPanel.visible) {
+      this.coinHUD.update(dt);
+      return;
+    }
+
     // 金币 HUD 更新
     if (this.coinHUD) this.coinHUD.update(dt);
 
@@ -1935,6 +1969,9 @@ class VillageScene {
 
     // 钓具店面板（覆盖层）
     if (this.shopUI) this.shopUI.render(ctx);
+
+    // PHASE 17 仗2：秀兰民宿面板（覆盖层，与 shopUI 互斥）
+    if (this.restPanel) this.restPanel.render(ctx);
 
     // Layer 7.5: 萤火虫（UI 之前、滤镜之前）⭐ Phase C
     drawFireflies(ctx, this.time * 1000, getFireflyBrightness(this.time * 1000));
@@ -2939,6 +2976,8 @@ class VillageScene {
     if (this.shopUI && this.shopUI.visible) return;
     if (this.inventoryUI && this.inventoryUI.visible) return;
     if (this.codexUI && this.codexUI.visible) return;
+    // PHASE 17 仗2：秀兰民宿弹窗打开时也屏蔽 DOM 飘字（防"华灯初上"盖面板）
+    if (this.restPanel && this.restPanel.visible) return;
     // 个人主页 / 排行榜是 DOM 面板（z-index:9000+），它们打开时玩家也不该被气泡打扰
     if (document.querySelector('.profile-panel.show')) return;
     if (document.querySelector('.leaderboard-overlay.show')) return;
