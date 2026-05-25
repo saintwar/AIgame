@@ -4,6 +4,8 @@ import SceneManager from './scene-manager.js';
 import questSystem from './quest-system.js';
 import { QUESTS } from './data/quests.js';
 import { rollFishWithRod, SHUISHE_FISH_POOL } from './data/fish-pool.js';
+import { BAIT_EFFECTS, getBaitEffect } from './data/bait-effects.js';
+import baitHUD from './ui/bait-hud.js';
 import { drawFishingBg } from './render/fishing-bg.js';
 // PHASE 16-6 仗1：鱼篓双轨同步工具
 import {
@@ -225,7 +227,10 @@ class FishingScene {
     this.ctx.font = '16px "TencentSansW7", "Noto Sans TC", sans-serif';
   }
 
-  start() { this.paused = false; this.lastTime = performance.now(); AudioSystem.playFishingAmbient(); this._loop(); }
+  start() { this.paused = false; this.lastTime = performance.now(); AudioSystem.playFishingAmbient(); this._loop();
+    // PHASE 16-6 仗4：挂载鱼饵切换 HUD
+    baitHUD.mount((index) => this._switchBaitByIndex(index));
+  }
 
   pause() { this.paused = true; if (this.rafId) cancelAnimationFrame(this.rafId); }
 
@@ -233,6 +238,8 @@ class FishingScene {
 
   destroy() {
     this.pause();
+    // PHASE 16-6 仗4：卸载鱼饵 HUD
+    baitHUD.unmount();
     // 清理 InputSystem 的键盘监听
     this.input.destroy && this.input.destroy();
     // 清理 FishingScene 自己的键盘监听
@@ -326,6 +333,28 @@ class FishingScene {
     overlay.querySelector('#esc-no').onclick = () => overlay.remove();
   }
 
+  // PHASE 16-6 仗4：按索引（0/1/2）切换鱼饵
+  //   数字键 1/2/3 与 HUD 鱼饵图标点击共用此入口
+  //   - 切换前校验该档库存：=0 时拒绝切换 + 飘字
+  //   - 切换后写 player.equippedBait + commit + 通知 HUD 刷新
+  _switchBaitByIndex(index) {
+    const order = ['basic_bait', 'advanced_bait', 'legendary_bait'];
+    const targetId = order[index];
+    if (!targetId) return;
+    const count = window.inventory ? window.inventory.getCount(targetId) : 0;
+    const baitName = BAIT_EFFECTS[targetId]?.name || targetId;
+    if (count <= 0) {
+      this._showCodexToast(`❌ ${baitName} 库存为 0`);
+      return;
+    }
+    const currentId = window.Save?.get('player.equippedBait') || 'basic_bait';
+    if (currentId === targetId) return;  // 已装备，无需切换
+    window.Save?.set('player.equippedBait', targetId);
+    window.Save?.commit();
+    this._showCodexToast(`${BAIT_EFFECTS[targetId]?.icon || ''} 已切换：${baitName}`);
+    if (window.fishingHUD) window.fishingHUD.render();
+  }
+
   _showCodexToast(text) {
     const toast = document.createElement('div');
     toast.style.cssText = `
@@ -381,6 +410,11 @@ class FishingScene {
     // 日月潭环境动画更新
     this._updateEnvBirds(dt); this._updateEnvLeaves(dt); this._updateEnvClouds(dt);
     this._updateSmallFish(dt);
+    // PHASE 16-6 仗4 HOTFIX2：鱼饵 HUD 仅在抛竿前（Idle/Aiming）可见
+    //   水下拉扯（Casting/Waiting/BiteWindow/Reeling/Playing）+ 鱼获结算（Caught/Failed）期间隐藏
+    if (window.fishingHUD) {
+      window.fishingHUD.setVisible(s === 'Idle' || s === 'Aiming');
+    }
     this.input.clearPressed();
   }
 
@@ -391,6 +425,24 @@ class FishingScene {
     console.log('[_updateIdle] 当前keys状态:', JSON.stringify(this.input.keys));
     
     if (spacePressed) {
+      // PHASE 16-6 仗4：抛竿前校验当前鱼饵库存（严格消耗策略）
+      //   当前鱼饵 = 0 时阻断抛竿（不允许"无饵钓鱼"）
+      //   若当前装备的不是 basic_bait 且 basic_bait>0 → 自动切回 basic_bait 再抛
+      const equippedBaitId = window.Save?.get('player.equippedBait') || 'basic_bait';
+      const baitCount = window.inventory ? window.inventory.getCount(equippedBaitId) : 1;
+      if (baitCount <= 0) {
+        const basicCount = window.inventory ? window.inventory.getCount('basic_bait') : 0;
+        if (equippedBaitId !== 'basic_bait' && basicCount > 0) {
+          // 当前稀有鱼饵用光 → 切回 basic_bait 再继续
+          window.Save?.set('player.equippedBait', 'basic_bait');
+          window.Save?.commit();
+          this._showCodexToast('🪱 鱼饵不足，已切换为初级鱼饵');
+          if (window.fishingHUD) window.fishingHUD.render();
+        } else {
+          this._showCodexToast('❌ 鱼饵不足！请去林师傅店购买');
+          return;
+        }
+      }
       console.log('🎣 进入蓄力状态');
       this.fsm.transition('Aiming', 'press Space'); 
       this.aimPower = 0;
@@ -399,6 +451,13 @@ class FishingScene {
       console.log('[_updateIdle] 记录蓄力按键状态: _aimingSpaceHeld=', this._aimingSpaceHeld);
     }
     if (this.input.wasPressed('b')) this._toggleAtlas();
+
+    // PHASE 16-6 仗4：数字键 1/2/3 切换鱼饵
+    for (let i = 0; i < 3; i++) {
+      if (this.input.wasPressed(String(i + 1))) {
+        this._switchBaitByIndex(i);
+      }
+    }
   }
 
   _updateAiming(dt) {
@@ -493,6 +552,69 @@ class FishingScene {
     this.currentFish.price = fishData.basePrice;
     this.currentFish.maxHP = fishData.rarity * 120;
     this.fishHP = this.currentFish.maxHP;
+
+    // ─────────────────────────────────────────────────────────
+    // PHASE 16-6 仗4：鱼饵效果末端注入
+    //   仅在末端基于 baitEffect 调整 currentFish，不重构上游 rollFishWithRod
+    //   - rarityShift +1：必把档位升一级（普通→稀有/稀有→史诗，最高档保持）
+    //   - rarityBonus 0.3：30% 概率提档 1 级（与 rarityShift 互斥，已通过配置）
+    //   - sizeMul：作用于 size[0]（caughtFishSize 的基准）
+    //   - 提档时从 SHUISHE_FISH_POOL 按"rarity == 目标档"重抽一条
+    // ─────────────────────────────────────────────────────────
+    this._lastBaitTrigger = null;  // 'shift' | 'bonus' | null
+    const equippedBaitId = window.Save?.get('player.equippedBait') || 'basic_bait';
+    const baitEffect = getBaitEffect(equippedBaitId);
+    if (baitEffect && (baitEffect.rarityShift > 0 || baitEffect.rarityBonus > 0 || baitEffect.sizeMul !== 1.0)) {
+      const maxRarity = Math.max(...SHUISHE_FISH_POOL.map(f => f.rarity));
+      const rodMaxRarity = rod.rarityUnlock || maxRarity;
+      const ceiling = Math.min(maxRarity, rodMaxRarity);  // 不能超过钓竿/鱼池上限
+
+      let targetRarity = this.currentFish.rarity;
+      if (baitEffect.rarityShift > 0) {
+        // 极品香饵：必升档
+        targetRarity = Math.min(ceiling, this.currentFish.rarity + baitEffect.rarityShift);
+        if (targetRarity > this.currentFish.rarity) this._lastBaitTrigger = 'shift';
+      } else if (baitEffect.rarityBonus > 0 && Math.random() < baitEffect.rarityBonus) {
+        // 香饵：rarityBonus 概率升档
+        targetRarity = Math.min(ceiling, this.currentFish.rarity + 1);
+        if (targetRarity > this.currentFish.rarity) this._lastBaitTrigger = 'bonus';
+      }
+
+      // 若需要重抽：从同档/更高档鱼里随机一条
+      if (targetRarity > this.currentFish.rarity) {
+        const candidates = SHUISHE_FISH_POOL.filter(f => f.rarity === targetRarity);
+        if (candidates.length > 0) {
+          const newFish = candidates[Math.floor(Math.random() * candidates.length)];
+          const newLegacy = FISH_POOL.find(f => f.name === newFish.species);
+          const [minS, maxS] = newFish.sizeRange;
+          const newSize = (minS + Math.random() * (maxS - minS)) * (rod.maxSizeMul || 1.0);
+          this.currentFish = newLegacy ? { ...newLegacy } : {
+            id: newFish.species, name: newFish.species,
+            rarity: newFish.rarity, color: '#4682B4',
+            size: [newSize, newSize * 0.5],
+            price: newFish.basePrice, baseProb: newFish.weight / 100
+          };
+          this.currentFish.size = [newSize, newSize * 0.5];
+          this.currentFish.price = newFish.basePrice;
+          this.currentFish.rarity = newFish.rarity;
+          this.currentFish.maxHP = newFish.rarity * 120;
+          this.fishHP = this.currentFish.maxHP;
+        }
+      }
+
+      // 应用 sizeMul（作用于 size[0]，影响后续 caughtFishSize 的基准）
+      if (baitEffect.sizeMul !== 1.0) {
+        this.currentFish.size[0] = Math.round(this.currentFish.size[0] * baitEffect.sizeMul * 10) / 10;
+        this.currentFish.size[1] = this.currentFish.size[0] * 0.5;
+      }
+
+      // 飘字反馈（仅在确实触发时显示）
+      if (this._lastBaitTrigger === 'shift') {
+        this._showCodexToast('✨ 极品香饵威力！');
+      } else if (this._lastBaitTrigger === 'bonus') {
+        this._showCodexToast('🌸 香饵生效！');
+      }
+    }
   }
 
   _startBite() { this.biteCount = 0; this.biteSinking = true; this.biteSinkingProgress = 0; this.biteResumeTimer = 0; }
@@ -707,6 +829,34 @@ class FishingScene {
       }
       window.Save.set('player', player);
       window.Save.commit();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // PHASE 16-6 仗4：消耗 1 个当前鱼饵
+    //   规则：成功上钩（无论入篓或满篓退回）都消耗（防止刷）
+    //   兜底：消耗后若该鱼饵 = 0 且 != basic_bait → 自动切回 basic_bait
+    //         若 basic_bait 也为 0 → 不切（仍持有原 id），下次抛竿在 _updateIdle 阻断
+    // ─────────────────────────────────────────────────────────
+    if (window.inventory && window.Save) {
+      const equippedBaitId = window.Save.get('player.equippedBait') || 'basic_bait';
+      const beforeCount = window.inventory.getCount(equippedBaitId);
+      if (beforeCount > 0) {
+        window.inventory.remove(equippedBaitId, 1);
+        const afterCount = window.inventory.getCount(equippedBaitId);
+        // 稀有鱼饵显示剩余数（普通蚯蚓不提示，避免噪音）
+        if (equippedBaitId !== 'basic_bait') {
+          const baitName = BAIT_EFFECTS[equippedBaitId]?.name || equippedBaitId;
+          this._showCodexToast(`消耗 1 ${baitName}（剩余 ${afterCount}）`);
+        }
+        // 0 库存兜底切档
+        if (afterCount === 0 && equippedBaitId !== 'basic_bait') {
+          window.Save.set('player.equippedBait', 'basic_bait');
+          window.Save.commit();
+          this._showCodexToast('🪱 鱼饵不足，已切换为初级鱼饵');
+        }
+        // 通知 HUD 刷新（库存数 + 装备态变化）
+        if (window.fishingHUD) window.fishingHUD.render();
+      }
     }
 
     // 同步任务进度

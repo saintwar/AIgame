@@ -23,6 +23,8 @@ const DEFAULT_SAVE = {
   player: {
     name: '阿明', x: 4, y: 5, money: 0, coin: 0,
     inventory: {}, codex: {}, equipment: { rod: 'basic_rod' },
+    // PHASE 16-6 仗4：当前装备的鱼饵 id（默认 basic_bait）
+    equippedBait: 'basic_bait',
     fishBag: [],
     // PHASE 16-6 仗1：鱼篓堆叠展示数据（与 fishBag 双轨并存）
     fishStorage: { ...DEFAULT_FISH_STORAGE, items: [] }
@@ -139,6 +141,11 @@ class Save {
       }
       // fishBag 兜底（老老存档极端情况）
       if (!Array.isArray(save.player.fishBag)) save.player.fishBag = [];
+
+      // PHASE 16-6 仗4：equippedBait 字段兜底（老存档无此字段 → 默认 basic_bait）
+      if (typeof save.player.equippedBait !== 'string') {
+        save.player.equippedBait = 'basic_bait';
+      }
     }
 
     // 标记到新版本（不强校验，仅作记录）

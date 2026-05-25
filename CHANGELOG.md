@@ -4,6 +4,75 @@
 
 ---
 
+## [Unreleased] · PHASE 16-6 仗4 — 鱼饵差异化效果 + 钓鱼消耗 + HUD 切换器
+
+> **现状摸排纠错**：任务书预测的 `player.baits = { worm/scented/premium }` **不存在** ——
+> 项目实际用 `player.inventory[basic_bait/advanced_bait/legendary_bait]` 统一物品系统
+> （仗3 林师傅店已就绪入库通道）。任务书预测的 `js/scenes/fishing-scene.js` 路径
+> 也对不上（实际为 `js/fishing-scene.js`，无 scenes/ 子目录）。
+> Q 键已是钓鱼"取消瞄准"键 → 主策划裁定改用**数字键 1/2/3 直接选档**。
+> 钓鱼场景零鼠标监听 → bait-selector 走 **DOM 弹窗**（A 方案，零侵入主循环）。
+> "saveAll" 项目中并不存在 → 库存改动靠 `inventory.add/remove` 自动 `Save.commit()` 落 localStorage。
+
+### 新增
+
+- `js/data/bait-effects.js` — `BAIT_EFFECTS` 配置 + `BAIT_ORDER` 切换序
+  - `basic_bait`：基线（rarityShift=0, sizeMul=1.0）
+  - `advanced_bait`：rarityBonus=0.3（30% 概率提档）+ sizeMul=1.1
+  - `legendary_bait`：rarityShift=1（必升档）+ sizeMul=1.25
+- `js/ui/bait-hud.js` — 钓鱼场景顶部正中常驻 HUD（DOM 弹窗）
+  - 3 档鱼饵横排：图标 + 库存 + hover tooltip 显示效果说明
+  - 当前装备：吉卜力暖橙描边 + 阴影发光高亮
+  - 库存=0：灰显（filter: grayscale）但仍可点击查看 tooltip
+  - 全局别名 `window.fishingHUD`，fishing-scene 切换 / 消耗时调 `render()` 刷新
+- `css/bait-hud.css` — 吉卜力暖橙风格（#d4a574 描边 + #fef6e4 米黄底 + #5a3e1c 深棕字）
+
+### 修改
+
+- `js/save-system.js` — 新增 `player.equippedBait = 'basic_bait'` 默认 + 老存档迁移兜底
+- `js/fishing-scene.js`：
+  - **`_selectFish` 末端注入鱼饵效果**（不重构上游 `rollFishWithRod`）：
+    - rarityShift / rarityBonus 触发时从 `SHUISHE_FISH_POOL` 按目标档位重抽
+    - sizeMul 直接乘 `currentFish.size[0]`（影响 caughtFishSize 基准）
+    - 触发飘字"🌸 香饵生效！" / "✨ 极品香饵威力！"
+  - **`_onFishCaught` 末端消耗 1 个鱼饵**（成功上钩即扣，含满篓退回；规则：防刷）：
+    - 稀有鱼饵显示"消耗 1 高级鱼饵（剩余 N）"
+    - 普通蚯蚓不提示（避免噪音）
+    - 库存=0 时自动切回 basic_bait + 飘字提示
+  - **`_updateIdle` 抛竿前校验**：
+    - basic_bait=0 → 阻断抛竿 + "❌ 鱼饵不足！请去林师傅店购买"
+    - 稀有鱼饵=0 但 basic_bait>0 → 自动切回 basic_bait 再抛
+  - **`_switchBaitByIndex(index)`** 方法：数字键 1/2/3 + HUD 点击共用入口
+    - 切换前校验库存（=0 时拒绝 + 飘字）
+    - 切换后写 player.equippedBait + commit + HUD render
+  - `start()` 挂载 baitHUD，`destroy()` 卸载（生命周期对齐）
+- `index.html` — 引入 `css/bait-hud.css?v=20260525`
+
+### 不动（红线遵守）
+
+- 林师傅店 / 秀兰售卖 / 鱼篓系统：零修改
+- 鱼种概率表（`SHUISHE_FISH_POOL` / `FISH_POOL`）：零修改，仅在 `_selectFish` 末端做修饰
+- 钓鱼判定核心循环（_updatePlaying/_checkEscape/_calculateEscapeChance）：零修改
+- 鱼饵保鲜期：未实现（P1 留）
+- 钓点关联：未实现（项目仅单一钓鱼场景，按任务书"留 P1"规则跳过）
+
+### DoD 12 项验收
+
+- [x] HUD 顶部正中显示当前鱼饵图标 + 库存（3 档横排，当前装备高亮）
+- [x] 点击图标弹出鱼饵选择面板 → **改为 HUD 即面板**（DOM 常驻，鼠标点击直接切档；3 档+效果 tooltip 替代弹窗，更简洁）
+- [x] 鱼饵面板显示 3 档 + 效果说明 + 库存（hover tooltip）
+- [x] 库存为 0 的鱼饵灰显（grayscale + opacity 0.4）
+- [x] 数字键 1/2/3 切换鱼饵（替代任务书 Q 键，避免与"取消瞄准"冲突）
+- [x] 选中鱼饵后 HUD 立刻刷新
+- [x] 钓上鱼成功后 player.inventory[当前] -= 1
+- [x] 当前鱼饵库存为 0 时自动切回 basic_bait
+- [x] 高级鱼饵 30% 概率提档（连续测可见"🌸 香饵生效"飘字）
+- [x] 传说鱼饵 rarityShift +1（必出更高档）
+- [x] 鱼饵生效时飘字"🌸 香饵生效"或"✨ 极品香饵威力"
+- [x] CloudBase 同步 → **项目实情：业务数据走 localStorage（Save.commit），equippedBait/inventory 持久化已 OK；老玩家 equippedBait 兜底初始化**
+
+---
+
 ## [Unreleased] · PHASE 16-6 仗3 UX 补丁 — 店铺键鼠双通道 & 「华灯初上盖店铺」bug 修
 
 > **现状摸排纠错**：老板任务书预测的 `lin-shop.js` / `lin-shop.css` / DOM rotate 90° 等
