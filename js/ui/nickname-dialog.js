@@ -50,7 +50,8 @@
           position: fixed; left: 0; top: 0; width: 100%; height: 100%;
           background: rgba(0,0,0,0.65); z-index: 9999;
           display: flex; align-items: center; justify-content: center;
-          font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
+          font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif,
+                       'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
           backdrop-filter: blur(2px);
         `;
 

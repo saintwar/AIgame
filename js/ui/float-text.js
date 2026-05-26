@@ -45,7 +45,11 @@ function ensureStyle() {
       top: 30%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
+      /* 末尾追加 emoji 字体：飘字含 🪱 ⏰ 💔 ✨ 等 emoji，前面字体均不含这些字符，
+         若 fallback 链末尾没有 emoji 字体，浏览器会显示豆腐方框（旧 bug：🪱→□）。
+         按 macOS / Windows / Linux 顺序覆盖。 */
+      font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif,
+                   'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
       text-shadow: 0 0 8px #000, 0 0 16px #000;
       pointer-events: none;
       z-index: 1000;

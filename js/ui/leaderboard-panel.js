@@ -46,7 +46,8 @@
         z-index: 9999;
         opacity: 0; pointer-events: none;
         transition: opacity 0.25s ease;
-        font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
+        font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif,
+                     'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
       }
       .leaderboard-overlay.show { opacity: 1; pointer-events: auto; }
 
@@ -163,7 +164,8 @@
         color: ${C_BG};
         cursor: pointer;
         box-shadow: 0 3px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
-        font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
+        font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif,
+                     'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
         letter-spacing: 1px;
         transition: transform 0.15s, box-shadow 0.15s;
       }

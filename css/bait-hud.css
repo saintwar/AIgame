@@ -25,7 +25,8 @@
   border: 2px solid #d4a574;
   border-radius: 14px;
   box-shadow: 0 4px 14px rgba(90, 62, 28, 0.25);
-  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Heiti SC', sans-serif;
+  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Heiti SC', sans-serif,
+               'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   user-select: none;
   pointer-events: auto;
   white-space: nowrap;
