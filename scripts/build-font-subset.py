@@ -135,8 +135,13 @@ def main():
     #   --layout-features='*'       保留所有 OpenType 布局特性（连字/字距）
     #   --no-hinting                去除 hinting（小幅减小体积，对中文几乎无影响）
     #   --desubroutinize            CFF 字体去子例程（这里是 TTF，无影响）
-    #   --notdef-glyph              保留 .notdef glyph（缺字时显示豆腐而非崩溃）
-    #   --notdef-outline            .notdef 保留轮廓
+    #   --notdef-glyph              保留 .notdef glyph 结构（结构必需，不然某些渲染管线崩溃）
+    #   --no-notdef-outline         .notdef 不保留轮廓 ★关键
+    #     原因：TencentSans-W7 的 .notdef 字形长得像数字 "0"（不是常见的空心方框）。
+    #     当 DOM/Canvas 渲染 emoji（🪱 🌸 ✨ 等）时，Chrome 优先用当前字体的 .notdef 字形
+    #     渲染，而不是回退到系统 Apple Color Emoji → 屏幕显示成 "0"（如挖蚯蚓飘字
+    #     "🪱🪱 +2 不错!" 变成 "00 +2 不错!"）。
+    #     去掉 .notdef 轮廓后，缺字字形为空，浏览器才会触发 emoji 字体 fallback。
     #   --recalc-bounds             重算字形边界框
     #   --recalc-timestamp          重写时间戳（reproducible build）
     cmd = [
@@ -147,7 +152,7 @@ def main():
         "--flavor=woff2",
         "--layout-features=*",
         "--notdef-glyph",
-        "--notdef-outline",
+        "--no-notdef-outline",
         "--recalc-bounds",
         "--recalc-timestamp",
         "--drop-tables+=DSIG",  # 删数字签名表（无用且占空间）

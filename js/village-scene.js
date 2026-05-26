@@ -2651,10 +2651,13 @@ class VillageScene {
     });
 
     // 保留任务标记（角色宽32px，中心在 px+16）
+    // HOTFIX：原 y=py-28 与名字标签 box（py-28~py-8）完全重叠，48px serif "?" 字符高度
+    // ~48px → 覆盖到 npc.py-52~py-4 → 截图里"阿土伯"的"土"被问号压住，看起来像"阿?伯"。
+    // 移到名字标签上方（py-44，留出名字 box 20px + 间距）。
     for (const npc of this.npcs) {
       const cx = npc.px + 16;
       const py = npc.py + npc.bobOffset;
-      this._renderNPCMarker(ctx, npc, cx, py - 28);
+      this._renderNPCMarker(ctx, npc, cx, py - 44);
     }
   }
 
@@ -2692,7 +2695,9 @@ class VillageScene {
     }
 
     if (icon) {
-      ctx.font = 'bold 48px serif';
+      // 任务标记字体：原 serif 衬线，与全局字体风格不一致；改用与项目一致的 sans 字体
+      // （? ! ✓ 都是 ASCII / 通用符号，子集字体均覆盖）
+      ctx.font = 'bold 36px "TencentSansW7", "PingFang SC", "Heiti SC", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       // 描边效果
