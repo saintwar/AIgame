@@ -16,3 +16,7 @@
 
 # 依赖
 node_modules/
+
+# 字体源文件（仅本地用于跑 scripts/build-font-subset.py 子集化，
+# 8MB+ 体积不入库；线上 @font-face 引用的是同目录生成的 woff2）
+font/TencentSans-W7.ttf

@@ -20,7 +20,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
+  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
   /* 防止页面滚动条引发尺寸抖动 */
   overflow: hidden;
   /* 默认完全不透明，hide() 时通过 inline style 触发淡出 */

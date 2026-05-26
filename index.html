@@ -70,7 +70,10 @@
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
+      /* HOTFIX：字体兜底链改为简体优先（原 'Noto Sans TC'/'PingFang TC' 繁体字库
+         对部分简体字（"得 土 伯 招 姨"等）字形缺失，会进一步回退到系统衬线，
+         导致同句话出现衬线/无衬线混排。改为 PingFang SC + Noto Sans SC 简体优先。 */
+      font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
       overflow: hidden;
     }
     #game-root {

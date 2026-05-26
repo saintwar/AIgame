@@ -45,7 +45,7 @@ function ensureStyle() {
       top: 30%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-family: 'TencentSans', 'Noto Sans TC', 'PingFang TC', 'Microsoft YaHei', sans-serif;
+      font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif;
       text-shadow: 0 0 8px #000, 0 0 16px #000;
       pointer-events: none;
       z-index: 1000;

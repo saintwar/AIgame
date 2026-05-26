@@ -38,9 +38,14 @@ FONT_SRC = ROOT / "font" / "TencentSans-W7.ttf"
 FONT_OUT_WOFF2 = ROOT / "font" / "TencentSans-W7.woff2"
 
 # 扫描的文件
+# HOTFIX：原本只扫一层 js/*.js + *.html，导致 js/data/ js/ui/ js/render/ 子目录
+# 全部漏扫（dialogues.js / npcs.js / leaderboard-panel.js 等几百个汉字进不了子集，
+# 浏览器对缺字回退到系统衬线 → 同句话出现两种字体）。
+# 改为递归 ** 通配 + 兜底 css/，确保不再漏字。
 SCAN_GLOBS = [
-    "js/*.js",
-    "*.html",
+    "js/**/*.js",
+    "**/*.html",
+    "css/**/*.css",
 ]
 
 # 兜底字符集：即使代码里没出现，也强制保留

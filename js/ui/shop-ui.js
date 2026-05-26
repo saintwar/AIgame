@@ -484,7 +484,7 @@ export class ShopUI {
       animation: coinFloatFade 1.6s ease-out forwards;
     `;
     div.innerHTML = `
-      <div style="font:bold 36px 'TencentSans','Noto Sans TC',sans-serif;color:#FFD700;text-shadow:0 0 12px #FFD700;">${big}</div>
+      <div style="font:bold 36px 'TencentSans','PingFang SC','Noto Sans SC','Heiti SC',sans-serif;color:#FFD700;text-shadow:0 0 12px #FFD700;">${big}</div>
       ${sub ? `<div style="font:18px 'TencentSans',sans-serif;color:#fff;opacity:.85;margin-top:4px">${sub}</div>` : ''}
     `;
     if (!document.getElementById('coin-float-style')) {

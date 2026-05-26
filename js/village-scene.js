@@ -1772,7 +1772,7 @@ class VillageScene {
       padding: 16px 32px;
       background: rgba(0,0,0,0.8);
       color: #FFD700;
-      font: bold 32px "TencentSans","Noto Sans TC",sans-serif;
+      font: bold 32px "TencentSans","PingFang SC","Noto Sans SC","Heiti SC",sans-serif;
       border: 3px solid #FFD700;
       border-radius: 10px;
       z-index: 500;
@@ -1808,7 +1808,7 @@ class VillageScene {
       padding: 16px 32px;
       background: rgba(0,0,0,0.8);
       color: #7CFC00;
-      font: bold 28px "TencentSans","Noto Sans TC",sans-serif;
+      font: bold 28px "TencentSans","PingFang SC","Noto Sans SC","Heiti SC",sans-serif;
       border: 3px solid #7CFC00;
       border-radius: 10px;
       z-index: 500;
@@ -2514,7 +2514,7 @@ class VillageScene {
           const txt = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
           ctx.save();
           ctx.fillStyle = '#FFD700';
-          ctx.font = 'bold 18px "TencentSans","PingFang TC","Microsoft YaHei",sans-serif';
+          ctx.font = 'bold 18px "TencentSans","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.shadowColor = '#000';
@@ -2799,7 +2799,7 @@ class VillageScene {
       // 量字宽 → 自适应胶囊尺寸（与 NPC 金圆同色板，扩展为胶囊容纳长文案）
       const text = '🪱 点击 / [E] 挖掘';
       ctx.save();
-      ctx.font = 'bold 14px "TencentSansW7","PingFang TC","Microsoft YaHei",sans-serif';
+      ctx.font = 'bold 14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       const textW = ctx.measureText(text).width;
       const padX = 10, padY = 6;
       const boxW = textW + padX * 2;
@@ -3431,7 +3431,7 @@ class VillageScene {
       padding: 18px 36px;
       background: rgba(0,0,0,0.75);
       color: #FFD700;
-      font: bold 28px "TencentSans","Noto Sans TC",sans-serif;
+      font: bold 28px "TencentSans","PingFang SC","Noto Sans SC","Heiti SC",sans-serif;
       border: 3px solid #FFD700;
       border-radius: 12px;
       z-index: 300;

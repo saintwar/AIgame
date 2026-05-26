@@ -17,7 +17,7 @@
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(139, 90, 43, 0.4);
   padding: 20px 22px;
-  font-family: 'TencentSans', 'Noto Sans TC', sans-serif;
+  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Heiti SC', sans-serif;
   z-index: 9000;
   overflow-y: auto;
   color: #4a3520;
@@ -189,7 +189,7 @@
   border-radius: 16px;
   padding: 22px 36px;
   text-align: center;
-  font-family: 'TencentSans', 'Noto Sans TC', sans-serif;
+  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Heiti SC', sans-serif;
   box-shadow: 0 0 40px rgba(232, 156, 74, 0.6),
               0 8px 24px rgba(0, 0, 0, 0.25);
   /* 坑 4：< splash(99999) 但高于面板（9000） */
@@ -239,7 +239,7 @@
   padding: 8px 14px;
   color: #ffd580;
   font-size: 14px;
-  font-family: 'TencentSans', 'Noto Sans TC', sans-serif;
+  font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Heiti SC', sans-serif;
   font-weight: bold;
   cursor: pointer;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4),
