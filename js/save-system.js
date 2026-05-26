@@ -42,7 +42,11 @@ const DEFAULT_SAVE = {
     // PHASE 16-6 仗1：鱼篓堆叠展示数据（与 fishBag 双轨并存）
     fishStorage: { ...DEFAULT_FISH_STORAGE, items: [] },
     // PHASE 17 仗1：体力系统（钓鱼/未来玩法消耗、跨日重置）
-    stamina: { ...DEFAULT_STAMINA }
+    stamina: { ...DEFAULT_STAMINA },
+    // PHASE 18 仗3：挖蚯蚓 — 16 块地格的独立 30min CD（key=tile_<tx>_<ty>，value=可挖时间戳）
+    diggingCD: {},
+    // PHASE 18 仗3：连续空挖计数（全局，3 次必出蚯蚓×1 保底）
+    dryDigCount: 0
   },
   quests: {},
   inventory: { fish: [] },
@@ -207,6 +211,17 @@ class Save {
         save.player.coin = (save.player.coin || 0) + save.player.money;
         console.log(`[migrate] 回收孤儿 player.money=${save.player.money} → player.coin=${save.player.coin}`);
         save.player.money = 0;
+      }
+
+      // PHASE 18 仗3：挖蚯蚓字段兜底
+      //   - diggingCD：每格独立 30min CD 时间戳；老存档缺失 → 空对象（全格可挖）
+      //   - dryDigCount：连续空挖计数（保底机制）；老存档缺失 → 0
+      //   注：跨日 4:00 重置不影响 CD（CD 由 Date.now() 比对，自然延续）
+      if (!save.player.diggingCD || typeof save.player.diggingCD !== 'object') {
+        save.player.diggingCD = {};
+      }
+      if (typeof save.player.dryDigCount !== 'number' || save.player.dryDigCount < 0) {
+        save.player.dryDigCount = 0;
       }
     }
 

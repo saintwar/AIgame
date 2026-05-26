@@ -9,6 +9,7 @@ import questSystem from './quest-system.js';
 import { QUESTS } from './data/quests.js';
 import { InventoryUI } from './ui/inventory-ui.js';
 import { CoinHUD } from './ui/coin-hud.js';
+import { StaminaHUD } from './ui/stamina-hud.js';
 import { CodexUI } from './ui/codex-ui.js';
 import { ShopUI } from './ui/shop-ui.js';
 import { RestPanel } from './ui/rest-panel.js';
@@ -26,6 +27,7 @@ import { drawLakeReflections } from './render/reflections.js';
 import { drawNameTag } from './render/name-tag.js';
 import { drawFarmland } from './render/farmland.js';
 import { drawFlowerbed } from './render/flowerbed.js';
+import diggingSystem from './digging-system.js';
 import { drawTitleBg } from './render/title-bg.js';
 import {
   drawDynamicSky, drawDynamicOverlay,
@@ -217,6 +219,11 @@ class VillageScene {
     // 背包 & 金币 HUD
     this.inventoryUI = null;
     this.coinHUD = null;
+    // PHASE 18 仗3 hotfix：体力 HUD（沿用钓鱼场景木牌+像素心形风格，左上角金币胶囊右侧）
+    this.staminaHUD = null;
+    // PHASE 18 仗3 hotfix：鼠标当前悬停的格子（用于 CD 倒计时按需显示）；null = 不在任何格上
+    //   {tx, ty} — 由 _moveHandler 玩法分支末尾在"无面板"时更新；离开 canvas / 进面板 → 重置 null
+    this._hoverTile = null;
 
     // 图鉴 UI
     this.codexUI = null;
@@ -279,6 +286,9 @@ class VillageScene {
     // 初始化背包 UI & 金币 HUD
     this.inventoryUI = new InventoryUI(this.canvas, window.inventory);
     this.coinHUD = new CoinHUD(window.inventory);
+    // PHASE 18 仗3 hotfix：体力 HUD（金币胶囊右侧；金币胶囊宽 180 + 间距 10 → x=210）
+    //   宽 150 / 高 44 与金币胶囊高度对齐
+    this.staminaHUD = new StaminaHUD({ x: 210, y: 20, w: 150, h: 44 });
 
     // 初始化图鉴 UI
     this.codexUI = new CodexUI(this.canvas, window.codex);
@@ -1107,7 +1117,17 @@ class VillageScene {
       else if (k === 'g') this.showGrid = !this.showGrid;
       else if (k === 'q') { this.questPanelOpen = true; AudioSystem.playMenuOpen(); }
       else if (k === 'p' && !this.debug) this._resetGame();
-      else if (k === 'e') this._tryInteract();
+      else if (k === 'e') {
+        // PHASE 18 仗3：挖蚯蚓 — 优先级高于 NPC 互动
+        //   规则：玩家相邻 (曼哈顿=1) 任意可挖地块格子 → 触发挖；否则走原 NPC 流程
+        //   挖掘成功(true) / 被 CD/体力/锁拦截(false) 都视为"挖掘意图"消费 e 键，不再 fallback NPC，
+        //   避免"靠近地块时按 e 误触地块旁的 NPC"。
+        if (this._tryDigNearby()) {
+          // 挖掘流程已处理（成功扣体力 或 提示后被拦）
+        } else {
+          this._tryInteract();
+        }
+      }
       else if (k === 'f') this._tryFishing();
       else if (k === 'm') {
         AudioSystem.init();
@@ -1198,6 +1218,20 @@ class VillageScene {
             return;
           }
         }
+
+        // PHASE 18 仗3：点击地块格子 — 玩家相邻才触发挖（不相邻 → 走 ClickToMove 寻路；
+        //   但 ROOF 不在 WALKABLE，寻路终点会落到相邻可走格 → 自然不与 ClickToMove 冲突）
+        {
+          const { x, y } = toCanvasXY(e);
+          const gx = Math.floor(x / 64);
+          const gy = Math.floor(y / 64);
+          if (diggingSystem.isDigTile(gx, gy)
+              && diggingSystem.isAdjacent(this.player.tx, this.player.ty, gx, gy)) {
+            diggingSystem.tryDig(gx, gy);
+            e.stopImmediatePropagation();   // 防止 ClickToMove 再寻路（不相邻时不阻断，让寻路自然进行）
+            return;
+          }
+        }
         return;  // 玩法阶段无面板 → 交给 ClickToMove 处理
       }
 
@@ -1220,28 +1254,33 @@ class VillageScene {
         // PHASE 16-4.8 仗4：对话激活 → 整框可点 → cursor pointer
         if (dialogueSystem.isActive()) {
           this.canvas.style.cursor = 'pointer';
+          this._hoverTile = null;
           return;
         }
         // PHASE 16-6 仗3 UX：店铺面板优先派发 hover
         if (this.shopUI && this.shopUI.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.shopUI.handleMouseMove(x, y);
+          this._hoverTile = null;
           return;
         }
         // PHASE 17 仗2：秀兰民宿弹窗 hover 派发
         if (this.restPanel && this.restPanel.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.restPanel.handleMouseMove(x, y);
+          this._hoverTile = null;
           return;
         }
         if (this.inventoryUI && this.inventoryUI.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.inventoryUI.handleMouseMove(x, y);
+          this._hoverTile = null;
           return;
         }
         if (this.codexUI && this.codexUI.visible) {
           const { x, y } = toCanvasXY(e);
           this.canvas.style.cursor = this.codexUI.handleMouseMove(x, y);
+          this._hoverTile = null;
           return;
         }
         // PHASE 16-4.8 仗4：栈桥上 → hover 底部钓鱼提示条 → cursor pointer
@@ -1250,9 +1289,16 @@ class VillageScene {
           if (x >= 0 && x <= 1280 && y >= 680 && y <= 720) {
             this.canvas.style.cursor = 'pointer';
             this._fishingHintHover = true;
+            this._hoverTile = null;
             return;
           }
           this._fishingHintHover = false;
+        }
+        // PHASE 18 仗3 hotfix：无面板时记录鼠标当前所在格（供 digging-overlay CD 倒计时按需显示）
+        //   T=64；超出地图范围 → 不更新（保留上一次值无所谓，render 端会用 isDigTile 二次过滤）
+        {
+          const { x, y } = toCanvasXY(e);
+          this._hoverTile = { tx: Math.floor(x / 64), ty: Math.floor(y / 64) };
         }
         // 无面板：恢复默认（ClickToMove 自己会按 hover 网格设置 cursor）
         return;
@@ -1275,6 +1321,9 @@ class VillageScene {
     };
     this._upHandler = () => { this._btnPressed = false; };
 
+    // PHASE 18 仗3 hotfix：鼠标移出 canvas → 清空悬停格，避免 CD 倒计时残留显示
+    this._leaveHandler = () => { this._hoverTile = null; };
+
     // PHASE 16-6 仗3 UX：双击仅店铺商品行使用（双击购买）
     //   - 浏览器 dblclick 是 click 之后另发的事件，不会和单击 selected 冲突
     //   - 仅在 buy 模式 + 命中商品行 时消费；其它面板透传给单击逻辑
@@ -1294,6 +1343,7 @@ class VillageScene {
     this.canvas.addEventListener('click', this._clickHandler);
     this.canvas.addEventListener('dblclick', this._dblClickHandler);
     this.canvas.addEventListener('mousemove', this._moveHandler);
+    this.canvas.addEventListener('mouseleave', this._leaveHandler);
     this.canvas.addEventListener('mousedown', this._downHandler);
     window.addEventListener('mouseup', this._upHandler);
   }
@@ -1308,9 +1358,11 @@ class VillageScene {
     if (this._clickHandler && this.canvas) {
       this.canvas.removeEventListener('click', this._clickHandler);
       this.canvas.removeEventListener('mousemove', this._moveHandler);
+      this.canvas.removeEventListener('mouseleave', this._leaveHandler);
       this.canvas.removeEventListener('mousedown', this._downHandler);
       this._clickHandler = null;
       this._moveHandler = null;
+      this._leaveHandler = null;
       this._downHandler = null;
     }
     if (this._dblClickHandler && this.canvas) {
@@ -1401,10 +1453,24 @@ class VillageScene {
   }
 
   // ========================================================
+  // PHASE 18 仗3：挖蚯蚓 — 找到玩家相邻最近的可挖地块格并尝试挖
+  // ========================================================
+  /**
+   * @returns {boolean} 是否找到相邻地块（无论挖掘是否被 CD/体力拦截，只要相邻就视为"挖掘意图"，
+   *   返回 true 让 e 键消费在挖掘上而不 fallback NPC 互动）
+   */
+  _tryDigNearby() {
+    if (dialogueSystem.isActive()) return false;
+    const near = diggingSystem.getNearestAdjacentTile(this.player.tx, this.player.ty);
+    if (!near) return false;
+    diggingSystem.tryDig(near.tile.tx, near.tile.ty);
+    return true;
+  }
+
+  // ========================================================
   // NPC 互动
   // ========================================================
   _tryInteract() {
-    if (dialogueSystem.isActive()) return;
 
     let nearestNpc = null;
     let nearestDist = Infinity;
@@ -1723,6 +1789,8 @@ class VillageScene {
 
     // 金币 HUD 更新
     if (this.coinHUD) this.coinHUD.update(dt);
+    // PHASE 18 仗3 hotfix：体力 HUD 更新（当前 no-op，预留未来动画/弹跳）
+    if (this.staminaHUD) this.staminaHUD.update(dt);
 
     // PHASE 16-4.8 仗1：鼠标点击寻路推进（必须在 WASD 段之前）
     //   - 返回 true：本帧由寻路控制玩家移动 → 跳过 WASD 段，避免 else 分支把 frame=0
@@ -1950,6 +2018,8 @@ class VillageScene {
     // Layer 7: 引导箭头、交互提示、小地图、任务HUD
     this.arrow.render(ctx, this.player);
     this._renderInteractionHints();
+    // PHASE 18 仗3 微调 v3：可挖格子交互提示（与 NPC 提示同层，相邻 ≤1 + 可挖才显示）
+    this._renderDigHints();
     this._renderFishingHint();
     this._renderQuestHUD();
     this._renderMinimap();
@@ -1960,6 +2030,8 @@ class VillageScene {
 
     // 金币 HUD（常驻）
     if (this.coinHUD) this.coinHUD.render(ctx);
+    // PHASE 18 仗3 hotfix：体力 HUD（常驻，与金币 HUD 同层级）
+    if (this.staminaHUD) this.staminaHUD.render(ctx);
 
     // 背包面板（覆盖层）
     if (this.inventoryUI) this.inventoryUI.render(ctx);
@@ -2187,6 +2259,87 @@ class VillageScene {
 
     // 右下红色色块 → 菜苗农田（覆盖 ROOF tiles at [4][15],[4][16],[5][15],[5][16]）
     drawFarmland(ctx, 15 * T, 4 * T, 2 * T, 2 * T);
+
+    // PHASE 18 仗3：挖蚯蚓 — 16 格地块叠加层（CD 倒计时 / 低体力灰显 / 相邻金边高亮）
+    this._renderDiggingOverlay(ctx, T);
+  }
+
+  // ========================================================
+  // PHASE 18 仗3：挖蚯蚓视觉叠加层
+  //   - 体力 < 2：所有可挖格 alpha 0.4 + 灰色叠加（饱和度归零的廉价近似）
+  //   - CD 中：黑色半透明蒙层（常驻）；倒计时数字按需显示 — 玩家相邻该格 或 鼠标悬停该格
+  //     （hotfix：原 16 格倒计时全屏常驻太吵，改为"按需"，玩家不关心的格仅留蒙层提示状态）
+  //   - 玩家相邻该格 且 CD 已到 且 体力 ≥ 2：描金边 #FFD700 / 2px / 1.2s sin 呼吸
+  // ========================================================
+  _renderDiggingOverlay(ctx, T) {
+    const tiles = diggingSystem.getAllTiles();
+    const SS = window.StaminaSystem;
+    const lowStamina = !!(SS && typeof SS.getCurrent === 'function' && SS.getCurrent() < 2);
+    const px = this.player.tx;
+    const py = this.player.ty;
+    const hover = this._hoverTile;   // {tx,ty} | null
+
+    // 呼吸：1.2s 周期 → ω = 2π / 1.2 ≈ 5.236
+    const breath = 0.5 + 0.5 * Math.sin(this.time * (2 * Math.PI / 1.2));
+
+    for (const t of tiles) {
+      const x = t.tx * T;
+      const y = t.ty * T;
+      const cdLeft = diggingSystem.getCDRemainMs(t.tx, t.ty);
+      const onCD = cdLeft > 0;
+
+      // ① 体力不足：alpha 0.4 + 灰色叠加（在所有格上盖一层中灰，模拟饱和度归零）
+      if (lowStamina) {
+        ctx.save();
+        ctx.globalAlpha = 0.6;          // 总体压暗
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(x, y, T, T);
+        ctx.restore();
+      }
+
+      // ② CD 中：半透明黑蒙层（常驻）；倒计时数字仅在玩家相邻或鼠标悬停时显示
+      if (onCD) {
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x, y, T, T);
+        ctx.restore();
+
+        // hotfix：按需显示倒计时（避免 16 格全屏常驻数字太吵）
+        //   - 玩家曼哈顿距离 ≤ 1 → 显示（"走近就能看见自己马上能挖的那一格还剩多久"）
+        //   - 鼠标悬停该格    → 显示（"想看哪一格悬停哪一格"）
+        const playerNear = (Math.abs(px - t.tx) + Math.abs(py - t.ty)) <= 1;
+        const mouseHover = !!(hover && hover.tx === t.tx && hover.ty === t.ty);
+        if (playerNear || mouseHover) {
+          // 倒计时 mm:ss
+          const mm = Math.floor(cdLeft / 60000);
+          const ss = Math.floor((cdLeft % 60000) / 1000);
+          const txt = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+          ctx.save();
+          ctx.fillStyle = '#FFD700';
+          ctx.font = 'bold 18px "TencentSans","PingFang TC","Microsoft YaHei",sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#000';
+          ctx.shadowBlur = 4;
+          ctx.fillText(txt, x + T / 2, y + T / 2);
+          ctx.restore();
+        }
+      }
+
+      // ③ 玩家相邻 + 可挖（非 CD 且 体力够）→ 金边呼吸高亮
+      const adjacent = (Math.abs(px - t.tx) + Math.abs(py - t.ty)) <= 1;
+      if (adjacent && !onCD && !lowStamina) {
+        ctx.save();
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.55 + 0.45 * breath;     // 0.55 ↔ 1.0 呼吸
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 6 + 6 * breath;
+        ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
+        ctx.restore();
+      }
+    }
   }
 
   // 建筑渲染已移至 Layer 3（见 render 方法中的直接调用）
@@ -2409,6 +2562,79 @@ class VillageScene {
         ctx.textBaseline = 'middle';
         ctx.fillText('E', hintX, hintY);
       }
+    }
+  }
+
+  // ========================================================
+  // PHASE 18 仗3 微调 v3：可挖格子交互提示
+  //   - 玩家曼哈顿距离 ≤ 1 的【可挖】（CD=0 且 体力≥2）格子上方显示提示框
+  //   - 文案：🪱 点击 / [E] 挖掘
+  //   - 视觉：沿用 NPC 提示色板 #E8C84C 底 + #3D2B1F 边/字（与 _renderInteractionHints 一致）
+  //   - 隐藏条件：对话激活 / 任意面板可见 / 距离>1 / CD 中 / 体力<2
+  // ========================================================
+  _renderDigHints() {
+    if (dialogueSystem.isActive()) return;
+    // 任意面板可见时不画（避免覆盖在面板下/上造成混乱）
+    if (this.shopUI && this.shopUI.visible) return;
+    if (this.restPanel && this.restPanel.visible) return;
+    if (this.inventoryUI && this.inventoryUI.visible) return;
+    if (this.codexUI && this.codexUI.visible) return;
+
+    const SS = window.StaminaSystem;
+    const lowStamina = !!(SS && typeof SS.getCurrent === 'function' && SS.getCurrent() < 2);
+    if (lowStamina) return;   // 体力不足 → 已有飘字反馈，不显示提示
+
+    const T = 64;
+    const px = this.player.tx;
+    const py = this.player.ty;
+    const tiles = diggingSystem.getAllTiles();
+    const ctx = this.ctx;
+
+    for (const t of tiles) {
+      // 仅 玩家相邻（曼哈顿 ≤ 1） + 非 CD 的格子
+      if ((Math.abs(px - t.tx) + Math.abs(py - t.ty)) > 1) continue;
+      if (diggingSystem.getCDRemainMs(t.tx, t.ty) > 0) continue;
+
+      // 提示框中心：格子顶部正上方 24px
+      const cx = t.tx * T + T / 2;
+      const cy = t.ty * T - 24;
+
+      // 量字宽 → 自适应胶囊尺寸（与 NPC 金圆同色板，扩展为胶囊容纳长文案）
+      const text = '🪱 点击 / [E] 挖掘';
+      ctx.save();
+      ctx.font = 'bold 14px "TencentSansW7","PingFang TC","Microsoft YaHei",sans-serif';
+      const textW = ctx.measureText(text).width;
+      const padX = 10, padY = 6;
+      const boxW = textW + padX * 2;
+      const boxH = 14 + padY * 2;
+      const boxX = cx - boxW / 2;
+      const boxY = cy - boxH / 2;
+
+      // 圆角矩形底（NPC 金 #E8C84C）
+      const r = 6;
+      ctx.beginPath();
+      ctx.moveTo(boxX + r, boxY);
+      ctx.lineTo(boxX + boxW - r, boxY);
+      ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
+      ctx.lineTo(boxX + boxW, boxY + boxH - r);
+      ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH);
+      ctx.lineTo(boxX + r, boxY + boxH);
+      ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
+      ctx.lineTo(boxX, boxY + r);
+      ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+      ctx.closePath();
+      ctx.fillStyle = '#E8C84C';
+      ctx.fill();
+      ctx.strokeStyle = '#3D2B1F';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 文案
+      ctx.fillStyle = '#3D2B1F';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx, cy + 1);
+      ctx.restore();
     }
   }
 
