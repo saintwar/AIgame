@@ -181,6 +181,7 @@ class VillageScene {
     this.showGrid = false;
     this.questPanelOpen = false;
     this._audioStarted = false;
+    this._loginBgmStarted = false; // 登录 BGM 幂等标记（仅 intro 阶段使用）
     this.onFishingSpot = false;
     this._lastPhase = -1;    // 上一帧昼夜相位（用于检测时段变化）
     this._lastPhaseText = ''; // 上一帧时段文字
@@ -383,6 +384,11 @@ class VillageScene {
     this.currentNarrLine = 0;
     this.narrOpacity = 0;
     this._updateNarrOpacity();
+    // 登录界面 BGM（旁白 + 标题阶段共用 login.mp3）
+    //   AudioSystem.playBGM 内部已处理浏览器自动播放策略：
+    //     - 首次手势前调用 → 挂起到 _pendingBGM，等首次 click/keydown 后自动播放
+    //     - 用户点开始游戏（_skipIntro）时会 playBGM('village_bgm.mp3') → 内部 stopBGM 后无缝切歌
+    this._playLoginBGM();
   }
 
   _updateNarrOpacity() {
@@ -454,6 +460,31 @@ class VillageScene {
   _startTitleCard() {
     this.introState = 'title';
     this.introTimer = 0;
+    // 老存档跳过旁白直接进标题：同样需要登录 BGM
+    this._playLoginBGM();
+  }
+
+  /**
+   * 登录界面 BGM 播放（幂等）
+   *   - 仅在 intro 阶段（旁白 + 标题）调用；_skipIntro 后会被 village_bgm 替换
+   *   - 用 _loginBgmStarted 防同实例重复加载
+   *   - PHASE 18 仗5：main.js bootstrap 已主动 playBGM('login.mp3') 把它挂起到
+   *     _pendingBGM（玩家点击 splash 时自动播放），所以村庄进 intro 时若检测到
+   *     AudioSystem 已经在播 / 已挂起 login.mp3，跳过本次调用以避免 stopBGM →
+   *     重新加载导致的"咔"一下断音。
+   */
+  _playLoginBGM() {
+    if (this._loginBgmStarted) return;
+    this._loginBgmStarted = true;
+    AudioSystem.init();
+    // 幂等检测：main.js 已挂起 / 已播 login.mp3，不重复调用
+    const curSrc = AudioSystem._bgmAudio && AudioSystem._bgmAudio.src;
+    const pendSrc = AudioSystem._pendingBGM && AudioSystem._pendingBGM.src;
+    if ((curSrc && curSrc.indexOf('login.mp3') >= 0) ||
+        (pendSrc && pendSrc.indexOf('login.mp3') >= 0)) {
+      return;
+    }
+    AudioSystem.playBGM('music/login.mp3');
   }
 
   _showTitleCard(ctx, cw, ch) {

@@ -103,6 +103,13 @@
   transition: opacity 0.3s ease;
 }
 
+/* PHASE 18 仗5：splash 进度满后切到"点击进入"提示，用呼吸闪烁吸引玩家点击。
+   动画通过 inline style 由 splash-loader.js 在 prepareReady() 里挂上。 */
+@keyframes splash-tip-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.7; transform: scale(1.04); }
+}
+
 /* 小屏幕（手机端）适配：等比缩放，不让进度条溢出 */
 @media (max-width: 420px) {
   .splash-logo { font-size: 34px; margin-bottom: 28px; letter-spacing: 2px; }

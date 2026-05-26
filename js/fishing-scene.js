@@ -227,7 +227,11 @@ class FishingScene {
     this.ctx.font = '16px "TencentSansW7", "Noto Sans TC", sans-serif';
   }
 
-  start() { this.paused = false; this.lastTime = performance.now(); AudioSystem.playFishingAmbient(); this._loop();
+  start() { this.paused = false; this.lastTime = performance.now();
+    // 钓鱼场景 BGM：从程序化水声 ambient → 外部 mp3（music/effects.mp3）
+    //   playBGM 内部会先 stopBGM（清掉村庄 BGM 实例），与 village→fishing 切场景天然契合
+    AudioSystem.playBGM('music/effects.mp3');
+    this._loop();
     // PHASE 16-6 仗4：挂载鱼饵切换 HUD
     baitHUD.mount((index) => this._switchBaitByIndex(index));
   }
@@ -449,7 +453,15 @@ class FishingScene {
           this._showCodexToast('🪱 鱼饵不足，已切换为初级鱼饵');
           if (window.fishingHUD) window.fishingHUD.render();
         } else {
-          this._showCodexToast('❌ 鱼饵不足！请去林师傅店购买');
+          // PHASE 18 仗7：鱼饵不足提示·双轨化
+          //   林师傅店要 q003 完成后才开放（村庄场景 lin_shop 对话同条件，line 1628）
+          //   q001/q002 阶段引导玩家去林师傅店会扑空 → 改为引导挖蚯蚓玩法（PHASE 18 仗3）
+          //   q003 完成后保留店铺路径，但同时提示挖蚯蚓作为免费替代
+          const linShifuOpen = questSystem.getStatus('q003') === 'completed';
+          const tip = linShifuOpen
+            ? '❌ 鱼饵不足！可去林师傅店购买，或到农田/花圃挖蚯蚓'
+            : '❌ 鱼饵不足！去农田或花圃挖蚯蚓吧';
+          this._showCodexToast(tip);
           return;
         }
       }

@@ -83,12 +83,13 @@ window.inventory = new InventorySystem(Save);
 }
 
 // 首次新建存档时给予初始物资
-//   PHASE 17 hotfix - basic_bait 已由 save-system.migrate 兜底到 999（新手鱼饵死锁修复），
-//   所以此处不能再用"inventory 整体为空"判定首次新档（永远不为空）。
-//   改为按物品逐项判定缺失：basic_rod 没有就发，basic_bait 由 migrate 全权负责，不在此重复处理。
+//   PHASE 18 仗4：worm=999 兜底已退役。新玩家 basic_bait=5 由 save-system.DEFAULT_BAIT
+//   在 reset / 首次 load 时直接初始化；老存档已有数值不动；用光后通过挖蚯蚓玩法补给。
+//   所以此处不再用"inventory 整体为空"判定首次新档（仍永远不为空），改为按物品逐项判定：
+//   basic_rod 没有就发；basic_bait 走存档默认值 + 挖蚯蚓循环，不在此重复处理。
 if (window.inventory.getCount('basic_rod') === 0) {
   window.inventory.add('basic_rod', 1);
-  console.log('🎒 初始物资已发放：入门钓竿 ×1（basic_bait 由存档兜底，详见 save-system.migrate）');
+  console.log('🎒 初始物资已发放：入门钓竿 ×1（basic_bait 由 save-system 默认值 5 提供）');
 }
 
 // 初始化鱼类图鉴系统
@@ -368,15 +369,44 @@ window.ensureNickname = ensureNickname;
   } catch (e) {
     console.warn('[Bootstrap] PlayerProfile.load() 失败（不阻塞游戏）:', e && e.message);
   }
+
+  // PHASE 18 仗5：登录 BGM 提前到 bootstrap 挂起。
+  //   时序设计：
+  //     1) 这里调用 playBGM('login.mp3') → AudioSystem 因无手势挂起到 _pendingBGM
+  //     2) splash 加载完成 → 展示"点击进入"提示 → 玩家点击
+  //     3) 该点击同时被 AudioSystem 的首次手势监听捕获 → 创建 AudioContext
+  //        → init() 末尾自动 retry _pendingBGM → login.mp3 真正播放（与 splash 淡出同步）
+  //     4) 紧接着 SceneManager 进入村庄旁白第一帧 → BGM 已经在响 ✅
+  //   错误兜底：villageScene._startIntroSequence/_startTitleCard 仍各自调用 _playLoginBGM
+  //     作为冗余保险（playBGM 已幂等，重复调用安全）。
+  AudioSystem.playBGM('music/login.mp3');
+
+  // PHASE 18 仗6：村庄场景的启动（含旁白播放）必须延迟到玩家点击 splash 之后。
+  //   原本 switchToInstant 紧接 playBGM 同步执行，导致：
+  //     - 玩家未点击 splash 时，村庄场景已在 splash 遮罩底下启动旁白（计时器 + 文字推进）
+  //     - splash 12s 全局兜底触发后强制 hide，玩家进游戏时旁白可能已经放完一半
+  //   修复：await SplashLoader.whenGestured() 阻塞到玩家真正点击 splash，
+  //   然后才启动村庄。SplashLoader 内部已移除 12s 全局自动 hide，玩家不点 → 永不开播。
+  //   Promise 在 splash hide() 起手时同步 resolve，所以场景启动与 splash 淡出动画并行，
+  //   玩家点击瞬间就能听到 BGM + 看到淡出过渡。
+  //   防御：SplashLoader 缺失（极端情况）时不阻塞，直接进村庄。
+  if (window.SplashLoader && typeof window.SplashLoader.whenGestured === 'function') {
+    await window.SplashLoader.whenGestured();
+  }
+
   SceneManager.switchToInstant('village');
 
-  // PHASE 16-9：村庄场景已就绪，主动通知 splash 隐藏
+  // PHASE 16-9：村庄场景已就绪，主动通知 splash 收尾
   //   原本 splash-loader.js 通过轮询 SceneManager.current === 'village' 自行收尾，
   //   但海外网络下 main.js booted 时刻可能已经接近 / 超过全局兜底时长，
-  //   主动 hide 能确保 splash 在"游戏真正可玩"那一刻精准消失，
-  //   而不是被全局 setTimeout 兜底提前 / 延后触发。
-  //   带 isHidden 守卫避免与轮询路径重复 hide（hide 自身也已幂等）。
-  if (window.SplashLoader && !window.SplashLoader.isHidden()) {
-    window.SplashLoader.hide();
+  //   主动收尾能确保 splash 在"游戏真正可玩"那一刻精准收尾。
+  // PHASE 18 仗5：从直接 hide() 改为 prepareReady()，splash 进度满后展示
+  //   "点击进入游戏"提示，等玩家点击触发 hide。这一次点击同时解锁 AudioContext，
+  //   保证旁白第一帧登录 BGM (login.mp3) 能正常响起，不再因浏览器自动播放策略静音。
+  // PHASE 18 仗6：上面 await whenGestured() 之后，splash 大概率已经在 hide 流程中
+  //   （hide 起手就 resolve gesturePromise）。这里的 prepareReady 调用基本是 no-op，
+  //   但保留作为"业务方异常导致玩家手势先触发但 splash 还没 ready"路径的兜底。
+  if (window.SplashLoader && !window.SplashLoader.isHidden() && !window.SplashLoader.isReady()) {
+    window.SplashLoader.prepareReady();
   }
 })();

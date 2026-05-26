@@ -29,6 +29,21 @@
   let tipEl = null;
   let currentProgress = 0;
   let hidden = false;
+  // PHASE 18 仗5：进度满后展示"点击进入"提示，等用户点击才真正 hide。
+  //   目的：登录 BGM (login.mp3) 必须在用户首次手势后才能播放（浏览器自动播放策略），
+  //         如果 splash 自动 hide 直接进入旁白，旁白阶段无任何交互 → 整段静音。
+  //   方案：splash 100% 后变成 ready 状态，文案 "点击进入游戏"，玩家点击 = 首次手势，
+  //         AudioSystem 解锁 → 旁白第一帧 BGM 立即响。
+  let readyForGesture = false;
+  let onClickHide = null;
+  // PHASE 18 仗6：whenGestured() Promise — 玩家点击/手势后才 resolve。
+  //   main.js bootstrap 用 await SplashLoader.whenGestured() 把 switchToInstant('village')
+  //   阻塞到玩家手势之后，从根源避免"未点击时旁白已开播"。
+  //   - 玩家点击 splash → onClickHide → hide() → 同步 resolve gesturePromise
+  //   - 不再有 12s 全局 FAILSAFE 自动 hide：玩家不点 splash 就一直停留在加载界面，
+  //     绝不进入旁白，符合"无手势不开播"的产品需求。
+  let _resolveGesture = null;
+  const gesturePromise = new Promise(function (r) { _resolveGesture = r; });
 
   const TIPS = [
     { upTo: 30,  text: '正在准备钓具...' },
@@ -118,9 +133,64 @@
 
   /* ─────────────────── 隐藏 / 销毁 ─────────────────── */
 
+  /**
+   * 进度满后切换到"点击进入"待机态，等用户点击触发真正的 hide。
+   * 设计动机：见顶部 readyForGesture 注释 —— 旁白 BGM 必须在玩家首次手势后才能响。
+   *   - 若已 hidden 或已在 ready 态 → 幂等返回
+   *   - 强制把进度推到 100%（防止某些路径未走 smoothTo 直接 hide）
+   *   - 替换 tip 文案为"点击进入游戏"，加 cursor:pointer 视觉暗示
+   *   - 全局监听 click/keydown/touchstart 任一即触发 hide（首次手势会一并解锁 AudioContext）
+   * 兜底：FAILSAFE_MS（12s）后强制 hide，玩家不点也不会卡死。
+   */
+  function prepareReady() {
+    if (hidden || readyForGesture) return;
+    readyForGesture = true;
+    setProgress(100);
+    if (tipEl) {
+      tipEl.textContent = '👆 点击任意位置进入游戏';
+      tipEl.style.opacity = '1';
+      tipEl.style.fontSize = '15px';
+      tipEl.style.fontWeight = 'bold';
+      tipEl.style.cursor = 'pointer';
+      // 呼吸闪烁吸引注意
+      tipEl.style.animation = 'splash-tip-pulse 1.2s ease-in-out infinite';
+    }
+    if (overlay) {
+      overlay.style.cursor = 'pointer';
+    }
+    // 任意手势触发 hide。capture=true 抢在业务监听之前 — 但不要 stopPropagation，
+    // 让该事件继续冒泡到 AudioSystem 的 _bindFirstGestureOnce 监听器，从而完成 ctx 创建。
+    onClickHide = function () {
+      // 移除监听后再 hide，避免 hide 内部 await 期间二次触发
+      window.removeEventListener('pointerdown', onClickHide, true);
+      window.removeEventListener('keydown', onClickHide, true);
+      window.removeEventListener('touchstart', onClickHide, true);
+      onClickHide = null;
+      hide();
+    };
+    window.addEventListener('pointerdown', onClickHide, true);
+    window.addEventListener('keydown', onClickHide, true);
+    window.addEventListener('touchstart', onClickHide, true);
+    console.log('[Splash] 已就绪，等待玩家点击进入');
+  }
+
   async function hide() {
     if (hidden || !overlay) return;
     hidden = true;
+    // 兜底清理：极端路径（错误兜底直接调 hide）下 onClickHide 监听可能还挂着
+    if (onClickHide) {
+      window.removeEventListener('pointerdown', onClickHide, true);
+      window.removeEventListener('keydown', onClickHide, true);
+      window.removeEventListener('touchstart', onClickHide, true);
+      onClickHide = null;
+    }
+    // PHASE 18 仗6：立即 resolve gesturePromise，让 main.js 的 await 解锁，
+    //   村庄场景启动（switchToInstant + 旁白）与 splash 淡出动画并行进行 ——
+    //   玩家点击的瞬间就能听到旁白配乐 + 看到淡出过渡，体验最连贯。
+    if (_resolveGesture) {
+      _resolveGesture();
+      _resolveGesture = null;
+    }
     // 直接补到 100（如果还没到）
     setProgress(100);
     // 停留 300ms 让玩家看清"100%"
@@ -198,35 +268,29 @@
     }, 100);
   }
 
-  // 阶段 4：场景就绪（100%） — 等 SceneManager 切到 village
-  function hookStage4Scene() {
+  // 阶段 4：准备完毕（100%）
+  // PHASE 18 仗6：原本依赖 SceneManager.current === 'village' 来判定"场景就绪"，
+  //   但现在 main.js bootstrap 反过来 await SplashLoader.whenGestured() 才切场景，
+  //   会形成"splash 等场景、场景等 splash"的死锁。改为：
+  //   - 直接监听阶段 3（PlayerProfile 就绪）完成 → smoothTo(100) → prepareReady
+  //   - 不再轮询 SceneManager；FAILSAFE 仅用于阶段 3 钩子失败的极端兜底
+  function hookStage4Ready() {
     let done = false;
     const finish = function () {
       if (done) return; done = true;
-      // 推到 100% 并触发 hide
-      smoothTo(100, 500).then(hide);
+      smoothTo(100, 500).then(prepareReady);
     };
-    // 轮询 SceneManager 当前场景。村庄一旦激活就视为完全就绪。
-    // 注：main.js 末尾 `SceneManager.switchToInstant('village')`，
-    //     此时 SceneManager.current（或类似字段）会变成 'village'。
-    //     我们做最宽松判断：SceneManager 存在 + 任意 current/active 字段被设置。
+    // 轮询：currentProgress 达到 85% 视为阶段 3 完成（hookStage3Profile.smoothTo(85)）
     const start = Date.now();
     const timer = setInterval(function () {
       if (done) { clearInterval(timer); return; }
-      const sm = window.SceneManager;
-      const isReady = sm && (
-        sm.current === 'village' ||
-        sm.currentScene === 'village' ||
-        (sm.current && typeof sm.current === 'object') ||
-        (typeof sm.getCurrent === 'function' && sm.getCurrent())
-      );
-      if (isReady) {
+      if (currentProgress >= 85) {
         clearInterval(timer);
         finish();
       } else if (Date.now() - start > FAILSAFE_MS) {
-        // 兜底（PHASE 16-9 已提到 12s）：无论如何强制 hide，避免玩家卡死
+        // 兜底：阶段 3 钩子失败，强制推到 ready 态（仍等玩家点击）
         clearInterval(timer);
-        console.warn('[Splash] ' + (FAILSAFE_MS / 1000) + 's 兜底触发，强制隐藏（场景未就绪信号丢失）');
+        console.warn('[Splash] ' + (FAILSAFE_MS / 1000) + 's 兜底触发，强制进入 ready 态（阶段 3 信号丢失）');
         finish();
       }
     }, 100);
@@ -242,26 +306,34 @@
   hookStage1Fonts();
   hookStage2CloudBase();
   hookStage3Profile();
-  hookStage4Scene();
+  hookStage4Ready();
 
-  // 全局兜底：哪怕所有钩子都失败，FAILSAFE_MS 后也强制结束
-  setTimeout(function () {
-    if (!hidden) {
-      console.warn('[Splash] 全局 ' + (FAILSAFE_MS / 1000) + 's 兜底：强制隐藏 splash');
-      hide();
-    }
-  }, FAILSAFE_MS);
+  // PHASE 18 仗6：移除全局 12s 自动 hide 兜底。
+  //   原 setTimeout(hide, FAILSAFE_MS) 会在 12s 后强制隐藏 splash → 触发 main.js
+  //   进入村庄旁白，违反"无玩家手势不开播"的产品需求。
+  //   现在的兜底改为：阶段钩子失败时仍能进入 prepareReady（见 hookStage4Ready 内部
+  //   的 FAILSAFE_MS 兜底），但玩家不点击就一直停留在"点击进入"态，绝不自动跳过。
 
   /* ─────────────────── 公开 API（便于业务代码主动推进 / 调试） ─────────────────── */
 
   window.SplashLoader = {
     setProgress: setProgress,
     smoothTo: smoothTo,
+    // PHASE 18 仗5：业务方（main.js）应优先调用 prepareReady（展示"点击进入"提示），
+    //   而不是直接 hide。直接 hide 仅供错误兜底场景使用。
+    prepareReady: prepareReady,
     hide: hide,
     isHidden: function () { return hidden; },
+    isReady: function () { return readyForGesture; },
+    // PHASE 18 仗6：业务方等待"玩家首次手势"信号的入口。main.js bootstrap 用：
+    //   await window.SplashLoader.whenGestured();
+    //   SceneManager.switchToInstant('village');
+    // 玩家点击 splash 调 hide() 时同步 resolve 此 Promise，让村庄场景启动与 splash
+    // 淡出动画并行进行；玩家不点击 → Promise 永不 resolve → 旁白永不开播。
+    whenGestured: function () { return gesturePromise; },
     // 调试用
     _debug: function () {
-      return { progress: currentProgress, hidden: hidden };
+      return { progress: currentProgress, hidden: hidden, ready: readyForGesture };
     }
   };
 })();
