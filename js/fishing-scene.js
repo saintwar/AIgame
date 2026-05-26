@@ -242,6 +242,11 @@ class FishingScene {
 
   destroy() {
     this.pause();
+    // HOTFIX：场景退出时清理音频（与 village-scene.destroy 对称）
+    //   原本依赖"村庄 _init 再 playBGM('village_bgm.mp3')"自动覆盖 effects.mp3，
+    //   但异常路径（reload / 切到非村庄场景）会导致 effects.mp3 残留循环。
+    AudioSystem.stopAmbient();
+    AudioSystem.stopBGM();
     // PHASE 16-6 仗4：卸载鱼饵 HUD
     baitHUD.unmount();
     // 清理 InputSystem 的键盘监听

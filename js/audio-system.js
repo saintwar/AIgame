@@ -267,10 +267,22 @@ class AudioSystem {
    * @param {number} [loopEnd] - 循环结束位置（秒），不填则从头开始
    */
   async playBGM(src, loopStart = null, loopEnd = null) {
+    // HOTFIX：幂等保护——相同 src 已在播放/挂起则直接返回，避免 stopBGM 打断刚发起的 play() Promise
+    //   症状：AbortError: play() request was interrupted by a call to pause()
+    //   触发链：main.js 启动期 playBGM('login.mp3') 挂起 → 首次手势 init() 取出 _pendingBGM 重放 play()（Promise pending）
+    //          → 同时 village-scene 多入口（line 361/710/2019/2042）再次 playBGM → 内部 stopBGM 把上面 pause 掉。
+    if (this._bgmCurrentSrc === src && (this._bgmAudio || this._pendingBGM)) {
+      return;
+    }
     await this.init();
+    // init() 内部可能已经把 _pendingBGM 取出重放过 → 标记一致就别再覆盖
+    if (this._bgmCurrentSrc === src && this._bgmAudio) {
+      return;
+    }
     this._pendingBGM = null;   // 避免重复加载
-    this.stopBGM();
+    await this.stopBGM();      // ★ 等待 play() Promise settle 后再 pause，避免 AbortError
 
+    this._bgmCurrentSrc = src;
     this._bgmAudio = new Audio(src);
     this._bgmAudio.volume = this.bgmVolume;
     this._bgmAudio.crossOrigin = 'anonymous';
@@ -292,23 +304,38 @@ class AudioSystem {
     this._bgmSource = this.ctx.createMediaElementSource(this._bgmAudio);
     this._bgmSource.connect(this.bgmGain);
     try {
-      await this._bgmAudio.play();
+      // 保存 play() Promise 以便 stopBGM 等待它 settle
+      this._bgmPlayPromise = this._bgmAudio.play();
+      await this._bgmPlayPromise;
+      this._bgmPlayPromise = null;
     } catch (e) {
-      if (e.name === 'NotAllowedError') {
+      this._bgmPlayPromise = null;
+      if (e.name === 'AbortError') {
+        // 预期内：被后续 stopBGM/切歌打断，不污染控制台
+      } else if (e.name === 'NotAllowedError') {
         // 浏览器自动播放策略：先挂起，等用户交互后由 init() 自动重试
         this._pendingBGM = { src, loopStart, loopEnd };
+        this._bgmCurrentSrc = null;
       } else {
         console.warn('BGM play failed:', e);
+        this._bgmCurrentSrc = null;
       }
     }
   }
 
   /**
    * 停止当前 BGM
+   *   ★ HOTFIX：await play() Promise settle 后再 pause，避免 AbortError
    */
-  stopBGM() {
+  async stopBGM() {
+    this._bgmCurrentSrc = null;
+    // 等待上次 play() 完成或失败，再 pause
+    if (this._bgmPlayPromise) {
+      try { await this._bgmPlayPromise; } catch (_) { /* 上次播放本身失败 → 无需 pause */ }
+      this._bgmPlayPromise = null;
+    }
     if (this._bgmAudio) {
-      this._bgmAudio.pause();
+      try { this._bgmAudio.pause(); } catch (_) { }
       this._bgmAudio = null;
     }
     if (this._bgmSource) {
