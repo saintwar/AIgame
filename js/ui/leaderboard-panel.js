@@ -202,7 +202,7 @@
             <div class="leaderboard-loading">加载中...</div>
           </div>
           <div class="leaderboard-mine" id="leaderboard-mine"></div>
-          <div class="leaderboard-tip">☕ 每日 15:00 排名前两位，可找开发者兑换咖啡一杯。</div>
+          <div class="leaderboard-tip">☕ 每日 15:00 排名前两位，可找 Aidendeng 兑换咖啡一杯。</div>
         </div>
       </div>
     `;

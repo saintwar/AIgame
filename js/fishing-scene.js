@@ -251,6 +251,13 @@ class FishingScene {
       document.removeEventListener('keydown', this._keyHandler);
       document.removeEventListener('keyup', this._keyUpHandler);
     }
+    // PHASE 18 仗5 - 仗3：清理回村按钮 canvas 监听
+    if (this.canvas && this._returnVillageClickHandler) {
+      this.canvas.removeEventListener('click', this._returnVillageClickHandler);
+      this.canvas.removeEventListener('mousemove', this._returnVillageMoveHandler);
+      this._returnVillageClickHandler = null;
+      this._returnVillageMoveHandler = null;
+    }
     if (this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
     }
@@ -320,6 +327,81 @@ class FishingScene {
     
     document.addEventListener('keydown', this._keyHandler);
     document.addEventListener('keyup', this._keyUpHandler);
+
+    // PHASE 18 仗7：钓鱼场景"回村"HUD 按钮（右下角 + 入水后隐藏）
+    //   坐标 1096,656 / w=160,h=40 → 占 [1096,656]~[1256,696]，距右/底各 24px
+    //   避让：装备钓竿木牌（左下 [20,660]~[300,700]）、操作提示（中下 [430,620]~[850,690]）、
+    //         任务HUD（右上 y≤325）、baitHUD（顶部）。仅与"奇力鱼信息面板"(Playing 时 [1020,545]~[1260,700])
+    //         水平重叠，但本仗已让 Playing/Waiting/BiteWindow/Reeling 期间隐藏按钮 → 不会同框。
+    //   点击 → 复用现有回村流程：taskComplete=true → 直接回村；否则调 _showEscapeConfirm()
+    //   不替代/不改键盘 R/ESC（铁律：键盘零回归；隐藏期间快捷键照常生效）
+    this._returnVillageBtnRect = { x: 1096, y: 656, w: 160, h: 40 };
+    this._returnVillageBtnHovered = false;
+
+    const toCanvasXY = (e) => {
+      const rect = self.canvas.getBoundingClientRect();
+      const sx = self.canvas.width / rect.width;
+      const sy = self.canvas.height / rect.height;
+      return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
+    };
+    this._returnVillageClickHandler = (e) => {
+      if (e.button !== 0 || !self.canvas) return;
+      // PHASE 18 仗7：按钮隐藏期间不响应点击（视觉/逻辑双门禁，避免"隐身按钮"被误触）
+      if (!self._isReturnVillageBtnVisible()) return;
+      const r = self._returnVillageBtnRect;
+      const { x, y } = toCanvasXY(e);
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        e.stopPropagation();
+        self._handleReturnVillage();
+      }
+    };
+    this._returnVillageMoveHandler = (e) => {
+      if (!self.canvas) return;
+      // PHASE 18 仗7：按钮隐藏期间清掉 hover 态 + 复位光标
+      if (!self._isReturnVillageBtnVisible()) {
+        if (self._returnVillageBtnHovered) {
+          self._returnVillageBtnHovered = false;
+          self.canvas.style.cursor = 'default';
+        }
+        return;
+      }
+      const r = self._returnVillageBtnRect;
+      const { x, y } = toCanvasXY(e);
+      const inBtn = x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      self._returnVillageBtnHovered = inBtn;
+      self.canvas.style.cursor = inBtn ? 'pointer' : 'default';
+    };
+    if (this.canvas) {
+      this.canvas.addEventListener('click', this._returnVillageClickHandler);
+      this.canvas.addEventListener('mousemove', this._returnVillageMoveHandler);
+    }
+  }
+
+  /**
+   * PHASE 18 仗7：回村按钮可见性判定（鱼钩入水后隐藏）
+   *   显示：Idle / Aiming / Casting（抛竿前 + 抛竿动作中，浮标尚未触水）
+   *   隐藏：Waiting / BiteWindow / Reeling / Playing / Caught / Failed（水下交互期 + 结算期）
+   *   ⚠️ 仅控制视觉 + 鼠标命中盒；R/ESC 键盘快捷键照常生效（铁律：键盘零回归）
+   *   ⚠️ 与 baitHUD 同步策略（line 473-476 仗4 HOTFIX2 模板）保持一致风格
+   */
+  _isReturnVillageBtnVisible() {
+    if (!this.fsm) return true;
+    const s = this.fsm.state;
+    return s === 'Idle' || s === 'Aiming' || s === 'Casting';
+  }
+
+  /**
+   * PHASE 18 仗5 - 仗3：统一回村入口（HUD 按钮 / R 键 / ESC 共用）
+   *   - taskComplete=true → 任务完成可直接回村（与 R 键流程一致）
+   *   - taskComplete=false → 弹原 _showEscapeConfirm 确认窗（与 ESC 流程一致）
+   */
+  _handleReturnVillage() {
+    if (this.taskComplete) {
+      this.pause();
+      SceneManager.switchToInstant('village', { spawnAt: { x: 10, y: 8 } });
+    } else {
+      this._showEscapeConfirm();
+    }
   }
 
   _showEscapeConfirm() {
@@ -2058,6 +2140,32 @@ class FishingScene {
       this._drawPixelIcon('rod', rx + 10, ry + (rh - 16) / 2, 2);
       this._drawPixelText(`${rod.name}`, rx + 44, ry + rh / 2, 18, '#FFF4D6', '#5C3A1E');
     }
+
+    // PHASE 18 仗7：回村按钮（右下角；Waiting/BiteWindow/Reeling 等水下交互期隐藏）
+    //   命中盒来自 _bindEvents 阶段写入的 _returnVillageBtnRect = {1096,656,160,40}
+    //   可见性 = _isReturnVillageBtnVisible()（同时门禁渲染/点击/hover，避免"隐身按钮"误触）
+    //   hover 时金色描边强化（与面板交互标准 v1.0 一致）
+    if (this._returnVillageBtnRect && this._isReturnVillageBtnVisible()) {
+      const { x, y, w, h } = this._returnVillageBtnRect;
+      const hovered = this._returnVillageBtnHovered;
+      this._drawWoodPlaque(x, y, w, h);
+      if (hovered) {
+        ctx.save();
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.floor(x) + 1, Math.floor(y) + 1, Math.ceil(w) - 2, Math.ceil(h) - 2);
+        ctx.restore();
+      }
+      // 🏘️ emoji
+      ctx.save();
+      ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.fillText('🏘️', Math.floor(x + 10), Math.floor(y + h / 2));
+      // "回村 (R/ESC)" 提示文字
+      this._drawPixelText('回村 (R/ESC)', x + 44, y + h / 2, 18, hovered ? '#FFE9A0' : '#FFF4D6', '#5C3A1E');
+      ctx.restore();
+    }
   }
 
   _renderAimBar() {
@@ -2265,7 +2373,16 @@ class FishingScene {
     if (!this.questParams || !this.questParams.target) return;
     const ctx = this.ctx; const cw = this.cw;
     const isQ002 = this.questParams.questId === 'q002';
-    const x = cw - 220; const y = 30; const w = 200;
+    // PHASE 18 仗6 - 仗2 → 仗8 修订：任务HUD 回到右上角（与金币/鱼数/体力同一水平线）
+    //   仗6 -仗2 曾下移到 y=140，原因是回村按钮占据右上 [1100,10]~[1260,50] + baitHUD 顶部带状区。
+    //   仗7 已把回村按钮挪到右下角 [1096,656]~[1256,696] → 右上空出。
+    //   现回归紧凑布局：
+    //     x = cw - 200 - 16 = 1064（距右边 16px）
+    //     y = 10（与金币 [10,159] / 鱼数 [170,290] / 体力 [302,451] 同顶边对齐）
+    //   水平不重叠：左侧顶栏 x ≤ 451 << 1064；baitHUD 居中 [509,771] << 1064。
+    //   纵向：q001 高 60 → y∈[10,70]；q002 5项最高 ~185 → y∈[10,195]，仍距 baitHUD 底 130 不冲突。
+    //   下沿距右下角"奇力鱼信息面板"(Playing 时 y=545~700) 仍隔 350px+ 安全。
+    const x = cw - 200 - 16; const y = 10; const w = 200;
     // 根据 q002 项目数动态计算高度
     let itemCount = 0;
     if (isQ002 && this.questParams.detail) {

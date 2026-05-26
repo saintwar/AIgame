@@ -25,6 +25,8 @@ class DialogueSystem {
     //     - { callback: fn } → 关闭对话框后调用 fn
     //   choices 出现时，本行不再走 _next() 顺序播放（改由选项 action 决定走向）。
     this.choiceIdx = 0;
+    // PHASE 18 仗5 - 仗2：选项命中盒数组（每帧 _renderChoices 重建；非选项行为 null）
+    this._choiceRects = null;
   }
 
   start(dialogId, opts = null) {
@@ -69,6 +71,8 @@ class DialogueSystem {
     this.lastTypeTime = performance.now();
     this._arrowTimer = 0;
     this.choiceIdx = 0;
+    // PHASE 18 仗5 - 仗2：清空旧对话残留命中盒（避免上一段对话点击穿透到新段）
+    this._choiceRects = null;
 
     // 已读对话快进（3倍速）
     const readDialogues = window.Save?.get('flags.readDialogues') || [];
@@ -208,6 +212,8 @@ class DialogueSystem {
    * PHASE 16-6 仗2：选项菜单渲染
    *   覆盖在对话框右下角，每项一行；选中项有红底高亮 + ▶ 指示器。
    *   坐标基于对话框 boxY=540 / boxH=180，从 boxY+80 开始向下排。
+   *
+   * PHASE 18 仗5 - 仗2：选项命中区域写回 this._choiceRects 供鼠标点击/hover 派发
    */
   _renderChoices(ctx, choices, boxY) {
     const startX = 720;          // 选项区左边界（避开左侧对话文字）
@@ -216,12 +222,24 @@ class DialogueSystem {
     const padX = 14;
     const w = 480;
 
+    // PHASE 18 仗5 - 仗2：每帧重建命中盒（坐标与红底高亮严格同步）
+    this._choiceRects = [];
+
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     for (let i = 0; i < choices.length; i++) {
       const c = choices[i];
       const y = startY + i * lineH;
       const selected = i === this.choiceIdx;
+
+      // 命中盒（与红底矩形完全一致：startX, y - lineH/2 + 2, w, lineH - 4）
+      this._choiceRects.push({
+        x: startX,
+        y: y - lineH / 2 + 2,
+        w: w,
+        h: lineH - 4,
+        idx: i
+      });
 
       if (selected) {
         // 选中态：红底白字
@@ -243,7 +261,8 @@ class DialogueSystem {
     ctx.fillStyle = 'rgba(61,43,31,0.55)';
     ctx.font = '14px "TencentSansW7", sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText('↑↓ 选择   Enter 确认   ESC 取消', 1216, boxY + 180 - 14);
+    // PHASE 18 仗5 - 仗2：补"鼠标点击 / 单击"提示（键盘操作零回归）
+    ctx.fillText('↑↓ 选择   Enter / 单击 确认   ESC 取消', 1216, boxY + 180 - 14);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
   }
@@ -353,24 +372,65 @@ class DialogueSystem {
    * 设计协议（坑 2）：单击 = 立即展示完整文字（打字机中）/ 进入下一句（打字机完成后）
    * 与 RPGMaker / 星露谷一致；旁白模式同样适用。
    *
-   * PHASE 16-6 仗2：选项菜单激活（hasChoices && typingDone）时，
-   *   点击仅消费事件、不触发选择 —— 避免误点选错；玩家必须用 ↑↓+Enter。
-   *   返回 true 让调用方仍 stopPropagation（防点击穿透到 ClickToMove）。
+   * PHASE 18 仗5 - 仗2：选项菜单激活时支持鼠标点击命中选择
+   *   - 命中某选项 → choiceIdx 同步更新 + 立即触发 _activateChoice
+   *   - 未命中任何选项 → 仅消费事件、不动作（防误触/防穿透 ClickToMove）
+   *   - 调用方应传入 (x, y) canvas 坐标；不传则退化为"消费事件不动作"
+   * 键盘操作零回归：↑↓+Enter 路径完全保留。
+   * @param {number} [x] canvas 坐标 X
+   * @param {number} [y] canvas 坐标 Y
    * @returns {boolean} 是否消费了点击（true：调用方应 stopPropagation）
    */
-  handleClick() {
+  handleClick(x, y) {
     if (!this.active || !this.currentDialog) return false;
     const currentLine = this.currentDialog.lines[this.currentLineIdx];
     if (currentLine) {
       const hasChoices = Array.isArray(currentLine.choices) && currentLine.choices.length > 0;
       const typingDone = this.charIdx >= currentLine.text.length;
       if (hasChoices && typingDone) {
-        // 选项菜单激活 → 点击不动作，只阻止穿透
+        // PHASE 18 仗5 - 仗2：命中检测（坐标系：canvas）
+        const rects = this._choiceRects;
+        if (rects && typeof x === 'number' && typeof y === 'number') {
+          for (const r of rects) {
+            if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+              this.choiceIdx = r.idx;
+              this._activateChoice(currentLine.choices[r.idx]);
+              return true;
+            }
+          }
+        }
+        // 未命中或未传坐标 → 消费事件不动作
         return true;
       }
     }
     this.handleKey(' ');
     return true;
+  }
+
+  /**
+   * PHASE 18 仗5 - 仗2：选项菜单 hover 派发
+   *   - 命中某选项 → choiceIdx 同步更新 + 返回 'pointer' cursor
+   *   - 未命中 → 返回 ''（保持默认 cursor，由调用方决定）
+   * @param {number} x canvas 坐标
+   * @param {number} y canvas 坐标
+   * @returns {string} cursor 值（'pointer' 或 ''）
+   */
+  handleMouseMove(x, y) {
+    if (!this.active || !this.currentDialog) return '';
+    const currentLine = this.currentDialog.lines[this.currentLineIdx];
+    if (!currentLine) return '';
+    const hasChoices = Array.isArray(currentLine.choices) && currentLine.choices.length > 0;
+    const typingDone = this.charIdx >= currentLine.text.length;
+    if (!hasChoices || !typingDone) return '';
+    const rects = this._choiceRects;
+    if (!rects) return '';
+    for (const r of rects) {
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        this.choiceIdx = r.idx;
+        return 'pointer';
+      }
+    }
+    return '';
   }
 
   _next() {

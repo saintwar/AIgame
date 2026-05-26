@@ -292,6 +292,14 @@ class VillageScene {
     //   y=4 维持（顶部留 4px 草地呼吸边）；间距 8px 维持。
     this.coinHUD = new CoinHUD(window.inventory, { x: 20, y: 4, w: 180, h: 44 });
     this.staminaHUD = new StaminaHUD({ x: 208, y: 4, w: 150, h: 44 });
+    // PHASE 18 仗5 - 仗1：游戏指南 HUD 按钮（紧邻 StaminaHUD 之后）
+    //   几何：x=368(=208+150+10), y=4, w=180, h=44，与金币/体力木牌同高同 baseline
+    //   命中区域 = 整块木牌；hover 时 _guideHUDHovered=true → 渲染高亮描边
+    this._guideHUDRect = { x: 368, y: 4, w: 180, h: 44 };
+    this._guideHUDHovered = false;
+    // 操作提示卡 ✕ 关闭按钮（坐标在 _renderTutorialCard 内动态计算并写回此字段）
+    this._tutorialCloseRect = null;
+    this._tutorialCloseHovered = false;
 
     // 初始化图鉴 UI
     this.codexUI = new CodexUI(this.canvas, window.codex);
@@ -1202,11 +1210,41 @@ class VillageScene {
       //   场景：点 ✕ 关闭面板 → handleMouseClick 内 hide() → visible=false →
       //         随后 ClickToMove.onClick 跑、isSceneInteractive 已通过 → 角色误寻路。
       if (this.introState !== 'title') {
+        // PHASE 18 仗5 - 仗1：操作提示卡打开 → 派发到 ✕ 命中
+        //   教程卡是模态层（line 2097 在 questPanel 之后渲染），点击必须先派给它
+        //   不在 ✕ 命中区域 → 也要阻断 ClickToMove（避免点穿教程卡触发寻路）
+        if (this.tutorialCardActive) {
+          const { x, y } = toCanvasXY(e);
+          const r = this._tutorialCloseRect;
+          if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+            this._hideTutorialCard();
+          }
+          e.stopImmediatePropagation();
+          return;
+        }
+        // PHASE 18 仗5 - 仗1：游戏指南 HUD 按钮（玩法阶段、教程卡未开时可点）
+        //   仅在没有面板打开 / 不在对话中时响应；与 staminaHUD 同 y=4 草地区域
+        {
+          const { x, y } = toCanvasXY(e);
+          const g = this._guideHUDRect;
+          if (g && !dialogueSystem.isActive() && !this.questPanelOpen
+              && !(this.inventoryUI && this.inventoryUI.visible)
+              && !(this.codexUI && this.codexUI.visible)
+              && !(this.shopUI && this.shopUI.visible)
+              && !(this.restPanel && this.restPanel.visible)
+              && x >= g.x && x <= g.x + g.w && y >= g.y && y <= g.y + g.h) {
+            this._showTutorialCard();
+            e.stopImmediatePropagation();
+            return;
+          }
+        }
         // PHASE 16-4.8 仗4：对话激活 → 整框 click = 等同空格（推进/跳过打字机）
         // 必须放在所有面板派发之前，因为对话框覆盖在所有 UI 之上、且 isSceneInteractive
         // 在对话激活时返回 false → ClickToMove 不会寻路；但 stopImmediatePropagation 双保险。
+        // PHASE 18 仗5 - 仗2：传 (x,y) 让 dialogueSystem 命中选项菜单条目（如秀兰 mom_menu）
         if (dialogueSystem.isActive()) {
-          if (dialogueSystem.handleClick()) {
+          const { x, y } = toCanvasXY(e);
+          if (dialogueSystem.handleClick(x, y)) {
             e.stopImmediatePropagation();
           }
           return;
@@ -1284,9 +1322,41 @@ class VillageScene {
     this._moveHandler = (e) => {
       // PHASE 16-4.8 仗3：玩法阶段，面板可见时转发 mousemove，更新 hover 字段 + cursor
       if (this.introState !== 'title') {
+        // PHASE 18 仗5 - 仗1：操作提示卡打开 → 仅 hover ✕ 按钮
+        if (this.tutorialCardActive) {
+          const { x, y } = toCanvasXY(e);
+          const r = this._tutorialCloseRect;
+          const inClose = !!(r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+          this._tutorialCloseHovered = inClose;
+          this.canvas.style.cursor = inClose ? 'pointer' : 'default';
+          this._hoverTile = null;
+          return;
+        }
+        // PHASE 18 仗5 - 仗1：游戏指南 HUD 按钮 hover（无面板/对话时才检测，避免与面板 hover 冲突）
+        //   注意：此处仅做 _guideHUDHovered 状态更新；实际 cursor 在面板派发结束后由 ClickToMove 决定
+        //   若命中按钮 → 提前 return 抢占 cursor=pointer
+        {
+          const { x, y } = toCanvasXY(e);
+          const g = this._guideHUDRect;
+          const noPanel = !dialogueSystem.isActive() && !this.questPanelOpen
+            && !(this.inventoryUI && this.inventoryUI.visible)
+            && !(this.codexUI && this.codexUI.visible)
+            && !(this.shopUI && this.shopUI.visible)
+            && !(this.restPanel && this.restPanel.visible);
+          if (g && noPanel && x >= g.x && x <= g.x + g.w && y >= g.y && y <= g.y + g.h) {
+            this._guideHUDHovered = true;
+            this.canvas.style.cursor = 'pointer';
+            this._hoverTile = null;
+            return;
+          }
+          this._guideHUDHovered = false;
+        }
         // PHASE 16-4.8 仗4：对话激活 → 整框可点 → cursor pointer
+        // PHASE 18 仗5 - 仗2：选项菜单激活时，hover 选项条目 → 同步 choiceIdx + 'pointer'
         if (dialogueSystem.isActive()) {
-          this.canvas.style.cursor = 'pointer';
+          const { x, y } = toCanvasXY(e);
+          const cursor = dialogueSystem.handleMouseMove(x, y);
+          this.canvas.style.cursor = cursor || 'pointer';
           this._hoverTile = null;
           return;
         }
@@ -2065,6 +2135,8 @@ class VillageScene {
     if (this.coinHUD) this.coinHUD.render(ctx);
     // PHASE 18 仗3 hotfix：体力 HUD（常驻，与金币 HUD 同层级）
     if (this.staminaHUD) this.staminaHUD.render(ctx);
+    // PHASE 18 仗5 - 仗1：游戏指南 HUD 按钮（与金币/体力同层级常驻）
+    this._renderGuideHUD(ctx);
 
     // 背包面板（覆盖层）
     if (this.inventoryUI) this.inventoryUI.render(ctx);
@@ -2201,11 +2273,103 @@ class VillageScene {
       ctx.fillText(item.text, cardX + 120, y + idx * 56);
     });
 
-    // 底部提示
-    ctx.fillStyle = '#888888';
-    ctx.font = '28px "TencentSansW7", sans-serif';
+    // PHASE 18 仗6 - 仗1：底部提示移至面板外（面板下方 28px，灰色小字居中）
+    //   原方案（cardY + cardH - 40）与第 7 项 ESC 行 y=446 重叠（cardH=480 装不下 7 行+提示）。
+    //   改为外置：①不与列表项混排；②不需要扩 cardH 影响整体布局；③字号缩到 20px 更克制。
+    //   外层红色边框 cardY + cardH + 2，外层栗褐边框 cardY + cardH + 6，
+    //   故文字 y = cardY + cardH + 28（与边框间距 16px，与 baseline=alphabetic 字底约对齐）。
+    ctx.fillStyle = 'rgba(255, 244, 214, 0.85)';   // 米白偏亮，遮罩底（rgba(0,0,0,0.7)）上可读
+    ctx.font = '20px "TencentSansW7", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('按 任意键 关闭', cardX + cardW / 2, cardY + cardH - 40);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('按 任意键 或 ESC 关闭', cardX + cardW / 2, cardY + cardH + 28);
+
+    // PHASE 18 仗5 - 仗1：右上角 ✕ 关闭按钮
+    //   几何 36×36，定位 cardX+cardW-46, cardY+14（红色标题栏内）
+    //   交互：hover 旋转 90° + 描边变金 + 半透金底（"hover旋转90°动效"原始要求）
+    //   命中坐标写回 this._tutorialCloseRect 供 _clickHandler/_moveHandler 派发
+    const closeW = 36, closeH = 36;
+    const closeX = cardX + cardW - closeW - 14;
+    const closeY = cardY + 14;
+    this._tutorialCloseRect = { x: closeX, y: closeY, w: closeW, h: closeH };
+
+    const hovered = this._tutorialCloseHovered;
+    ctx.save();
+    // hover 时整体旋转 90°（绕按钮中心）
+    if (hovered) {
+      const hcx = closeX + closeW / 2;
+      const hcy = closeY + closeH / 2;
+      ctx.translate(hcx, hcy);
+      ctx.rotate(Math.PI / 2);
+      ctx.translate(-hcx, -hcy);
+    }
+    // 底色（hover 半透金 / 默认透明）
+    ctx.fillStyle = hovered ? 'rgba(255, 215, 0, 0.30)' : 'rgba(255,255,255,0.10)';
+    ctx.fillRect(closeX, closeY, closeW, closeH);
+    // 描边
+    ctx.strokeStyle = hovered ? '#ffd700' : '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(closeX, closeY, closeW, closeH);
+    // ✕ 字
+    ctx.fillStyle = hovered ? '#ffd700' : '#FFFFFF';
+    ctx.font = 'bold 26px "TencentSansW7", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✕', closeX + closeW / 2, closeY + closeH / 2 + 1);
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  /**
+   * PHASE 18 仗5 - 仗1：游戏指南 HUD 按钮渲染
+   * 风格：木牌（克隆 CoinHUD/StaminaHUD 配色）+ "📖 游戏指南"文字
+   * hover 时金色描边强化（与 shop-ui ✕ 同套高亮规范）
+   * 入口：点击 → _showTutorialCard()（同 mom 对话首次教程触发）
+   */
+  _renderGuideHUD(ctx) {
+    if (!this._guideHUDRect) return;
+    const { x, y, w, h } = this._guideHUDRect;
+    const hovered = this._guideHUDHovered;
+
+    ctx.save();
+    // 木牌底板（与 CoinHUD._drawWoodPlaque 完全同源）
+    ctx.fillStyle = '#5C3A1E';
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    ctx.fillStyle = hovered ? '#A87F4E' : '#8B6F47';   // hover 略亮
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + 2, Math.ceil(w) - 4, Math.ceil(h) - 4);
+    ctx.fillStyle = '#A88860';
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + 2, Math.ceil(w) - 4, 1);
+    ctx.fillStyle = '#6B4A2A';
+    ctx.fillRect(Math.floor(x) + 2, Math.floor(y) + Math.ceil(h) - 3, Math.ceil(w) - 4, 1);
+    // hover 金色描边（与面板交互标准 v1.0 一致）
+    if (hovered) {
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.floor(x) + 1, Math.floor(y) + 1, Math.ceil(w) - 2, Math.ceil(h) - 2);
+    }
+
+    // 📖 emoji
+    ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('📖', Math.floor(x + 8), Math.floor(y + h / 2));
+
+    // "游戏指南" 文字（描边 + 填充，与 CoinHUD 数字同字号 22）
+    const text = '游戏指南';
+    const tx = x + 38;
+    const ty = y + h / 2;
+    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.strokeStyle = '#5C3A1E';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'miter';
+    ctx.miterLimit = 2;
+    ctx.strokeText(text, Math.floor(tx), Math.floor(ty));
+    ctx.fillStyle = hovered ? '#FFE9A0' : '#FFF4D6';
+    ctx.fillText(text, Math.floor(tx), Math.floor(ty));
+
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
   }
 
   // 绘制单个 tile 颜色（原渲染逻辑保留）
