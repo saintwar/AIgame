@@ -7,7 +7,8 @@ export const QUESTS = {
     giver: 'chief',
     description: '帮村长阿土伯钓 3 条奇力鱼',
     target: { fish: '奇力鱼', count: 0, need: 3 },
-    reward: { coin: 50, bait: 5 },
+    // PHASE 18 仗4：奖励对齐 PRD v2.0 — 100 金币 + 5 蚯蚓（原 50 金币为历史值）
+    reward: { coin: 100, bait: 5 },
     onCompleteFlag: 'q001_done'
   },
 

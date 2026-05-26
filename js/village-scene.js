@@ -285,10 +285,12 @@ class VillageScene {
 
     // 初始化背包 UI & 金币 HUD
     this.inventoryUI = new InventoryUI(this.canvas, window.inventory);
-    this.coinHUD = new CoinHUD(window.inventory);
-    // PHASE 18 仗3 hotfix：体力 HUD（金币胶囊右侧；金币胶囊宽 180 + 间距 10 → x=210）
-    //   宽 150 / 高 44 与金币胶囊高度对齐
-    this.staminaHUD = new StaminaHUD({ x: 210, y: 20, w: 150, h: 44 });
+    // PHASE 18 仗4 收尾【村庄 HUD v3 修复】：StaminaHUD 改用 ❤️ emoji 后，
+    //   图标位置/文字起始与 CoinHUD 完全对齐 → 体力 HUD 宽 160 → 150 收回（emoji 系图标
+    //   占用比像素心形小一圈，"100/100" 5 字符在 w=150 内充分容纳）。
+    //   y=4 维持（顶部留 4px 草地呼吸边）；间距 8px 维持。
+    this.coinHUD = new CoinHUD(window.inventory, { x: 20, y: 4, w: 180, h: 44 });
+    this.staminaHUD = new StaminaHUD({ x: 208, y: 4, w: 150, h: 44 });
 
     // 初始化图鉴 UI
     this.codexUI = new CodexUI(this.canvas, window.codex);

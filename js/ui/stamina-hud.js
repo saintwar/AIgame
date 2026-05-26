@@ -59,9 +59,18 @@ export class StaminaHUD {
     }
 
     this._drawWoodPlaque(ctx, this.x, this.y, this.w, this.h);
-    // 心形：8x8 @ s=2 → 16x16 屏幕像素，左内边距 10px（与 fishing 一致）
-    this._drawPixelHeart(ctx, this.x + 10, this.y + (this.h - 16) / 2, 2);
-    this._drawPixelText(ctx, `${cur}/${max}`, this.x + 36, this.y + this.h / 2, 22, textFill, '#5C3A1E');
+    // PHASE 18 仗4 收尾【村庄 HUD v3 修复】：像素心形 → ❤️ emoji
+    //   原因：用户连续 2 次反馈"红心被遮挡/看不到"，定位是 8x8 像素心形（s=2 → 16px）
+    //   在某些 DPR/缩放/字体抗锯齿下视觉权重过弱、肉眼难辨。改用 ❤️ emoji 与金币 💰
+    //   同样的渲染路径（fillText + textBaseline=middle），保证图标一定可见且两个 HUD
+    //   图标风格统一（emoji 系）。
+    //   位置：x+8 与金币 💰 完全对齐；文字起始 x+38 与金币数字对齐。
+    ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = (cur === 0 || (ratio < 0.2)) ? textFill : '#FFFFFF';
+    ctx.fillText('❤️', Math.floor(this.x + 8), Math.floor(this.y + this.h / 2));
+    this._drawPixelText(ctx, `${cur}/${max}`, this.x + 38, this.y + this.h / 2, 22, textFill, '#5C3A1E');
     ctx.restore();
   }
 

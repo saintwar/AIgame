@@ -30,12 +30,26 @@ const DEFAULT_STAMINA = {
   lastResetDate: ''
 };
 
+/**
+ * PHASE 18 仗4：默认鱼饵库存（worm 兜底退役 — 仗3 挖蚯蚓玩法上线后，
+ *   兜底使命完成；新玩家给 5 条普通蚯蚓做开局补给，premium / ultra 默认 0）
+ *   字段名沿用历史命名（basic / advanced / legendary），等价于 PRD v2.0 的
+ *   { worm: 5, premium: 0, ultra: 0 } —— 改字段名牵涉店铺/装备/任务全链路，
+ *   仗4 不做命名重构，仅退役兜底逻辑。
+ */
+const DEFAULT_BAIT = {
+  basic_bait: 5,
+  advanced_bait: 0,
+  legendary_bait: 0
+};
+
 /** 默认存档数据 */
 const DEFAULT_SAVE = {
   version: 2,
   player: {
     name: '阿明', x: 4, y: 5, money: 0, coin: 0,
-    inventory: {}, codex: {}, equipment: { rod: 'basic_rod' },
+    // PHASE 18 仗4：新玩家初始鱼饵 — 5 蚯蚓 + 0 高级 + 0 终极
+    inventory: { ...DEFAULT_BAIT }, codex: {}, equipment: { rod: 'basic_rod' },
     // PHASE 16-6 仗4：当前装备的鱼饵 id（默认 basic_bait）
     equippedBait: 'basic_bait',
     fishBag: [],
@@ -167,25 +181,19 @@ class Save {
       }
 
       // ─────────────────────────────────────────────────────────
-      // PHASE 17 hotfix - 临时兜底：新手鱼饵死锁修复
-      //   背景：q001 卡 3 条奇力鱼期间，basic_bait 用光后无补给来源
-      //         （挖蚯蚓玩法未上线 / 林师傅店铺需 q003 后开放），
-      //         玩家无法继续钓鱼 → MVP 红线。
-      //   策略：basic_bait（普通蚯蚓）兜底到 999；advanced_bait /
-      //         legendary_bait 保持原值（稀缺资源，不通胀）。
-      //   同时命中：
-      //     - 全新存档（inventory: {}）→ 直接灌 999
-      //     - 老存档 basic_bait 缺失 / = 0 → 补到 999
-      //     - 老存档 basic_bait > 0 → 不动（玩家自己买的不覆盖）
-      //   PHASE 18 挖蚯蚓玩法上线后，本兜底应推翻删除。
+      // PHASE 18 仗4：worm 兜底退役（PHASE 17 hotfix → 已删除）
+      //   仗3 挖蚯蚓玩法上线 → 玩家可在村口 4 块地（16 格）随时补给，
+      //   原"basic_bait → 999"兜底彻底取消。
+      //   保留逻辑：
+      //     - inventory 不存在 → 给空对象（防御老存档结构残缺）
+      //     - 三种鱼饵字段缺失（undefined）→ 补 0；老存档已有数值不动
+      //   不再做 "= 0 时强补 5" — 老玩家 worm 用光属于正常游戏循环。
       // ─────────────────────────────────────────────────────────
       if (!save.player.inventory || typeof save.player.inventory !== 'object') {
         save.player.inventory = {};
       }
       const inv = save.player.inventory;
-      if (!inv.basic_bait || inv.basic_bait === 0) {
-        inv.basic_bait = 999;
-      }
+      if (inv.basic_bait === undefined) inv.basic_bait = 0;
       if (inv.advanced_bait === undefined) inv.advanced_bait = 0;
       if (inv.legendary_bait === undefined) inv.legendary_bait = 0;
 

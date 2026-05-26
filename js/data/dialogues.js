@@ -134,10 +134,12 @@ export const DIALOGUES = {
     npc: 'chief',
     lines: [
       { speaker: '阿土伯', text: '哇！三条都肥肥的，不愧是大海的儿子！' },
-      { speaker: '阿土伯', text: '这50块钱拿去，再给你一些鱼饵，路上用得着。' },
+      { speaker: '阿土伯', text: '这100块钱拿去，再给你一些鱼饵，路上用得着。' },
       { speaker: '阿土伯', text: '对了……你阿爸失踪那晚，我看到湖中央有奇怪的光。' },
       { speaker: '阿明', text: '……阿爸？村长你是不是知道什么！' },
-      { speaker: '阿土伯', text: '时候未到。先去把竿子练好，少年仔。' }
+      { speaker: '阿土伯', text: '时候未到。先去把竿子练好，少年仔。' },
+      // PHASE 18 仗4：worm 兜底退役 — 引导玩家自给自足，村口 4 块地（16 格）随时挖
+      { speaker: '阿土伯', text: '蚯蚓不够了？村口那 4 块地都能挖，自己动手嘛。' }
     ],
     onEnd: 'completeQuest:q001_first_fish'
   },
@@ -209,7 +211,8 @@ export const DIALOGUES = {
     id: 'lin_shop',
     npc: 'master_lin',
     lines: [
-      { speaker: '林师傅', text: '想买点啥？还是来卖鱼的？' }
+      // PHASE 18 仗4：worm 兜底退役 — 林师傅顺嘴引导挖蚯蚓，让玩家知道有免费替代
+      { speaker: '林师傅', text: '想买点啥？还是来卖鱼的？不想花钱？地里也能挖出来嘛。' }
     ],
     onEnd: null
   },
