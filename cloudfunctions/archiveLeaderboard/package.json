@@ -1,0 +1,9 @@
+{
+  "name": "archiveLeaderboard",
+  "version": "1.0.0",
+  "description": "Daily archive leaderboard_today -> leaderboard_history at 15:00 Beijing time",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.0.0"
+  }
+}
