@@ -77,12 +77,13 @@
     // innerHTML 直接写，DOM 量极小、无 XSS 风险（全部静态文案）
     overlay.innerHTML =
       '<div class="splash-content">' +
+        // 设备适配提示：游戏按桌面端 Canvas 尺寸/操作设计，手机端/小屏体验不佳。
+        // 放在 logo 上方，确保移动端竖屏窄视口下不会被裁出可视区。
+        '<div class="splash-device-notice">⚠ 请使用台式电脑进行游戏</div>' +
         '<div class="splash-logo">🎣 宝岛钓手</div>' +
         '<div class="splash-bar-wrap"><div class="splash-bar" id="splash-bar"></div></div>' +
         '<div class="splash-percent" id="splash-percent">0%</div>' +
         '<div class="splash-tip" id="splash-tip">正在准备钓具...</div>' +
-        // 设备适配提示：游戏按桌面端 Canvas 尺寸/操作设计，手机端体验不佳
-        '<div class="splash-device-notice">⚠ 请使用台式电脑进行游戏</div>' +
       '</div>';
 
     // body 还没就绪时（极早期同步执行）走 documentElement，hide 时一并清理
