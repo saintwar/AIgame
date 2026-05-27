@@ -111,9 +111,24 @@
   50%      { opacity: 0.7; transform: scale(1.04); }
 }
 
+/* 设备适配提示（红字，强调）：游戏按桌面端 Canvas 尺寸/操作设计，
+   手机端 / 平板触屏体验不佳，提醒玩家用电脑访问。
+   位置在 splash-tip 下方，整段始终可见（不随 splash-tip 文案切换变化）。 */
+.splash-device-notice {
+  margin-top: 18px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #c0392b;                      /* 深红：在暖橙背景上对比清晰，不刺眼 */
+  letter-spacing: 1px;
+  /* 半透明描边/阴影，让红字在橙色渐变背景上更清楚 */
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5),
+               0 0 6px rgba(255, 255, 255, 0.35);
+}
+
 /* 小屏幕（手机端）适配：等比缩放，不让进度条溢出 */
 @media (max-width: 420px) {
   .splash-logo { font-size: 34px; margin-bottom: 28px; letter-spacing: 2px; }
   .splash-bar-wrap { width: 80vw; }
   .splash-tip { font-size: 12px; }
+  .splash-device-notice { font-size: 13px; margin-top: 14px; }
 }

@@ -81,6 +81,8 @@
         '<div class="splash-bar-wrap"><div class="splash-bar" id="splash-bar"></div></div>' +
         '<div class="splash-percent" id="splash-percent">0%</div>' +
         '<div class="splash-tip" id="splash-tip">正在准备钓具...</div>' +
+        // 设备适配提示：游戏按桌面端 Canvas 尺寸/操作设计，手机端体验不佳
+        '<div class="splash-device-notice">⚠ 请使用台式电脑进行游戏</div>' +
       '</div>';
 
     // body 还没就绪时（极早期同步执行）走 documentElement，hide 时一并清理
