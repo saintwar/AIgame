@@ -321,4 +321,30 @@ class QuestSystem {
 
 const instance = new QuestSystem();
 QuestSystem._inst = instance;
+
+// ============================================================
+// q002 存档迁移（一次性）：目标鱼鲤鱼 → 草鱼
+//   触发条件：q002 处于 active 且 progress 字典含老 key '鲤鱼' 且缺新 key '草鱼'
+//   迁移规则：把鲤鱼的勾选状态原样转移到草鱼（让老玩家进度不退步），删掉鲤鱼字段。
+//   注意：completed / ready_to_turnin 状态不动，避免影响已通关玩家的存档语义。
+// ============================================================
+(function migrateQ002LiyuToCaoyu() {
+  try {
+    const q = Save.get('quests.q002');
+    if (!q || q.status !== 'active' || !q.progress) return;
+    const p = q.progress;
+    const hasOld = Object.prototype.hasOwnProperty.call(p, '鲤鱼');
+    const hasNew = Object.prototype.hasOwnProperty.call(p, '草鱼');
+    if (!hasOld || hasNew) return;
+    // 鲤鱼勾选状态转移到草鱼（若都没钓过，草鱼初始 false）
+    p['草鱼'] = p['鲤鱼'] === true;
+    delete p['鲤鱼'];
+    Save.set('quests.q002', q);
+    Save.commit();
+    console.log('[Quest] q002 存档迁移完成：鲤鱼 → 草鱼，新进度', JSON.stringify(p));
+  } catch (e) {
+    console.warn('[Quest] q002 迁移失败', e);
+  }
+})();
+
 export default instance;
