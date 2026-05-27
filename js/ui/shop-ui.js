@@ -485,7 +485,7 @@ export class ShopUI {
     `;
     div.innerHTML = `
       <div style="font:bold 36px 'TencentSans','PingFang SC','Noto Sans SC','Heiti SC',sans-serif;color:#FFD700;text-shadow:0 0 12px #FFD700;">${big}</div>
-      ${sub ? `<div style="font:18px 'TencentSans',sans-serif;color:#fff;opacity:.85;margin-top:4px">${sub}</div>` : ''}
+      ${sub ? `<div style="font:18px 'TencentSans','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif;color:#fff;opacity:.85;margin-top:4px">${sub}</div>` : ''}
     `;
     if (!document.getElementById('coin-float-style')) {
       const style = document.createElement('style');
@@ -524,14 +524,14 @@ export class ShopUI {
       ? '🐟 秀兰阿姨鱼摊'
       : '🎣 林师傅钓具店';
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 32px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(title, x + 30, y + 50);
 
     // 金币（PHASE 16-6 仗3 UX：往左挪 40px 给 ✕ 按钮腾位）
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${this.inventory.getCoin()} 金`, x + w - 70, y + 50);
     ctx.textAlign = 'left';
@@ -544,7 +544,7 @@ export class ShopUI {
     else if (this.mode === 'sell') this._renderSell(ctx, x, y, w, h);
 
     ctx.fillStyle = '#888';
-    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     // 底部操作提示按 mode/owner 调整
     let escHint = 'ESC/B 关闭';
@@ -567,7 +567,7 @@ export class ShopUI {
     ctx.lineWidth = 2;
     ctx.strokeRect(cx, cy, cw, ch);
     ctx.fillStyle = this.mouseHoveredClose ? '#ffd700' : '#d4a574';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('✕', cx + cw / 2, cy + ch / 2 + 1);
@@ -587,15 +587,15 @@ export class ShopUI {
       ctx.strokeRect(x + 60, y + 175, w - 120, 55);
     }
     ctx.fillStyle = hovered ? '#ffd700' : '#fff';
-    ctx.font = 'bold 28px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 28px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('1. 🛒 购买装备', x + 80, y + 210);
 
     ctx.fillStyle = '#888';
-    ctx.font = '18px "TencentSansW7", sans-serif';
+    ctx.font = '18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('按 [1] 或单击进入购买', x + 80, y + 280);
 
     ctx.fillStyle = '#aaa';
-    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('💡 卖鱼请去找村口的秀兰阿姨', x + 80, y + 360);
   }
 
@@ -610,7 +610,7 @@ export class ShopUI {
     }
 
     ctx.fillStyle = '#888';
-    ctx.font = '14px "TencentSansW7", sans-serif';
+    ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     // PHASE 16-6 仗3 UX：键鼠双通道提示
     ctx.fillText('1/2 切换分类   ↑↓ 选择   Enter 购买   或 单击选中 / 双击购买', x + 30, y + h - 50);
@@ -644,7 +644,7 @@ export class ShopUI {
         ctx.strokeRect(tx, tabY, tabW, tabH);
       }
       ctx.fillStyle = active ? '#2d1b0e' : '#d4a574';
-      ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(`${i + 1}. ${tab.label}`, tx + 14, tabY + 23);
     });
@@ -680,7 +680,7 @@ export class ShopUI {
       ctx.textAlign = 'left';
       ctx.fillText(item.icon, x + 35, iy + 28);
 
-      ctx.font = 'bold 20px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillStyle = owned ? '#7CFC00' : '#fff';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(`${item.name}${owned ? ' ✅已拥有' : ''}`, x + 85, iy + 26);
@@ -690,17 +690,17 @@ export class ShopUI {
         const stackCount = this.inventory.getCount(itemId);
         if (stackCount > 0) {
           ctx.fillStyle = '#aaccdd';
-          ctx.font = '14px "TencentSansW7", sans-serif';
+          ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
           ctx.fillText(`（已有 ${stackCount}）`, x + 85 + ctx.measureText(item.name).width + 10, iy + 26);
         }
       }
 
       ctx.fillStyle = '#bbb';
-      ctx.font = '14px "TencentSansW7", sans-serif';
+      ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(item.desc, x + 85, iy + 46);
 
       ctx.fillStyle = '#ffd700';
-      ctx.font = 'bold 20px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(`${item.price} 金`, x + w - 40, iy + 34);
       ctx.textAlign = 'left';
@@ -729,7 +729,7 @@ export class ShopUI {
     const lv1Name = '木竹篓';
     const curName = curLevel === 3 ? '保鲜冰篓' : (curLevel === 2 ? '藤编大篓' : lv1Name);
     ctx.fillStyle = '#aaccdd';
-    ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`当前：🪣 ${curName}（${fs.maxSlots} 条 / ${(fs.maxWeight / 1000).toFixed(0)}kg）`, x + 30, headerY);
@@ -767,7 +767,7 @@ export class ShopUI {
       ctx.fillText(up.icon, x + 38, iy + 40);
 
       // 名称 + 状态徽章
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = owned ? '#7CFC00' : (locked ? '#888' : '#fff');
       let statusTag = '';
@@ -777,23 +777,23 @@ export class ShopUI {
 
       // 容量描述
       ctx.fillStyle = '#bbb';
-      ctx.font = '15px "TencentSansW7", sans-serif';
+      ctx.font = '15px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(`容量：${up.maxSlots} 条 / ${(up.maxWeight / 1000).toFixed(0)}kg`, x + 95, iy + 50);
 
       // 描述
       ctx.fillStyle = '#aaa';
-      ctx.font = '13px "TencentSansW7", sans-serif';
+      ctx.font = '13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(up.desc, x + 95, iy + 70);
 
       // 价格（已拥有显示 ✅，否则显示 X 金）
       ctx.textAlign = 'right';
       if (owned) {
         ctx.fillStyle = '#7CFC00';
-        ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillText('✅', x + w - 40, iy + 38);
       } else {
         ctx.fillStyle = locked ? '#888' : '#ffd700';
-        ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillText(`${up.price} 金`, x + w - 40, iy + 38);
       }
       ctx.textAlign = 'left';
@@ -807,7 +807,7 @@ export class ShopUI {
     //   - 底部"按 A 全部出售"提示固定显示
     const subtitle = (this.shopOwner === 'xiulan') ? '🐟 鱼货收购' : '🐟 出售鱼货';
     ctx.fillStyle = '#aaccdd';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(subtitle, x + 30, y + 90);
@@ -815,7 +815,7 @@ export class ShopUI {
     const fishBag = window.Save?.get('player.fishBag') || [];
     if (fishBag.length === 0) {
       ctx.fillStyle = '#888';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('鱼篓空空，先去钓鱼吧～', x + 80, y + 200);
       return;
     }
@@ -853,7 +853,7 @@ export class ShopUI {
 
       // 主行：🐟 名 重量
       ctx.fillStyle = '#fff';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(`🐟 ${fish.species}  ${weightG}g`, x + 40, iy + 22);
@@ -868,12 +868,12 @@ export class ShopUI {
       ctx.fillRect(labelX, labelY, labelW, labelH);
       ctx.globalAlpha = 1.0;
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(rInfo.name, labelX + labelW / 2, iy + 22);
 
       // 价格（右对齐）
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.fillStyle = '#FFD700';
       ctx.fillText(`¥${price}`, x + w - 40, iy + 22);
@@ -885,14 +885,14 @@ export class ShopUI {
     let totalPrice = 0;
     fishBag.forEach(f => { totalPrice += this.inventory.computeFishPrice(f); });
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`合计 ¥${totalPrice}（${fishBag.length} 条）`, x + w - 40, y + h - 70);
     ctx.textAlign = 'left';
 
     // 操作提示
     ctx.fillStyle = '#888';
-    ctx.font = '14px "TencentSansW7", sans-serif';
+    ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('↑↓ 选择   Enter 单卖   A 全部出售   或 单击鱼货 = 单卖', x + 30, y + h - 50);
   }
 }

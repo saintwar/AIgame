@@ -117,14 +117,14 @@ class DialogueSystem {
       ctx.fillRect(0, 0, 1280, 720);
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 48px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 48px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(currentLine.text.substring(0, this.charIdx), 640, 360);
 
       // 底部提示
       if (this.charIdx >= currentLine.text.length) {
-        ctx.font = '24px "TencentSansW7", sans-serif';
+        ctx.font = '24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         const showArrow = this._arrowTimer < 0.25;
         if (showArrow) {
@@ -164,14 +164,14 @@ class DialogueSystem {
       ctx.fill();
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 28px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 28px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(currentLine.speaker, 128, boxY + 32);
 
       // 对话文字
       ctx.fillStyle = '#3D2B1F';
-      ctx.font = '32px "TencentSansW7", sans-serif';
+      ctx.font = '32px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       const displayText = currentLine.text.substring(0, this.charIdx);
@@ -185,7 +185,7 @@ class DialogueSystem {
         this._renderChoices(ctx, currentLine.choices, boxY);
       } else if (typingDone) {
         // 继续提示箭头（原有逻辑）
-        ctx.font = '24px "TencentSansW7", sans-serif';
+        ctx.font = '24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
 
@@ -196,7 +196,7 @@ class DialogueSystem {
         ctx.fillText('▼', 1216, boxY + boxH - 16);
 
         // 按键提示文字
-        ctx.font = '16px "TencentSansW7", sans-serif';
+        ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillStyle = 'rgba(61,43,31,0.45)';
@@ -248,18 +248,18 @@ class DialogueSystem {
         this._roundRect(ctx, startX, y - lineH / 2 + 2, w, lineH - 4, 4);
         ctx.fill();
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 20px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillText(`▶ ${c.label}`, startX + padX, y);
       } else {
         ctx.fillStyle = '#3D2B1F';
-        ctx.font = '20px "TencentSansW7", sans-serif';
+        ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillText(`  ${c.label}`, startX + padX, y);
       }
     }
 
     // 操作提示
     ctx.fillStyle = 'rgba(61,43,31,0.55)';
-    ctx.font = '14px "TencentSansW7", sans-serif';
+    ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'right';
     // PHASE 18 仗5 - 仗2：补"鼠标点击 / 单击"提示（键盘操作零回归）
     ctx.fillText('↑↓ 选择   Enter / 单击 确认   ESC 取消', 1216, boxY + 180 - 14);

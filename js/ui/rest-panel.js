@@ -227,7 +227,7 @@ export class RestPanel {
 
     // 标题 + 副标题
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 32px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText('🛏️ 秀兰阿姨民宿', x + 30, y + 50);
@@ -237,7 +237,7 @@ export class RestPanel {
     const cur = StaminaSystem.getCurrent();
     const max = StaminaSystem.getMax();
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${coin}    ❤️ ${cur}/${max}`, x + w - 70, y + 50);
     ctx.textAlign = 'left';
@@ -247,17 +247,17 @@ export class RestPanel {
 
     // 副文案 + 灰显警示
     ctx.fillStyle = '#aaccdd';
-    ctx.font = '20px "TencentSansW7", sans-serif';
+    ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('想休息一下吗？', x + 30, y + 100);
 
     // 灰显规则提示（金币不足时顶部红字）
     if (coin < REST_MENU[0].coin) {
       ctx.fillStyle = '#FFD166';
-      ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('💰 金币不足，先去钓几条鱼吧', x + 30, y + 140);
     } else {
       ctx.fillStyle = '#888';
-      ctx.font = '16px "TencentSansW7", sans-serif';
+      ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('数字键 1/2/3/4 直选，或鼠标点击 / ↑↓+Enter，ESC 关闭', x + 30, y + 140);
     }
 
@@ -266,7 +266,7 @@ export class RestPanel {
 
     // 底部提示
     ctx.fillStyle = '#888';
-    ctx.font = '14px "TencentSansW7", sans-serif';
+    ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('1/2/3 选档位   4 / ESC 告辞   或鼠标点击', x + 30, y + h - 20);
   }
@@ -279,7 +279,7 @@ export class RestPanel {
     ctx.lineWidth = 2;
     ctx.strokeRect(cx, cy, cw, ch);
     ctx.fillStyle = this.mouseHoveredClose ? '#ffd700' : '#d4a574';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('✕', cx + cw / 2, cy + ch / 2 + 1);
@@ -342,7 +342,7 @@ export class RestPanel {
         : '#ffd700';
 
       ctx.fillStyle = titleColor;
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
       const numTag = ['①', '②', '③'][i];
@@ -350,12 +350,12 @@ export class RestPanel {
       ctx.fillText(`${numTag}  ${opt.label}`, itemX + 16, iy + 28);
 
       ctx.fillStyle = descColor;
-      ctx.font = '16px "TencentSansW7", sans-serif';
+      ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(`${restoreLabel} · ${opt.desc}`, itemX + 16, iy + 50);
 
       // 右侧价格（金币不足红字 / 满血灰）
       ctx.fillStyle = priceColor;
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${opt.coin} 金`, itemX + itemW - 16, iy + 30);
@@ -382,7 +382,7 @@ export class RestPanel {
       ctx.strokeRect(itemX, iy, itemW, 60);
     }
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText('④  不了，告辞', itemX + 16, iy + 38);
   }

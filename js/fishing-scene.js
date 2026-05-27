@@ -451,7 +451,7 @@ class FishingScene {
     toast.style.cssText = `
       position: fixed; top: 25%; left: 50%; transform: translate(-50%, -50%);
       padding: 16px 36px; background: rgba(0,0,0,0.85); color: #FFD700;
-      font: bold 28px "TencentSansW7", sans-serif; border: 3px solid #FFD700;
+      font: bold 28px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif; border: 3px solid #FFD700;
       border-radius: 12px; z-index: 800; pointer-events: none;
       animation: codexToastFade 2.5s ease-out forwards;
     `;
@@ -1568,7 +1568,7 @@ class FishingScene {
       ctx.shadowColor = cfg.shadowColor;
       ctx.shadowBlur = cfg.shadowBlur;
     }
-    ctx.font = `bold ${cfg.fontSize}px "TencentSansW7", sans-serif`;
+    ctx.font = `bold ${cfg.fontSize}px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (cfg.strokeWidth > 0 && cfg.strokeColor) {
@@ -1964,7 +1964,7 @@ class FishingScene {
   }
   _drawPixelText(text, x, y, size, fill, stroke) {
     const ctx = this.ctx;
-    ctx.font = `bold ${size}px "TencentSansW7", sans-serif`;
+    ctx.font = `bold ${size}px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
     ctx.textBaseline = 'middle';
     if (stroke) {
       ctx.strokeStyle = stroke;
@@ -2163,7 +2163,7 @@ class FishingScene {
       }
       // 🏘️ emoji
       ctx.save();
-      ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+      ctx.font = '20px "TencentSansW7", "PingFang SC", "Microsoft YaHei", "Heiti SC", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       ctx.fillText('🏘️', Math.floor(x + 10), Math.floor(y + h / 2));
@@ -2233,10 +2233,10 @@ class FishingScene {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
     ctx.fillStyle = 'rgba(255,0,0,0.2)'; ctx.fillRect(0, 0, cw, ch);
     if (Math.sin(Date.now() / 100) > 0) {
-      ctx.fillStyle = '#FF0000'; ctx.font = "bold 180px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', cw / 2, ch / 2);
+      ctx.fillStyle = '#FF0000'; ctx.font = "bold 180px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', cw / 2, ch / 2);
       // "快按" 和 "提竿!" 分段渲染，[空格] 键使用高对比度霓虹绿
       const baseY = ch / 2 + 120;
-      ctx.font = "42px 'TencentSansW7', sans-serif";
+      ctx.font = "42px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
       const leftText = '快按 ';
       const keyText = '[空格]';
       const rightText = ' 提竿!';
@@ -2255,7 +2255,7 @@ class FishingScene {
       ctx.fillStyle = '#FFF';
       ctx.fillText(rightText, startX + leftW + keyW, baseY);
       ctx.textAlign = 'center';
-      ctx.font = "30px 'TencentSansW7', sans-serif"; ctx.fillText(`剩余 ${(this.biteWindowTimer).toFixed(1)}s`, cw / 2, ch / 2 + 180);
+      ctx.font = "30px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(`剩余 ${(this.biteWindowTimer).toFixed(1)}s`, cw / 2, ch / 2 + 180);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
   }
@@ -2264,11 +2264,11 @@ class FishingScene {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const cx = cw / 2; const cy = ch / 2;
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, cw, ch);
     const arrows = { up: '↑', down: '↓', left: '←', right: '→' };
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 144px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(arrows[this.qteDirection] || '?', cx, cy - 45);
+    ctx.fillStyle = '#FFD700'; ctx.font = "bold 144px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(arrows[this.qteDirection] || '?', cx, cy - 45);
     const radius = 90; const progress = this.qteTimer / this.qteMaxTime;
     ctx.strokeStyle = progress > 0.3 ? '#4CAF50' : '#F44336'; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(cx, cy - 45, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress); ctx.stroke();
-    ctx.fillStyle = '#FFF'; ctx.font = "36px 'TencentSansW7', sans-serif"; ctx.fillText(Math.ceil(this.qteTimer * 10) / 10 + 's', cx, cy + 90); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    if (this.qteResult) { ctx.fillStyle = this.qteResultColor; ctx.font = "bold 54px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.fillText(this.qteResult, cw / 2, ch / 2 + 150); ctx.textAlign = 'left'; }
+    ctx.fillStyle = '#FFF'; ctx.font = "36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(Math.ceil(this.qteTimer * 10) / 10 + 's', cx, cy + 90); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (this.qteResult) { ctx.fillStyle = this.qteResultColor; ctx.font = "bold 54px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.fillText(this.qteResult, cw / 2, ch / 2 + 150); ctx.textAlign = 'left'; }
   }
 
   _renderCaught() {
@@ -2292,12 +2292,12 @@ class FishingScene {
     const boxW = 450; const boxH = 210; const boxX = (cw - boxW) / 2; const boxY = (ch - boxH) / 2;
     ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(boxX, boxY, boxW, boxH);
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 4; ctx.strokeRect(boxX, boxY, boxW, boxH);
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 42px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('🎉 钓到了!', cw / 2, boxY + 45);
-    ctx.fillStyle = '#FFF'; ctx.font = "36px 'TencentSansW7', sans-serif"; ctx.fillText(fish.name, cw / 2, boxY + 90);
-    ctx.fillStyle = '#4FC3F7'; ctx.font = "28px 'TencentSansW7', sans-serif"; ctx.fillText('★'.repeat(fish.rarity), cw / 2, boxY + 125);
-    ctx.fillStyle = '#AAA'; ctx.font = "24px 'TencentSansW7', sans-serif"; ctx.fillText(`尺寸: ${this.caughtFishSize}cm  价格: $${fish.price}`, cw / 2, boxY + 165);
+    ctx.fillStyle = '#FFD700'; ctx.font = "bold 42px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.fillText('🎉 钓到了!', cw / 2, boxY + 45);
+    ctx.fillStyle = '#FFF'; ctx.font = "36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(fish.name, cw / 2, boxY + 90);
+    ctx.fillStyle = '#4FC3F7'; ctx.font = "28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText('★'.repeat(fish.rarity), cw / 2, boxY + 125);
+    ctx.fillStyle = '#AAA'; ctx.font = "24px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(`尺寸: ${this.caughtFishSize}cm  价格: $${fish.price}`, cw / 2, boxY + 165);
     // 按空格键再次抛竿提示
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 26px 'TencentSansW7', sans-serif"; ctx.fillText('按 [空格] 再次抛竿', cw / 2, boxY + 195); ctx.textAlign = 'left';
+    ctx.fillStyle = '#FFD700'; ctx.font = "bold 26px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText('按 [空格] 再次抛竿', cw / 2, boxY + 195); ctx.textAlign = 'left';
   }
 
   _renderFailed() {
@@ -2321,15 +2321,15 @@ class FishingScene {
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 4; ctx.stroke();
     
     // 标题
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 48px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFD700'; ctx.font = "bold 48px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('🐟 跑鱼了!', cw / 2, panelY + 60);
     
     // 原因消息（翻页显示）
-    ctx.fillStyle = '#FFF'; ctx.font = "32px 'TencentSansW7', sans-serif";
+    ctx.fillStyle = '#FFF'; ctx.font = "32px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     ctx.fillText(msg, cw / 2, panelY + 130);
     
     // 确认提示：[空格] 键高亮
-    ctx.font = "bold 28px 'TencentSansW7', sans-serif";
+    ctx.font = "bold 28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     const confirmLeft = '请按 '; const confirmKey = '[空格]'; const confirmRight = ' 确认';
     const clW = ctx.measureText(confirmLeft).width;
     const ckW = ctx.measureText(confirmKey).width;
@@ -2341,7 +2341,7 @@ class FishingScene {
     ctx.strokeText(confirmKey, cStartX + clW, panelY + 220);
     ctx.fillStyle = '#00FF88'; ctx.fillText(confirmKey, cStartX + clW, panelY + 220);
     ctx.fillStyle = '#FFD700'; ctx.fillText(confirmRight, cStartX + clW + ckW, panelY + 220);
-    ctx.fillStyle = '#AAA'; ctx.font = "20px 'TencentSansW7', sans-serif";
+    ctx.fillStyle = '#AAA'; ctx.font = "20px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     ctx.fillText('确认后重新抛竿', cw / 2, panelY + 255);
     
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2358,7 +2358,7 @@ class FishingScene {
     const key1 = '[空格]';
     const line1r = ' 键抛竿';
     const baseY = hintY + hintH / 2 - 15;
-    ctx.font = "bold 36px 'TencentSansW7', sans-serif";
+    ctx.font = "bold 36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     const l1W = ctx.measureText(line1).width;
     const k1W = ctx.measureText(key1).width;
     const l1rW = ctx.measureText(line1r).width;
@@ -2369,7 +2369,7 @@ class FishingScene {
     ctx.strokeText(key1, startX1 + l1W, baseY);
     ctx.fillStyle = '#00FF88'; ctx.fillText(key1, startX1 + l1W, baseY);
     ctx.fillStyle = '#FFD700'; ctx.fillText(line1r, startX1 + l1W + k1W, baseY);
-    ctx.fillStyle = '#AAA'; ctx.font = "22px 'TencentSansW7', sans-serif";
+    ctx.fillStyle = '#AAA'; ctx.font = "22px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     ctx.textAlign = 'center'; ctx.fillText('长按蓄力，松手抛竿', cw / 2, hintY + hintH / 2 + 30);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
@@ -2723,7 +2723,7 @@ class FishingScene {
   _renderTaskComplete() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
     ctx.fillStyle = '#5C8A4C'; ctx.beginPath(); ctx.roundRect(cw / 2 - 400, ch / 2 - 60, 800, 120, 16); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.font = "bold 36px 'TencentSansW7', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✅ 任务目标达成！按 R 返回村庄', cw / 2, ch / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#FFF'; ctx.font = "bold 36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✅ 任务目标达成！按 R 返回村庄', cw / 2, ch / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
   // ============================================================

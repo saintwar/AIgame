@@ -58,7 +58,7 @@ export class CoinHUD {
 
     // 钱袋 emoji 图标（保留 💰），左内边距 10px，与 StaminaHUD 心形对齐
     // 用 16px emoji 字号（实际渲染 ~16-18px），与 StaminaHUD 心形 16x16 视觉等大
-    ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.font = '20px "TencentSansW7", "PingFang SC", "Microsoft YaHei", "Heiti SC", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText('💰', Math.floor(this.x + 8), Math.floor(this.y + this.h / 2));
@@ -90,7 +90,7 @@ export class CoinHUD {
   }
 
   _drawPixelText(ctx, text, x, y, size, fill, stroke) {
-    ctx.font = `bold ${size}px "TencentSansW7", sans-serif`;
+    ctx.font = `bold ${size}px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     if (stroke) {

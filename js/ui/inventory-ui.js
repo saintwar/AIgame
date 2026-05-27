@@ -200,13 +200,13 @@ export class InventoryUI {
 
     // 标题
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 32px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 32px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('🎒 阿明的背包', x + 30, y + 50);
 
     // 金币显示
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${this.inventory.getCoin()} 金`, x + w - 60, y + 50);
     ctx.textAlign = 'left';
@@ -219,7 +219,7 @@ export class InventoryUI {
     ctx.lineWidth = 2;
     ctx.strokeRect(cx, cy, cw, ch);
     ctx.fillStyle = this.mouseHoveredClose ? '#ffd700' : '#d4a574';
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('✕', cx + cw / 2, cy + 22);
     ctx.textAlign = 'left';
@@ -241,7 +241,7 @@ export class InventoryUI {
         ctx.strokeRect(tx, tabY, tabW, tabH);
       }
       ctx.fillStyle = active ? '#2d1b0e' : '#d4a574';
-      ctx.font = '18px "TencentSansW7", sans-serif';
+      ctx.font = '18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(tab.label, tx + 12, tabY + 27);
     });
 
@@ -254,7 +254,7 @@ export class InventoryUI {
 
     // 底部提示
     ctx.fillStyle = '#888';
-    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('← → / 1-5 切换分类   B/ESC 关闭   🖱️ 点 Tab 切换 / 点 ✕ 关闭', x + 30, y + h - 20);
   }
@@ -284,14 +284,14 @@ export class InventoryUI {
     const bagName = cap.bagLevel === 3 ? '保鲜冰篓'
                   : cap.bagLevel === 2 ? '藤编大篓' : '木竹篓';
     ctx.fillStyle = '#d4a574';
-    ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`🪣 ${bagName}`, x + 42, barAreaY + 22);
 
     // 第 1 行右侧：满载警告
     if (cap.slotsFull || cap.weightFull) {
       ctx.fillStyle = '#ff7043';
-      ctx.font = 'bold 14px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText('⚠ 鱼篓已满，请回村卖鱼', x + w - 42, barAreaY + 22);
       ctx.textAlign = 'left';
@@ -312,7 +312,7 @@ export class InventoryUI {
     const listY = this._getListY(tabY);
     if (items.length === 0) {
       ctx.fillStyle = '#888';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('（鱼篓空空，去日月潭钓几条吧～）', x + 40, listY + 30);
       return;
     }
@@ -341,15 +341,15 @@ export class InventoryUI {
       ctx.fillText('🐟', x + 45, iy + 40);
       // 名称 ×count
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(`${item.name} ×${item.count}`, x + 100, iy + 28);
       // 副信息：均重 / 总重
       ctx.fillStyle = '#bbb';
-      ctx.font = '16px "TencentSansW7", sans-serif';
+      ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(`均 ${item.avgWeight}g · 共 ${item.totalWeight}g`, x + 100, iy + 48);
       // 右侧总重高亮
       ctx.fillStyle = '#ffd54f';
-      ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(`${item.totalWeight}g`, x + w - 40, iy + 36);
       ctx.textAlign = 'left';
@@ -358,7 +358,7 @@ export class InventoryUI {
     // 列表被截断的 hint
     if (visible.length < items.length) {
       ctx.fillStyle = '#888';
-      ctx.font = '14px "TencentSansW7", sans-serif';
+      ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(`···还有 ${items.length - visible.length} 种未显示`, x + w - 40, listY + visible.length * 60 + 16);
       ctx.textAlign = 'left';
@@ -382,7 +382,7 @@ export class InventoryUI {
     ctx.fillRect(bx + 1, by + 1, Math.max(0, (bw - 2) * ratio), bh - 2);
     // 文字（条内居中，深色描边保证在任何底色上都清晰）
     const label = `${unit === '条' ? '条数' : '重量'}  ${value} / ${max} ${unit}`;
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 3;
@@ -402,7 +402,7 @@ export class InventoryUI {
     const listY = this._getListY(tabY);
     if (items.length === 0) {
       ctx.fillStyle = '#888';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('（这一类还没有物品）', x + 40, listY + 30);
       return;
     }
@@ -425,19 +425,19 @@ export class InventoryUI {
       ctx.fillText(item.icon, x + 45, iy + 40);
       // 名称
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+      ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(`${item.name} ×${item.count}`, x + 100, iy + 28);
       // 已装备标记
       if (item.category === 'rod' && window.equipment && window.equipment.getEquippedRod().id === item.id) {
         ctx.fillStyle = '#7CFC00';
-        ctx.font = 'bold 18px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'right';
         ctx.fillText('⚔️ 已装备', x + w - 40, iy + 28);
         ctx.textAlign = 'left';
       }
       // 描述
       ctx.fillStyle = '#bbb';
-      ctx.font = '16px "TencentSansW7", sans-serif';
+      ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText(item.desc, x + 100, iy + 48);
     });
   }

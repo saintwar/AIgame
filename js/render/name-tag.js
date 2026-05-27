@@ -9,7 +9,7 @@ export function drawNameTag(ctx, centerX, topY, name) {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  const font = '14px "TencentSansW7", sans-serif';
+  const font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
   ctx.font = font;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';

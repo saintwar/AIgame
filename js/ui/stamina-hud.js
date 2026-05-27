@@ -65,7 +65,7 @@ export class StaminaHUD {
     //   同样的渲染路径（fillText + textBaseline=middle），保证图标一定可见且两个 HUD
     //   图标风格统一（emoji 系）。
     //   位置：x+8 与金币 💰 完全对齐；文字起始 x+38 与金币数字对齐。
-    ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.font = '20px "TencentSansW7", "PingFang SC", "Microsoft YaHei", "Heiti SC", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillStyle = (cur === 0 || (ratio < 0.2)) ? textFill : '#FFFFFF';
@@ -98,7 +98,7 @@ export class StaminaHUD {
   }
 
   _drawPixelText(ctx, text, x, y, size, fill, stroke) {
-    ctx.font = `bold ${size}px "TencentSansW7", sans-serif`;
+    ctx.font = `bold ${size}px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
     ctx.textBaseline = 'middle';
     if (stroke) {
       ctx.strokeStyle = stroke;

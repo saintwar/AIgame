@@ -98,7 +98,7 @@ class ArrowGuide {
       ctx.fillStyle = '#FFD700';
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 2;
-      ctx.font = '14px "TencentSansW7", sans-serif';
+      ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
       ctx.strokeText(this.targetTile.label, arrowX, arrowY - 18);
       ctx.fillText(this.targetTile.label, arrowX, arrowY - 18);
@@ -519,7 +519,7 @@ class VillageScene {
     const titleY = titleBaseY + floatY;
     const titleText = '宝岛钓手';
 
-    ctx.font = 'bold 96px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 96px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -540,7 +540,7 @@ class VillageScene {
       octx.clearRect(0, 0, ocW, ocH);
 
       // ⚠️ 必须在绘制前设置字体（oc.width 重置了上下文，font 回到默认值）
-      octx.font = 'bold 96px "TencentSansW7", sans-serif';
+      octx.font = 'bold 96px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
 
@@ -592,7 +592,7 @@ class VillageScene {
       ctx.fillText(titleText, cw / 2, titleY);
     }
 
-    ctx.font = '48px "TencentSansW7", sans-serif';
+    ctx.font = '48px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // 副标题描边（深紫，保证在山脉背景上可读）
@@ -616,7 +616,7 @@ class VillageScene {
     ctx.fillRect(cw / 2 - 120, ch / 2 + 70, 240, 4);
 
     ctx.fillStyle = '#888';
-    ctx.font = '16px "TencentSansW7", sans-serif';
+    ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('v1.1 · 720p HD', 20, ch - 40);
     ctx.textAlign = 'right';
@@ -675,7 +675,7 @@ class VillageScene {
     // 按钮文字（亮金色 + 阴影）
     const textBright = h > 0.3 ? '#FFE8A8' : '#FFD166';
     ctx.fillStyle = textBright;
-    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = h > 0.3 ? 'rgba(255,224,138,0.5)' : 'rgba(0,0,0,0.8)';
@@ -689,7 +689,7 @@ class VillageScene {
     ctx.restore();
 
     // 提示文字（白字 + 黑描边）
-    ctx.font = '14px "TencentSansW7", sans-serif';
+    ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
@@ -2181,7 +2181,7 @@ class VillageScene {
 
       ctx.globalAlpha = this.narrOpacity;
       ctx.fillStyle = '#F4E4C1';
-      ctx.font = '48px "TencentSansW7", sans-serif';
+      ctx.font = '48px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(INTRO_NARRATIONS[this.currentNarrLine], cw / 2, ch / 2);
@@ -2246,7 +2246,7 @@ class VillageScene {
 
     // 标题文字
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 36px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('📖 操作指南', cardX + cardW / 2, cardY + 32);
@@ -2263,7 +2263,7 @@ class VillageScene {
     ];
 
     let y = cardY + 110;
-    ctx.font = '32px "TencentSansW7", sans-serif';
+    ctx.font = '32px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#3D2B1F';
 
@@ -2279,7 +2279,7 @@ class VillageScene {
     //   外层红色边框 cardY + cardH + 2，外层栗褐边框 cardY + cardH + 6，
     //   故文字 y = cardY + cardH + 28（与边框间距 16px，与 baseline=alphabetic 字底约对齐）。
     ctx.fillStyle = 'rgba(255, 244, 214, 0.85)';   // 米白偏亮，遮罩底（rgba(0,0,0,0.7)）上可读
-    ctx.font = '20px "TencentSansW7", sans-serif';
+    ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText('按 任意键 或 ESC 关闭', cardX + cardW / 2, cardY + cardH + 28);
@@ -2312,7 +2312,7 @@ class VillageScene {
     ctx.strokeRect(closeX, closeY, closeW, closeH);
     // ✕ 字
     ctx.fillStyle = hovered ? '#ffd700' : '#FFFFFF';
-    ctx.font = 'bold 26px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 26px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('✕', closeX + closeW / 2, closeY + closeH / 2 + 1);
@@ -2350,7 +2350,7 @@ class VillageScene {
     }
 
     // 📖 emoji
-    ctx.font = '20px "TencentSansW7", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.font = '20px "TencentSansW7", "PingFang SC", "Microsoft YaHei", "Heiti SC", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText('📖', Math.floor(x + 8), Math.floor(y + h / 2));
@@ -2359,7 +2359,7 @@ class VillageScene {
     const text = '游戏指南';
     const tx = x + 38;
     const ty = y + h / 2;
-    ctx.font = 'bold 22px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.strokeStyle = '#5C3A1E';
     ctx.lineWidth = 3;
     ctx.lineJoin = 'miter';
@@ -2593,7 +2593,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = '#FFD700';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(`🎯 奇力鱼 ${count}/3`, x + 12, y + 20);
@@ -2609,7 +2609,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = isReady ? '#7CFC00' : '#FFD700';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + 12, y + 20);
@@ -2625,7 +2625,7 @@ class VillageScene {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x, y, 360, 36);
       ctx.fillStyle = isReady ? '#7CFC00' : '#FFD700';
-      ctx.font = '20px "TencentSansW7", sans-serif';
+      ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + 12, y + 20);
@@ -2759,7 +2759,7 @@ class VillageScene {
         ctx.stroke();
 
         ctx.fillStyle = '#3D2B1F';
-        ctx.font = 'bold 20px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('E', hintX, hintY);
@@ -2867,7 +2867,7 @@ class VillageScene {
     }
 
     ctx.fillStyle = hovered ? '#FFE4B5' : '#FFFFFF';
-    ctx.font = 'bold 24px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // PHASE 16-4.8 仗4：补"或点击此处"，告知玩家可鼠标启动
@@ -3005,7 +3005,7 @@ class VillageScene {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 11px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 11px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
 
     for (const d of dirs) {
       const dx = centerX + d.x;
@@ -3045,7 +3045,7 @@ class VillageScene {
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
     ctx.fillStyle = '#3D2B1F';
-    ctx.font = 'bold 40px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 40px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('📋 任务面板', panelX + panelW / 2, panelY + 50);
@@ -3053,7 +3053,7 @@ class VillageScene {
     const activeQuests = questSystem.getActiveQuests();
 
     if (activeQuests.length === 0) {
-      ctx.font = '28px "TencentSansW7", sans-serif';
+      ctx.font = '28px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillStyle = '#888';
       ctx.fillText('暂无进行中的任务', panelX + panelW / 2, panelY + 200);
     } else {
@@ -3061,7 +3061,7 @@ class VillageScene {
       for (const q of activeQuests) {
         const tpl = window.QUESTS?.[q.id] || { name: q.id, description: '' };
 
-        ctx.font = 'bold 24px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillStyle = '#3D2B1F';
         ctx.textAlign = 'left';
         ctx.fillText(tpl.name, panelX + 40, y);
@@ -3078,12 +3078,12 @@ class VillageScene {
         const badgeX = panelX + panelW - 120;
         ctx.fillRect(badgeX, y - 14, 80, 28);
         ctx.fillStyle = '#FFF';
-        ctx.font = 'bold 16px "TencentSansW7", sans-serif';
+        ctx.font = 'bold 16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(badgeText, badgeX + 40, y + 1);
 
         y += 40;
-        ctx.font = '20px "TencentSansW7", sans-serif';
+        ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillStyle = '#666';
         ctx.textAlign = 'left';
         const questTpl = QUESTS[q.id];
@@ -3098,7 +3098,7 @@ class VillageScene {
       }
     }
 
-    ctx.font = '20px "TencentSansW7", sans-serif';
+    ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillStyle = '#888';
     ctx.textAlign = 'center';
     ctx.fillText('按 Q 关闭', panelX + panelW / 2, panelY + panelH - 30);
@@ -3135,7 +3135,7 @@ class VillageScene {
 
     // === 标题 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 16px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('🐛 DEBUG MODE', panelX + 12, y);
     y += 28;
 
@@ -3150,7 +3150,7 @@ class VillageScene {
 
     // === 性能 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('📊 性能', panelX + 12, y);
     y += 20;
 
@@ -3207,7 +3207,7 @@ class VillageScene {
 
     // === 玩家 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('🎮 玩家', panelX + 12, y);
     y += 20;
 
@@ -3232,7 +3232,7 @@ class VillageScene {
 
     // === 任务 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('📋 任务', panelX + 12, y);
     y += 20;
 
@@ -3266,7 +3266,7 @@ class VillageScene {
 
     // === 存档 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('💾 存档', panelX + 12, y);
     y += 20;
 
@@ -3293,7 +3293,7 @@ class VillageScene {
 
     // === 热键 ===
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px "TencentSansW7", sans-serif';
+    ctx.font = 'bold 13px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('🔧 热键', panelX + 12, y);
     y += 20;
 

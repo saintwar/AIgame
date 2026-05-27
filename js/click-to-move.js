@@ -435,7 +435,7 @@
         ctx.shadowBlur = 0;
 
         // 头顶气泡 "💬 点击对话"（NPC 中心上方）
-        ctx.font = '14px "TencentSansW7", sans-serif';
+        ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const tipX = hoverGridX * T + T / 2;
@@ -454,7 +454,7 @@
         ctx.strokeRect(hoverGridX * T + 1, hoverGridY * T + 1, T - 2, T - 2);
         ctx.shadowBlur = 0;
 
-        ctx.font = '14px "TencentSansW7", sans-serif';
+        ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const tipX = hoverGridX * T + T / 2;
