@@ -1,7 +1,7 @@
 /**
  * 玩家档案系统
  * 负责：昵称读取 / 保存 / 双写（localStorage + CloudBase）
- * PHASE 16-2
+ * PHASE 16-2 → PHASE 16-2.1 扩展 titleStats（历史最佳 + 称号）
  *
  * 设计原则：
  *   - 本地为快、云端为准：开局先用 localStorage 闪开界面，云端拉到后覆盖
@@ -9,14 +9,47 @@
  *   - IIFE，挂 window.PlayerProfile，与 main.js (ES module) 解耦
  *
  * 数据契约（player_profile 集合）：
- *   { _openid: string, nickname: string, createdAt: number, updatedAt: number }
+ *   {
+ *     _openid: string,
+ *     nickname: string,
+ *     createdAt: number,
+ *     updatedAt: number,
+ *     // PHASE 16-2.1 新增：历史最佳（titleStats 子集，单位 kg / ISO 字符串）
+ *     titleStats?: {
+ *       currentTitleId: string,
+ *       bestSingleFishWeight: number,    // 单位 kg
+ *       bestSingleFishName: string,
+ *       bestSingleFishDate: string|null, // ISO 8601
+ *       totalCaughtWeight: number        // 单位 kg
+ *     }
+ *   }
  *   （_openid 是 CloudBase 自动注入字段，无需手动写）
+ *
+ * 写入时机（方案 C 折中）：
+ *   - saveNickname() 时顺手把当前本地 titleStats 全量带写云端
+ *   - 钓鱼回调链路不改动；接受"换设备后历史最佳数据滞后到下次填昵称才同步"
+ *
+ * 读取时机（load）：
+ *   - 若云端 titleStats 存在 → 与本地 Save.player.titleStats 按"取大不取小"合并回本地
+ *   - 失败降级：云端无数据 / 网络异常 → 维持本地，不影响游戏
  */
 (function() {
   'use strict';
 
   const STORAGE_KEY = 'bdds_player_profile_v1';
   const COLLECTION = 'player_profile';
+
+  // titleStats 字段元信息：决定云/本合并时的策略
+  //   - 'max'：数值字段，取 max(本地, 云端)
+  //   - 'maxWithPair'：bestSingleFishWeight 决胜，配套字段（name/date）跟随胜者
+  //   - 'cloud'：字符串类（currentTitleId），云端为准（称号"只升不降"由 title-system 保证）
+  const TITLE_STATS_FIELDS = [
+    'currentTitleId',
+    'bestSingleFishWeight',
+    'bestSingleFishName',
+    'bestSingleFishDate',
+    'totalCaughtWeight',
+  ];
 
   window.PlayerProfile = {
     nickname: null,
@@ -78,6 +111,17 @@
               this.cloudSynced = true;
               this._saveLocal();
               console.log('[Profile] 云端档案已同步:', this.nickname);
+            }
+
+            // PHASE 16-2.1：云端 titleStats 存在 → 按"取大不取小"合并回本地 Save
+            //   设计原则：云端为权威源，但数值字段取 max，避免本地比云端新时反被降级。
+            //   失败/无 Save 模块 时静默跳过，不影响游戏。
+            if (cloud.titleStats && typeof cloud.titleStats === 'object') {
+              try {
+                this._mergeTitleStatsToLocal(cloud.titleStats);
+              } catch (e) {
+                console.warn('[Profile] titleStats 合并失败（不影响游戏）:', e && e.message);
+              }
             }
           } else {
             console.log('[Profile] 云端无档案（待首次保存）');
@@ -161,6 +205,7 @@
     /**
      * 将当前 nickname 写入云端（query → update / add）
      * 由 saveNickname 与 load（自动补写）共用
+     * PHASE 16-2.1：顺手把本地 titleStats 全量带写（方案 C 折中，不动钓鱼回调）
      * @private
      */
     async _saveToCloud() {
@@ -169,27 +214,118 @@
       }
       const db = window.CloudBase.db;
 
+      // 顺手带写：从本地 Save 读 titleStats（不存在则不带，避免覆盖云端已有数据）
+      const localTitleStats = this._readLocalTitleStats();
+
       const res = await db.collection(COLLECTION)
         .where({ _openid: this.openid })
         .get();
 
       if (res && res.data && res.data.length > 0) {
         // 已存在 → 更新
-        await db.collection(COLLECTION).doc(res.data[0]._id).update({
+        const updatePayload = {
           nickname: this.nickname,
           updatedAt: Date.now(),
-        });
+        };
+        if (localTitleStats) updatePayload.titleStats = localTitleStats;
+        await db.collection(COLLECTION).doc(res.data[0]._id).update(updatePayload);
       } else {
         // 新建（_openid 由 CloudBase 自动注入）
-        await db.collection(COLLECTION).add({
+        const addPayload = {
           nickname: this.nickname,
           createdAt: this.createdAt || Date.now(),
           updatedAt: Date.now(),
-        });
+        };
+        if (localTitleStats) addPayload.titleStats = localTitleStats;
+        await db.collection(COLLECTION).add(addPayload);
       }
 
       this.cloudSynced = true;
       this._saveLocal();
+    },
+
+    /**
+     * 从本地 Save 读取 titleStats（5 字段全量）
+     * 老存档或 Save 模块未就绪 → 返回 null（外层据此决定是否带字段写云端）
+     * @private
+     * @returns {object|null}
+     */
+    _readLocalTitleStats() {
+      if (!window.Save || typeof window.Save.get !== 'function') return null;
+      const stats = window.Save.get('player.titleStats');
+      if (!stats || typeof stats !== 'object') return null;
+      // 全量字段化（确保云端拿到的是固定 schema，缺失字段补默认值）
+      return {
+        currentTitleId: typeof stats.currentTitleId === 'string' ? stats.currentTitleId : 'newbie',
+        bestSingleFishWeight: typeof stats.bestSingleFishWeight === 'number' ? stats.bestSingleFishWeight : 0,
+        bestSingleFishName: typeof stats.bestSingleFishName === 'string' ? stats.bestSingleFishName : '',
+        bestSingleFishDate: typeof stats.bestSingleFishDate === 'string' ? stats.bestSingleFishDate : null,
+        totalCaughtWeight: typeof stats.totalCaughtWeight === 'number' ? stats.totalCaughtWeight : 0,
+      };
+    },
+
+    /**
+     * 将云端 titleStats 按"取大不取小"合并回本地 Save
+     * 合并规则：
+     *   - bestSingleFishWeight：取 max；配套字段 bestSingleFishName/bestSingleFishDate 跟随胜者
+     *   - totalCaughtWeight：取 max（防止云端数据陈旧把本地累计干没）
+     *   - currentTitleId：取索引更大的（"只升不降"，与 title-system 语义一致）
+     * 写回后立即 commit() 持久化到 localStorage。
+     * @private
+     * @param {object} cloudStats
+     */
+    _mergeTitleStatsToLocal(cloudStats) {
+      if (!window.Save || typeof window.Save.get !== 'function' || typeof window.Save.set !== 'function') {
+        console.warn('[Profile] Save 模块未就绪，跳过 titleStats 合并');
+        return;
+      }
+
+      // 读本地（缺失 → 空对象，由 _readLocalTitleStats 规范化）
+      const local = this._readLocalTitleStats() || {
+        currentTitleId: 'newbie',
+        bestSingleFishWeight: 0,
+        bestSingleFishName: '',
+        bestSingleFishDate: null,
+        totalCaughtWeight: 0,
+      };
+
+      // 1) bestSingleFishWeight + 配套字段（取胜者整组）
+      const cloudBest = typeof cloudStats.bestSingleFishWeight === 'number' ? cloudStats.bestSingleFishWeight : 0;
+      const localBest = local.bestSingleFishWeight || 0;
+      let merged;
+      if (cloudBest > localBest) {
+        merged = {
+          currentTitleId: local.currentTitleId,
+          bestSingleFishWeight: cloudBest,
+          bestSingleFishName: typeof cloudStats.bestSingleFishName === 'string' ? cloudStats.bestSingleFishName : local.bestSingleFishName,
+          bestSingleFishDate: typeof cloudStats.bestSingleFishDate === 'string' ? cloudStats.bestSingleFishDate : local.bestSingleFishDate,
+          totalCaughtWeight: local.totalCaughtWeight,
+        };
+      } else {
+        merged = { ...local };
+      }
+
+      // 2) totalCaughtWeight 取 max
+      const cloudTotal = typeof cloudStats.totalCaughtWeight === 'number' ? cloudStats.totalCaughtWeight : 0;
+      merged.totalCaughtWeight = Math.max(merged.totalCaughtWeight || 0, cloudTotal);
+
+      // 3) currentTitleId 取"索引更大"（依赖 title-system 的 TITLES 序）
+      //    若 title-system 未加载或找不到 → 维持本地（安全降级）
+      const cloudTitleId = typeof cloudStats.currentTitleId === 'string' ? cloudStats.currentTitleId : null;
+      if (cloudTitleId && cloudTitleId !== merged.currentTitleId) {
+        const TS = window.TitleSystem;
+        if (TS && Array.isArray(TS.TITLES)) {
+          const li = TS.TITLES.findIndex(t => t.id === merged.currentTitleId);
+          const ci = TS.TITLES.findIndex(t => t.id === cloudTitleId);
+          if (ci > li) merged.currentTitleId = cloudTitleId;
+        }
+        // title-system 不可用：保持本地，不冒险升降
+      }
+
+      // 写回 Save 并持久化
+      window.Save.set('player.titleStats', merged);
+      if (typeof window.Save.commit === 'function') window.Save.commit();
+      console.log('[Profile] titleStats 已合并自云端:', merged);
     },
 
     _saveLocal() {
