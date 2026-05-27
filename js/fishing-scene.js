@@ -661,12 +661,15 @@ class FishingScene {
     };
     this.currentFish.size = [fishData.size, fishData.size * 0.5];
     this.currentFish.price = fishData.basePrice;
-    this.currentFish.maxHP = fishData.rarity * 120;
+    // PHASE 15 修复：legacy FISH_POOL 仅提供 color 等视觉字段，rarity/HP 必须以 PHASE 15 数据为权威
+    //   原 bug：legacy.rarity 覆盖 fishData.rarity（曲腰鱼 2→3）+ maxHP=rarity*120（→240）
+    //   修复：rarity 强制用 fishData.rarity；maxHP 直接用 fishData.hp（PHASE 15 战斗参数）
+    this.currentFish.rarity = fishData.rarity;
+    this.currentFish.maxHP = fishData.hp;
     this.fishHP = this.currentFish.maxHP;
     // PHASE 15：把鱼种行为/拉力字段同步到 currentFish（_initPlayingState 会用）
     this.currentFish.fishPull = fishData.fishPull || 0;
     this.currentFish.behavior = fishData.behavior || 'none';
-    this.currentFish.species_hp = fishData.hp || 0;       // 行为版"鱼总 HP"（与 maxHP 区分）
     this.currentFish.hpDrain = fishData.hpDrain || 0;
 
     // ─────────────────────────────────────────────────────────
@@ -713,12 +716,12 @@ class FishingScene {
           this.currentFish.size = [newSize, newSize * 0.5];
           this.currentFish.price = newFish.basePrice;
           this.currentFish.rarity = newFish.rarity;
-          this.currentFish.maxHP = newFish.rarity * 120;
+          // PHASE 15 修复：maxHP 用 PHASE 15 数据，与 _setupCurrentFish 保持一致
+          this.currentFish.maxHP = newFish.hp;
           this.fishHP = this.currentFish.maxHP;
           // PHASE 15：提档后同步行为/拉力字段
           this.currentFish.fishPull = newFish.fishPull || 0;
           this.currentFish.behavior = newFish.behavior || 'none';
-          this.currentFish.species_hp = newFish.hp || 0;
           this.currentFish.hpDrain = newFish.hpDrain || 0;
         }
       }
@@ -793,9 +796,9 @@ class FishingScene {
     this.surgeWarnTimer = 0;          // >0 时：UI 层显示鱼图标抖动 + "！"气泡
     this.lineWarnColor  = null;       // null | 'red'(将断) | 'blue'(将松脱)
     this.dangerTextTimer = 0;         // >0 时：屏幕中央闪"危险！"
-    // PHASE 15：行为版"鱼总 HP"（黄金区按 hpDrain 扣血用）；与原 fishHP 解耦保留
-    this.fishCurrentHP = this.currentFish.species_hp || 0;
-    this.fishSpeciesMaxHP = this.fishCurrentHP;
+    // PHASE 15 修复：删除 fishCurrentHP/fishSpeciesMaxHP 平行 HP 体系。
+    //   现在 fishHP / maxHP 直接对接 PHASE 15 数据（fishData.hp / fishData.hpDrain），
+    //   mythic 三阶段所需 hpPercent 直接用 fishHP/maxHP 计算。
     // 首次进入水下场景时显示拉力教程
     this._showTensionTutorialIfNeeded();
   }
@@ -852,7 +855,11 @@ class FishingScene {
     if (holdingSpace) AudioSystem.startReelSound();
     else AudioSystem.stopReelSound();
     if (this._checkEscape(dt)) return;
-    const hpDecayRate = 5 + this.currentFish.rarity * 4.5; const hpRecoverRate = cfg.fishHPRecoverPerSecond; const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
+    // PHASE 15 修复：扣血率改用鱼种自带 hpDrain（替代老公式 5+rarity*4.5）
+    //   这样 hp ÷ hpDrain 即理论最快收杆时间，符合 PHASE 15 数值表设计。
+    //   回血率不动（cfg.fishHPRecoverPerSecond），与 escape/exhausted 判定耦合的逻辑全部保留。
+    const hpDecayRate = this.currentFish.hpDrain || (5 + this.currentFish.rarity * 4.5);
+    const hpRecoverRate = cfg.fishHPRecoverPerSecond; const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
     if (this.fishHP > 0) { if (holdingSpace) this.fishHP = Math.max(0, this.fishHP - hpDecayRate * dt); else if (this.fishHP < maxRecoverHP) this.fishHP = Math.min(maxRecoverHP, this.fishHP + hpRecoverRate * dt); }
     const fishExhausted = this.fishHP <= 0;
     if (this.tension > 70 && !this.highTensionSound) { this.highTensionSound = true; AudioSystem.playReelTick(); } else if (this.tension <= 70) this.highTensionSound = false;
@@ -888,7 +895,8 @@ class FishingScene {
     //   - 负值 → tension 朝松脱方向下降（mythic 深潜：鱼往下扎，线被带松）
     //   红线兼容：对 rise=15 / fall=40 / 黄金区 / slackFailGrace 都是叠加项，不替换。
     if (this.currentFishBehavior) {
-      const hpPercent = this.fishSpeciesMaxHP > 0 ? (this.fishCurrentHP / this.fishSpeciesMaxHP) : 1;
+      // PHASE 15 修复：hpPercent 直接用 fishHP/maxHP（与 UI 显示同源，mythic 三阶段判定准确）
+      const hpPercent = this.currentFish.maxHP > 0 ? (this.fishHP / this.currentFish.maxHP) : 1;
       const effectivePull = this.currentFishBehavior.getEffectivePull(dt, hpPercent);
       this.tension += effectivePull * dt;
     }
@@ -905,12 +913,10 @@ class FishingScene {
     else if (this.dangerTextTimer > 0) this.dangerTextTimer = Math.max(0, this.dangerTextTimer - dt);
     if (this.surgeWarnTimer > 0) this.surgeWarnTimer = Math.max(0, this.surgeWarnTimer - dt);
 
-    // PHASE 15 仗4：行为版"鱼总 HP"按 hpDrain 在黄金区(30~70)内扣血。
-    //   注意：保留原 fishHP/hpDecayRate 体系（与 escape/exhausted 判定耦合），
-    //         这里只是把"鱼种差异化 HP"挂在 fishCurrentHP 上做平行体验，不影响现有失败判定。
-    if (this.fishCurrentHP > 0 && this.tension >= cfg.goldZoneMin && this.tension <= cfg.goldZoneMax) {
-      this.fishCurrentHP = Math.max(0, this.fishCurrentHP - (this.currentFish.hpDrain || 0) * dt);
-    }
+    // PHASE 15 修复：移除 fishCurrentHP 平行扣血段。
+    //   现已统一：fishHP 用 PHASE 15 的 fishData.hp 初始化，扣血率 hpDecayRate 改用 fish.hpDrain，
+    //   与 UI 显示（"鱼的体力"血条）和 _onFishCaught 胜负判定全部同源。
+
 
     // PHASE 13-4：低拉力（鱼线松弛）失败判定 —— tension≤0 持续 slackFailGrace 秒 → slack
     //   与 tension≥100 鱼线断对称，均为"控压失败"。0.5 秒缓冲避开松手瞬间误触发
@@ -1176,7 +1182,6 @@ class FishingScene {
     this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.fishShadow = null; this.biteSinking = false; this.biteCount = 0; this.biteSinkingProgress = 0; this.biteResumeTimer = 0; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
     // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
     this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
-    this.fishCurrentHP = 0; this.fishSpeciesMaxHP = 0;
   }
 
   _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.biteSinking = false; this.showingFishInfo = false; }
