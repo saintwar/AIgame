@@ -4,6 +4,45 @@
 
 ---
 
+## [Unreleased] · PHASE 15 — 鱼个体差异化（拉力 / 行为 / HP 差异）
+
+### 仗1：鱼种数据扩展（5 → 10）
+- `js/data/fish-pool.js` 扩展为 10 种鱼，每个稀有度 2 条，新增字段 `fishPull / hp / hpDrain / behavior`。
+- 新增鱼种：草鱼（rarity 2 surge）、鲈鱼（rarity 3 erratic）、总统鱼（rarity 4 erratic）、潭神使者（rarity 5 mythic）。
+- `js/data/fish-codex.js` 同步图鉴文案（含潭神使者剧情伏笔："与阿明父亲的失踪有关……"）。
+
+### 仗2：拉力系统接入 fishPull
+- `_updatePlaying`：tension 公式追加 `effectivePull * dt`，叠加在 rise=15 / fall=40 之上不替换。
+- 红线遵守：`tensionRiseRate / tensionFallRate / 黄金区 30~70 / slackFailGrace 0.5s` 全部不动。
+
+### 仗3：FishBehavior 状态机（`js/data/fish-behavior.js`）
+- 4 种行为：`none`（平稳）/ `surge`（calm 2~4s + surge 0.8~1.5s 循环）/ `erratic`（每 0.3~0.8s 随机变向）/ `mythic`（三阶段：试探 → 狂暴含深潜 → 垂死挣扎）。
+- 通过 `onEvent` 回调向场景层抛 `surge_incoming / mythic_dive` 事件，UI 层渲染"!"气泡。
+
+### 仗4：HP 系统差异化
+- 新增 `fishCurrentHP / fishSpeciesMaxHP`（与原 `fishHP` 平行解耦），仅在黄金区 30~70 内按 `fish.hpDrain` 扣减。
+- 原 `fishHP / hpDecayRate` 体系保留（与 escape/exhausted 判定耦合，红线不动）。
+
+### 仗5：视觉预警
+- 鱼上方 surge 冲刺预告气泡（红圆 + 黄"!"，0.6s 衰减）。
+- 屏幕边框呼吸光：tension≥85 红、≤15 蓝。
+- 屏幕中央"危险！"闪烁：tension≥90 触发，0.3s 高频闪。
+
+### 钓竿兼容确认
+- 入门竿（rarityUnlock=2）：奇力鱼/罗非鱼/草鱼/曲腰鱼。
+- 竹制竿（rarityUnlock=3）：+ 翘嘴鲌/鲈鱼。
+- 碳素竿（rarityUnlock=5）：全部可钓。
+
+### DoD 验收
+1. ✅ 10 种鱼数据完整 + 4 个新字段
+2. ✅ 拉力公式正确接入 fishPull
+3. ✅ 4 种行为模式均生效
+4. ✅ hpDrain 按鱼种差异化
+5. ✅ 视觉预警三件套（线红/蓝、危险文字、surge 预告）
+6. ✅ 入门竿钓奇力鱼（fishPull=3）体验与改动前几乎无差异
+
+---
+
 ## [Unreleased] · PHASE 16-6 仗4 — 鱼饵差异化效果 + 钓鱼消耗 + HUD 切换器
 
 > **现状摸排纠错**：任务书预测的 `player.baits = { worm/scented/premium }` **不存在** ——

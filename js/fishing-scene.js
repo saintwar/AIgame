@@ -4,6 +4,8 @@ import SceneManager from './scene-manager.js';
 import questSystem from './quest-system.js';
 import { QUESTS } from './data/quests.js';
 import { rollFishWithRod, SHUISHE_FISH_POOL } from './data/fish-pool.js';
+// PHASE 15：鱼行为状态机（none/surge/erratic/mythic）
+import { FishBehavior } from './data/fish-behavior.js';
 import { BAIT_EFFECTS, getBaitEffect } from './data/bait-effects.js';
 import baitHUD from './ui/bait-hud.js';
 import { drawFishingBg } from './render/fishing-bg.js';
@@ -661,6 +663,11 @@ class FishingScene {
     this.currentFish.price = fishData.basePrice;
     this.currentFish.maxHP = fishData.rarity * 120;
     this.fishHP = this.currentFish.maxHP;
+    // PHASE 15：把鱼种行为/拉力字段同步到 currentFish（_initPlayingState 会用）
+    this.currentFish.fishPull = fishData.fishPull || 0;
+    this.currentFish.behavior = fishData.behavior || 'none';
+    this.currentFish.species_hp = fishData.hp || 0;       // 行为版"鱼总 HP"（与 maxHP 区分）
+    this.currentFish.hpDrain = fishData.hpDrain || 0;
 
     // ─────────────────────────────────────────────────────────
     // PHASE 16-6 仗4：鱼饵效果末端注入
@@ -708,6 +715,11 @@ class FishingScene {
           this.currentFish.rarity = newFish.rarity;
           this.currentFish.maxHP = newFish.rarity * 120;
           this.fishHP = this.currentFish.maxHP;
+          // PHASE 15：提档后同步行为/拉力字段
+          this.currentFish.fishPull = newFish.fishPull || 0;
+          this.currentFish.behavior = newFish.behavior || 'none';
+          this.currentFish.species_hp = newFish.hp || 0;
+          this.currentFish.hpDrain = newFish.hpDrain || 0;
         }
       }
 
@@ -768,6 +780,22 @@ class FishingScene {
     this.escapeSpeed = cfg.fishEscapeSpeed; this.tension = 60; this.escapeBurstTimer = 0; this.fishMaxHP = this.currentFish.maxHP;
     this.fishYCenter = this.playingFishY; this.fishYTime = Math.random() * Math.PI * 2; this.escapeCheckTimer = 0; this.warningShown = false;
     this.slackTimer = 0; // PHASE 13-4：tension≤0 累计秒数，超过 slackFailGrace 则 slack 失败
+    // ───────────── PHASE 15：鱼行为状态机 + 视觉预警状态位 ─────────────
+    // 用 currentFish 自带 fishPull / behavior 字段创建状态机；
+    // FishBehavior 通过 onEvent 回调把"surge_incoming/mythic_dive"事件转交给场景层（用于"!"气泡 / 屏幕震动等）。
+    this.currentFishBehavior = new FishBehavior(this.currentFish, (evt, payload) => {
+      if (evt === 'surge_incoming') {
+        this.surgeWarnTimer = 0.6;   // 显示 0.6s 的预告气泡
+      } else if (evt === 'mythic_dive') {
+        this.surgeWarnTimer = 1.2;   // 深潜冲击更长
+      }
+    });
+    this.surgeWarnTimer = 0;          // >0 时：UI 层显示鱼图标抖动 + "！"气泡
+    this.lineWarnColor  = null;       // null | 'red'(将断) | 'blue'(将松脱)
+    this.dangerTextTimer = 0;         // >0 时：屏幕中央闪"危险！"
+    // PHASE 15：行为版"鱼总 HP"（黄金区按 hpDrain 扣血用）；与原 fishHP 解耦保留
+    this.fishCurrentHP = this.currentFish.species_hp || 0;
+    this.fishSpeciesMaxHP = this.fishCurrentHP;
     // 首次进入水下场景时显示拉力教程
     this._showTensionTutorialIfNeeded();
   }
@@ -853,7 +881,36 @@ class FishingScene {
     //   ⚠️ 玩法要求"按对方向键 -10 / 按错 +20"在 _updateReeling QTE 中保留，未动
     if (holdingSpace) this.tension += cfg.tensionRiseRate * dt;
     else              this.tension -= cfg.tensionFallRate * dt;
+
+    // PHASE 15 仗2：鱼自身拉力（fishPull）影响。
+    //   FishBehavior 每帧返回 effectivePull（行为模式相关），单位 = 每秒额外 tension 增量。
+    //   - 正值 → tension 朝断线方向上涨（鱼把线往外拉，玩家按住时上升变快、松手时下降变慢）
+    //   - 负值 → tension 朝松脱方向下降（mythic 深潜：鱼往下扎，线被带松）
+    //   红线兼容：对 rise=15 / fall=40 / 黄金区 / slackFailGrace 都是叠加项，不替换。
+    if (this.currentFishBehavior) {
+      const hpPercent = this.fishSpeciesMaxHP > 0 ? (this.fishCurrentHP / this.fishSpeciesMaxHP) : 1;
+      const effectivePull = this.currentFishBehavior.getEffectivePull(dt, hpPercent);
+      this.tension += effectivePull * dt;
+    }
     this.tension = Math.max(0, Math.min(cfg.maxTension, this.tension));
+
+    // PHASE 15 仗5：视觉预警状态位（每帧重算，UI 层渲染时直接读）
+    //   - lineWarnColor: 'red'(将断 ≥85) / 'blue'(将松 ≤15) / null
+    //   - dangerTextTimer: tension≥90 时刷为 0.3s（短闪），渲染层若 >0 显示"危险！"
+    //   - surgeWarnTimer: 由 FishBehavior onEvent 触发，已在回调里设置；这里只衰减
+    if (this.tension >= 85)      this.lineWarnColor = 'red';
+    else if (this.tension <= 15) this.lineWarnColor = 'blue';
+    else                         this.lineWarnColor = null;
+    if (this.tension >= 90) this.dangerTextTimer = 0.3;
+    else if (this.dangerTextTimer > 0) this.dangerTextTimer = Math.max(0, this.dangerTextTimer - dt);
+    if (this.surgeWarnTimer > 0) this.surgeWarnTimer = Math.max(0, this.surgeWarnTimer - dt);
+
+    // PHASE 15 仗4：行为版"鱼总 HP"按 hpDrain 在黄金区(30~70)内扣血。
+    //   注意：保留原 fishHP/hpDecayRate 体系（与 escape/exhausted 判定耦合），
+    //         这里只是把"鱼种差异化 HP"挂在 fishCurrentHP 上做平行体验，不影响现有失败判定。
+    if (this.fishCurrentHP > 0 && this.tension >= cfg.goldZoneMin && this.tension <= cfg.goldZoneMax) {
+      this.fishCurrentHP = Math.max(0, this.fishCurrentHP - (this.currentFish.hpDrain || 0) * dt);
+    }
 
     // PHASE 13-4：低拉力（鱼线松弛）失败判定 —— tension≤0 持续 slackFailGrace 秒 → slack
     //   与 tension≥100 鱼线断对称，均为"控压失败"。0.5 秒缓冲避开松手瞬间误触发
@@ -1117,6 +1174,9 @@ class FishingScene {
 
   _resetToWaiting() {
     this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.fishShadow = null; this.biteSinking = false; this.biteCount = 0; this.biteSinkingProgress = 0; this.biteResumeTimer = 0; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
+    // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
+    this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
+    this.fishCurrentHP = 0; this.fishSpeciesMaxHP = 0;
   }
 
   _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.biteSinking = false; this.showingFishInfo = false; }
@@ -1770,6 +1830,21 @@ class FishingScene {
     // 渲染鱼（约束 6：鱼形状不动）
     this._renderFish(this.playingFishX, this.playingFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace);
 
+    // ─────────── PHASE 15 仗5：鱼行为视觉预警 ───────────
+    // surge 冲刺预告：鱼上方画"!"气泡（红圆 + 黄感叹号），surgeWarnTimer 衰减期间显示
+    if (this.surgeWarnTimer > 0) {
+      const bx = Math.floor(this.playingFishX);
+      const by = Math.floor(this.playingFishY - 50);
+      // 阴影
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath(); ctx.arc(bx + 1, by + 1, 14, 0, Math.PI * 2); ctx.fill();
+      // 红底
+      ctx.fillStyle = '#E74C3C';
+      ctx.beginPath(); ctx.arc(bx, by, 13, 0, Math.PI * 2); ctx.fill();
+      // 黄"!"
+      this._drawPixelText('!', bx, by, 22, '#FFE066', '#1A1A2E');
+    }
+
     // ── 鱼身体下方耐力条（PHASE 13-3：像素方格 + 像素字）──
     const fishHPBarW = 120; const fishHPBarX = Math.floor(this.playingFishX - fishHPBarW / 2); const fishHPBarY = Math.floor(this.playingFishY + 55);
     this._drawPixelHPBar(fishHPBarX, fishHPBarY, fishHPBarW, 10, this.fishHP / this.currentFish.maxHP, 4);
@@ -1817,7 +1892,28 @@ class FishingScene {
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
-    // ── 右下角"奇力鱼"信息面板（PHASE 13-3：木牌质感 + 像素血条/张力条）──
+    // ─────────── PHASE 15 仗5：屏幕级钓线/危险预警 ───────────
+    // 1) 钓线状态边框：红=tension≥85（将断），蓝=tension≤15（将松）。
+    //    透明度做呼吸（基于 performance.now()），不抢主视觉。
+    if (this.lineWarnColor) {
+      const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+      const breathe = 0.35 + 0.25 * Math.sin(t * 6);
+      ctx.strokeStyle = this.lineWarnColor === 'red'
+        ? `rgba(231, 76, 60, ${breathe})`
+        : `rgba(52, 152, 219, ${breathe})`;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, 3, cw - 6, ch - 6);
+      ctx.lineWidth = 1;
+    }
+    // 2) 危险文字：tension≥90 时屏幕中央闪"危险！"
+    if (this.dangerTextTimer > 0) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const flash = Math.floor(this.dangerTextTimer * 30) % 2 === 0;
+      if (flash) this._drawPixelText('危 险 ！', cw / 2, ch * 0.32, 36, '#E74C3C', '#FFF4D6');
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    }
+
+    // ── 右下角"鱼种"信息面板（PHASE 13-3：木牌质感 + 像素血条/张力条）──
     const panelW = 240; const panelH = 155; const panelX = cw - panelW - 20; const panelY = ch - panelH - 20;
     this._drawWoodPlaque(panelX, panelY, panelW, panelH);
     // 鱼名（米白大字 + 深棕描边）
