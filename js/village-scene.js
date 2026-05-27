@@ -1091,7 +1091,7 @@ class VillageScene {
         if (k === 'f7') {
           const q = questSystem.getQuest('q002');
           if (q) {
-            q.progress = { 奇力鱼: true, 罗非鱼: true, 曲腰鱼: true, 翘嘴鲌: true, 鲤鱼: true };
+            q.progress = { 奇力鱼: true, 罗非鱼: true, 草鱼: true, 曲腰鱼: true, 翘嘴鲌: true };
             q.status = 'active';
             window.Save?.set('quests.q002', q);
             window.Save?.commit();

@@ -19,12 +19,12 @@ export const QUESTS = {
     prerequisite: 'q001_first_fish',   // 必须 q001 已完成
     description: '小芳想集齐日月潭水社村钓点的所有鱼种图鉴，帮她钓全 5 种不同的鱼吧！',
 
-    // 目标鱼种
-    targetSpecies: ['奇力鱼', '罗非鱼', '曲腰鱼', '翘嘴鲌', '鲤鱼'],
+    // 目标鱼种（调整：鲤鱼 → 草鱼，降低门槛，让入门竿玩家也能直接推进）
+    targetSpecies: ['奇力鱼', '罗非鱼', '草鱼', '曲腰鱼', '翘嘴鲌'],
 
     // 进度结构：{ 奇力鱼: false, 罗非鱼: false, ... }
     initialProgress: () => ({
-      奇力鱼: false, 罗非鱼: false, 曲腰鱼: false, 翘嘴鲌: false, 鲤鱼: false
+      奇力鱼: false, 罗非鱼: false, 草鱼: false, 曲腰鱼: false, 翘嘴鲌: false
     }),
 
     // 进度更新逻辑（不重复计数）
