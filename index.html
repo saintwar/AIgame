@@ -82,22 +82,27 @@
          （unicode-range 已让 TencentSans 不处理 emoji 区段 → 浏览器需在后续字体里找 emoji） */
       font-family: 'TencentSans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Heiti SC', sans-serif,
                    'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
-      overflow: hidden;
+      /* PHASE 20.5：A 方案配套——视口比游戏小时允许滚动条（之前 hidden 会截断画面）。
+         视口足够大时（≥1280×720）game-root 居中、四周黑边，自然不会出现滚动条。 */
+      overflow: auto;
     }
     #game-root {
+      /* PHASE 20.5：游戏画面严格锁死 1280×720，任何窗口尺寸都不缩放、不放大。
+         - 视口 ≥ 1280×720：居中显示，周围留黑边（body 的 flex 居中 + 黑底）
+         - 视口 < 1280×720：保留原始尺寸，body overflow:auto 让用户滚动查看
+         不再使用 transform: scale(...)，避免缩放带来的：
+           ① 文字/像素模糊
+           ② input 坐标换算复杂度
+           ③ splash-loader / fixed 浮窗与 game-root 缩放不同步
+         设计稿在 1280×720 下是 1 CSS px = 1 canvas px，所见即所得。 */
       width: 1280px;
       height: 720px;
+      flex-shrink: 0;
       position: relative;
       background: #000;
       box-shadow: 0 0 60px rgba(0,0,0,0.9);
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-    }
-    @media (max-width: 1320px), (max-height: 760px) {
-      #game-root {
-        transform: scale(min(calc(100vw / 1280), calc(100vh / 720)));
-        transform-origin: center center;
-      }
     }
     canvas {
       image-rendering: pixelated;
