@@ -2165,8 +2165,10 @@ class VillageScene {
     // 倒影 reflections）全部由 villageMap 数据 + 其他模块承担，不受影响。
     // drawWoodenDock 函数本身保留（dusk-effects.js）以便未来复用。
     // drawWoodenDock(ctx);
-    drawFountain(ctx, 544, 160, this.time * 1000);  // ⭐ 喷泉水花
-    this._renderDecorations();
+    // 2026-05-28：去掉程序化喷泉与码头两侧 🌳 emoji 树。
+    // 新美术 BG（village-riverside-bg）已自带场景装饰，程序化装饰会与 BG 重叠/违和。
+    // drawFountain(ctx, 544, 160, this.time * 1000);
+    // this._renderDecorations();
 
     // Layer 5: NPC
     this._renderNPCs();
@@ -2604,44 +2606,10 @@ class VillageScene {
   // 建筑渲染已移至 Layer 3（见 render 方法中的直接调用）
 
   _renderDecorations() {
-    const ctx = this.ctx;
-
-    // PHASE Step2：装饰物中心改用像素硬值（与旧 T=64 时一致）
-    //   喷泉中心：旧 (8.5*64, 2.5*64) = (544, 160)
-    const fx = 544;
-    const fy = 160;
-
-    ctx.fillStyle = '#7AB8C4';
-    ctx.beginPath();
-    ctx.arc(fx, fy, 24, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#5D8A9A';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(fx, fy, 24, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(fx, fy, 8, 0, Math.PI * 2);
-    ctx.fill();
-
-    const dropOffset = (this.time % 1) * 16;
-    ctx.fillStyle = `rgba(255,255,255,${1 - dropOffset / 16})`;
-    ctx.beginPath();
-    ctx.arc(fx, fy - dropOffset, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 静态树木（无动画）
-    //   旧坐标 (8,8) (12,8) → 像素中心 (8*64+32, 8*64+32)=(544, 544) 与 (12*64+32, 544)=(800, 544)
-    ctx.font = '48px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🌳', 544, 544);
-    ctx.fillText('🌳', 800, 544);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    // 2026-05-28：方法已弃用 —— 程序化喷泉 + 码头两侧 🌳 emoji 树都已去掉。
+    // 新 BG 美术（village-riverside-bg）已自带装饰，程序化装饰会与 BG 重叠/违和。
+    // 方法本身保留为空体，避免外部潜在调用报错；调用点已注释（见 _render Layer 4）。
+    return;
   }
 
   // 任务进度 HUD（右上角）

@@ -26,6 +26,12 @@
 ### 其他
 - `index.html`、`js/main.js`、`js/click-to-move.js`、`js/digging-system.js`、`js/fishing-scene.js`：随美术资源升级的小幅适配。
 
+### 去除程序化装饰（贴合新 BG 美术）
+- `js/village-scene.js`：注释掉 `_render` 中的 `drawFountain(544,160,...)` 和 `_renderDecorations()` 调用；`_renderDecorations()` 方法体清空（保留空方法做兼容）。
+- 移除：① 蓝色圆喷泉 + 白色水滴粒子（像素 544,160）、② 码头两侧两棵 🌳 emoji 树（像素 544,544 / 800,544）。
+- 原因：新 BG 美术 `village-riverside-bg` 已自带场景装饰，程序化装饰会与 BG 重叠/违和。
+- `drawFountain`（`js/render/dusk-effects.js`）和 `drawWoodenDock` 函数本体保留，未来需要可复用。
+
 ---
 
 ## [Unreleased] · PHASE 15 — 鱼个体差异化（拉力 / 行为 / HP 差异）
