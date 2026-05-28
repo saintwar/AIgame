@@ -1,0 +1,246 @@
+{
+  "source_image": "amin-walk-sheet-v3.png",
+  "source_size": [
+    800,
+    446
+  ],
+  "row_directions": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "frames_per_row": 6,
+  "canvas": {
+    "w": 96,
+    "h": 112,
+    "anchor_x": 48,
+    "anchor_y": 110
+  },
+  "frames": [
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 0,
+      "src_x": 30,
+      "src_y": 9,
+      "src_w": 65,
+      "src_h": 100
+    },
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 1,
+      "src_x": 172,
+      "src_y": 9,
+      "src_w": 57,
+      "src_h": 100
+    },
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 2,
+      "src_x": 306,
+      "src_y": 9,
+      "src_w": 56,
+      "src_h": 100
+    },
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 3,
+      "src_x": 430,
+      "src_y": 9,
+      "src_w": 65,
+      "src_h": 100
+    },
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 4,
+      "src_x": 573,
+      "src_y": 9,
+      "src_w": 55,
+      "src_h": 100
+    },
+    {
+      "direction": "down",
+      "row": 0,
+      "col": 5,
+      "src_x": 705,
+      "src_y": 9,
+      "src_w": 54,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 0,
+      "src_x": 38,
+      "src_y": 121,
+      "src_w": 65,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 1,
+      "src_x": 171,
+      "src_y": 121,
+      "src_w": 57,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 2,
+      "src_x": 305,
+      "src_y": 121,
+      "src_w": 57,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 3,
+      "src_x": 438,
+      "src_y": 121,
+      "src_w": 65,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 4,
+      "src_x": 571,
+      "src_y": 121,
+      "src_w": 58,
+      "src_h": 100
+    },
+    {
+      "direction": "up",
+      "row": 1,
+      "col": 5,
+      "src_x": 704,
+      "src_y": 121,
+      "src_w": 56,
+      "src_h": 100
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 0,
+      "src_x": 40,
+      "src_y": 234,
+      "src_w": 54,
+      "src_h": 100
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 1,
+      "src_x": 155,
+      "src_y": 231,
+      "src_w": 74,
+      "src_h": 101
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 2,
+      "src_x": 287,
+      "src_y": 233,
+      "src_w": 75,
+      "src_h": 99
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 3,
+      "src_x": 440,
+      "src_y": 233,
+      "src_w": 54,
+      "src_h": 101
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 4,
+      "src_x": 553,
+      "src_y": 231,
+      "src_w": 75,
+      "src_h": 102
+    },
+    {
+      "direction": "left",
+      "row": 2,
+      "col": 5,
+      "src_x": 685,
+      "src_y": 231,
+      "src_w": 75,
+      "src_h": 101
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 0,
+      "src_x": 40,
+      "src_y": 344,
+      "src_w": 54,
+      "src_h": 102
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 1,
+      "src_x": 152,
+      "src_y": 344,
+      "src_w": 77,
+      "src_h": 102
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 2,
+      "src_x": 287,
+      "src_y": 344,
+      "src_w": 75,
+      "src_h": 100
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 3,
+      "src_x": 440,
+      "src_y": 344,
+      "src_w": 54,
+      "src_h": 102
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 4,
+      "src_x": 551,
+      "src_y": 344,
+      "src_w": 76,
+      "src_h": 102
+    },
+    {
+      "direction": "right",
+      "row": 3,
+      "col": 5,
+      "src_x": 685,
+      "src_y": 344,
+      "src_w": 75,
+      "src_h": 102
+    }
+  ],
+  "frame_interval_ms": 100,
+  "walk_speed_px_s": 80,
+  "notes": [
+    "bbox 宽度差异: 54~77px（持竿/持竿在身侧导致）",
+    "bbox 高度: 99~102px（很稳定）",
+    "建议统一画布 96×112，脚底锚点 (48,110)",
+    "frame_interval=100ms x 6帧 = 600ms单循环（主策划方案）"
+  ]
+}

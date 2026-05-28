@@ -1,6 +1,7 @@
 // Phase C 角色程序化精修绘制（32×48）
 
 import { PALETTE } from './palette.js';
+import { drawAmingFromSheet, isAmingSheetReady } from './aming-sprite.js';
 
 // ============================================================
 // 通用辅助函数
@@ -12,7 +13,7 @@ function px(ctx, x, y, w, h, color) {
   ctx.fillRect(x | 0, y | 0, w, h);
 }
 
-// 走路呼吸偏移：每 250ms 切换一帧，3 帧循环
+// 走路呼吸偏移：每 250ms 切换一帧，3 帧循环（用于 fallback 像素绘制）
 function getWalkOffset(time, isMoving) {
   if (!isMoving) return { legY: 0, armX: 0 };
   const frame = Math.floor(time / 250) % 3;
@@ -23,8 +24,16 @@ function getWalkOffset(time, isMoving) {
 
 // ============================================================
 // 角色 1：阿明 — 主角红帽少年
+// PHASE-20：优先使用 amin-walk-sheet-v3.png（24帧雪碧图）
+// 雪碧图未就绪时 fallback 到原像素绘制（与项目其它 NPC 同样的兜底惯例）
 // ============================================================
 export function drawAming(ctx, x, y, dir = 'down', time = 0, isMoving = false) {
+  // 优先走雪碧图
+  if (isAmingSheetReady()) {
+    if (drawAmingFromSheet(ctx, x, y, dir, isMoving, time)) return;
+  }
+
+  // ---- Fallback：原 32×48 像素小人 ----
   const off = getWalkOffset(time, isMoving);
 
   // === 头部 16px (y:0-15) ===

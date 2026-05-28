@@ -17,6 +17,13 @@
 # 依赖
 node_modules/
 
+# Playwright-CLI 本地验证截图缓存（仅用于开发期 DoD 验证，不入库）
+.playwright-cli/
+
+# 根目录参考图（开发期临时贴图，正式资源走 assets/）
+/00-splash.png
+/01-idle-down.png
+
 # 字体源文件（仅本地用于跑 scripts/build-font-subset.py 子集化，
 # 8MB+ 体积不入库；线上 @font-face 引用的是同目录生成的 woff2）
 font/TencentSans-W7.ttf

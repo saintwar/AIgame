@@ -23,6 +23,7 @@ import { drawChiefHouse, drawFishingShop, drawAmingHome, drawAmingHomeSmoke, dra
 import {
   drawAming, drawXiulan, drawVillageChief, drawLin, drawXiaofang
 } from './render/characters.js';
+import { preloadAmingSheet } from './render/aming-sprite.js';
 import { drawLakeReflections } from './render/reflections.js';
 import { drawNameTag } from './render/name-tag.js';
 import { drawFarmland } from './render/farmland.js';
@@ -244,6 +245,9 @@ class VillageScene {
 
   // 初始化
   init(params) {
+    // PHASE-20：触发阿明行走 sheet 预加载（内部有单次锁，重复调用安全）
+    preloadAmingSheet();
+
     this._generateMap();
 
     // PHASE Step2：新 tile 体系下 spawn 默认值 (4,7) → (8,14)
