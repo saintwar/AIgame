@@ -1,0 +1,210 @@
+{
+  "sheet": "assets/character/amin/amin-walk-sheet-v2.png",
+  "sheet_w": 1289,
+  "sheet_h": 720,
+  "rows": 4,
+  "cols": 6,
+  "canvas": {
+    "w": 129,
+    "h": 170,
+    "anchor_x": 64,
+    "anchor_y": 168,
+    "note": "帧在画布内水平居中、脚底贴 anchor_y"
+  },
+  "has_alpha": true,
+  "note": "v2: 4×6 完整步态、全帧侧身、PNG 自带透明背景。脚底=该帧紧致 bbox 底中心。",
+  "frames": [
+    {
+      "direction": "down",
+      "col": 0,
+      "src_x": 48,
+      "src_y": 13,
+      "src_w": 106,
+      "src_h": 163
+    },
+    {
+      "direction": "down",
+      "col": 1,
+      "src_x": 277,
+      "src_y": 13,
+      "src_w": 91,
+      "src_h": 163
+    },
+    {
+      "direction": "down",
+      "col": 2,
+      "src_x": 491,
+      "src_y": 13,
+      "src_w": 92,
+      "src_h": 163
+    },
+    {
+      "direction": "down",
+      "col": 3,
+      "src_x": 693,
+      "src_y": 13,
+      "src_w": 106,
+      "src_h": 163
+    },
+    {
+      "direction": "down",
+      "col": 4,
+      "src_x": 921,
+      "src_y": 13,
+      "src_w": 92,
+      "src_h": 163
+    },
+    {
+      "direction": "down",
+      "col": 5,
+      "src_x": 1134,
+      "src_y": 13,
+      "src_w": 89,
+      "src_h": 163
+    },
+    {
+      "direction": "up",
+      "col": 0,
+      "src_x": 60,
+      "src_y": 194,
+      "src_w": 105,
+      "src_h": 164
+    },
+    {
+      "direction": "up",
+      "col": 1,
+      "src_x": 275,
+      "src_y": 194,
+      "src_w": 93,
+      "src_h": 162
+    },
+    {
+      "direction": "up",
+      "col": 2,
+      "src_x": 490,
+      "src_y": 194,
+      "src_w": 93,
+      "src_h": 162
+    },
+    {
+      "direction": "up",
+      "col": 3,
+      "src_x": 704,
+      "src_y": 194,
+      "src_w": 105,
+      "src_h": 163
+    },
+    {
+      "direction": "up",
+      "col": 4,
+      "src_x": 919,
+      "src_y": 194,
+      "src_w": 94,
+      "src_h": 162
+    },
+    {
+      "direction": "up",
+      "col": 5,
+      "src_x": 1133,
+      "src_y": 194,
+      "src_w": 92,
+      "src_h": 162
+    },
+    {
+      "direction": "right",
+      "col": 0,
+      "src_x": 64,
+      "src_y": 376,
+      "src_w": 89,
+      "src_h": 163
+    },
+    {
+      "direction": "right",
+      "col": 1,
+      "src_x": 249,
+      "src_y": 372,
+      "src_w": 120,
+      "src_h": 164
+    },
+    {
+      "direction": "right",
+      "col": 2,
+      "src_x": 461,
+      "src_y": 374,
+      "src_w": 122,
+      "src_h": 162
+    },
+    {
+      "direction": "right",
+      "col": 3,
+      "src_x": 707,
+      "src_y": 375,
+      "src_w": 89,
+      "src_h": 164
+    },
+    {
+      "direction": "right",
+      "col": 4,
+      "src_x": 891,
+      "src_y": 372,
+      "src_w": 121,
+      "src_h": 164
+    },
+    {
+      "direction": "right",
+      "col": 5,
+      "src_x": 1103,
+      "src_y": 372,
+      "src_w": 122,
+      "src_h": 164
+    },
+    {
+      "direction": "left",
+      "col": 0,
+      "src_x": 64,
+      "src_y": 555,
+      "src_w": 88,
+      "src_h": 165
+    },
+    {
+      "direction": "left",
+      "col": 1,
+      "src_x": 244,
+      "src_y": 554,
+      "src_w": 125,
+      "src_h": 166
+    },
+    {
+      "direction": "left",
+      "col": 2,
+      "src_x": 461,
+      "src_y": 554,
+      "src_w": 124,
+      "src_h": 162
+    },
+    {
+      "direction": "left",
+      "col": 3,
+      "src_x": 707,
+      "src_y": 554,
+      "src_w": 89,
+      "src_h": 165
+    },
+    {
+      "direction": "left",
+      "col": 4,
+      "src_x": 887,
+      "src_y": 554,
+      "src_w": 125,
+      "src_h": 166
+    },
+    {
+      "direction": "left",
+      "col": 5,
+      "src_x": 1102,
+      "src_y": 554,
+      "src_w": 124,
+      "src_h": 165
+    }
+  ]
+}

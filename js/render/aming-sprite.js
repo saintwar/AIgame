@@ -1,35 +1,47 @@
-// 阿明四方向行走动画（PHASE-20）
-// 雪碧图：assets/character/amin/amin-walk-sheet-v3.png（4行×6列=24帧）
-// 切帧坐标：amin-frame-spec-v3.json（绝不硬编码，全部从 JSON 读）
-// 黑底抠 alpha 阈值 lum<30；锚点 (48,110)；frameInterval=100ms；idle=第0帧
+// 阿明四方向行走动画（PHASE-20.4 比例适配 + 侧向回头修复）
+// 雪碧图：assets/character/amin/amin-walk-sheet-v2.png（4行×6列=24帧，PNG 自带透明背景）
+// 切帧坐标：amin-frame-spec-v2.json（全部从 JSON 读，不硬编码）
+//
+// 演进：
+//   v2 sheet 共享画布 129×170，锚点 (64,168)；自带透明背景。
+//   v2 sheet 的 left/right col=0/3 实际上仍是"正脸过渡帧"（朝向观众，非侧身），
+//     必须跳过，与 v3 同样的规律：侧向只用 col=[1,2,4,5] 4 帧步态。
+//   1:1 渲染下阿明高度约 170px，远大于其它 NPC（~60px），视觉失衡；
+//     PHASE-20.4 把 SCALE 调为 0.40，让阿明 ~68px，略高于成年 NPC 但同档。
 
-const SHEET_URL = 'assets/character/amin/amin-walk-sheet-v3.png';
-const SPEC_URL  = 'assets/character/amin/amin-frame-spec-v3.json';
+const SHEET_URL = 'assets/character/amin/amin-walk-sheet-v2.png';
+const SPEC_URL  = 'assets/character/amin/amin-frame-spec-v2.json';
 
 const FRAME_INTERVAL_MS = 100;
 const FRAMES_PER_DIR    = 6;
-const BLACK_LUM_THRESHOLD = 30;
 
-// PHASE-20.2 修复"侧向行走时回头"
-// 原画 left/right 行的 col=0 与 col=3 实际是正面 3/4 视角（转身瞬间），
-// 直接接入步态循环会产生"走两步突然回头"。
-// down/up 6 帧都是有效步态，全用；left/right 只用 col=1,2,4,5 这 4 个真侧身帧。
-// 仅改"帧索引→col"的映射，不动 spec、雪碧图、frameInterval、walkSpeed。
+// 跳过 left/right 的 col=0/3 正脸过渡帧，侧向只循环 4 帧侧身步态
 const STEP_SEQUENCE = {
   down:  [0, 1, 2, 3, 4, 5],
   up:    [0, 1, 2, 3, 4, 5],
   left:  [1, 2, 4, 5],
   right: [1, 2, 4, 5],
 };
-// 各方向 idle 用哪一 col（必须是"侧身"或"正面静止"帧）
+// idle 用哪一 col：down/up 用 col=0（正/背面站立），left/right 用 col=1（侧身收脚），避免 idle 正脸
 const IDLE_COL = {
   down: 0, up: 0, left: 1, right: 1,
+};
+
+// PHASE-20.5：v2 sheet 的第 3 行（src_y≈376）实际为"朝左"姿态，
+// 第 4 行（src_y≈555）实际为"朝右"姿态——与 spec 中的 direction 字段含义相反，
+// 直接用会导致游戏内侧向移动脸朝反方向。
+// 不改动 spec / 资源，渲染入口做一次 left↔right 名义映射即可。
+const DIR_REMAP = {
+  down:  'down',
+  up:    'up',
+  left:  'right',
+  right: 'left',
 };
 
 // 模块私有状态（不污染 player/存档）
 let _spec     = null;            // JSON 原始数据
 let _frameMap = null;            // { down:[6], up:[6], left:[6], right:[6] }
-let _canvas   = null;            // 抠完黑底的离屏 canvas（替代原图）
+let _image    = null;            // 直接复用源 Image（v2 自带透明，无需离屏处理）
 let _ready    = false;
 let _loading  = false;
 let _failed   = false;
@@ -39,26 +51,6 @@ const _anim = {
   frameIdx: 0,
   lastTick: 0,
 };
-
-/**
- * 把图片黑底转成 alpha：lum < 30 的像素 α=0
- * 一次性预处理到离屏 canvas，后续 drawImage 零开销
- */
-function _blackToAlpha(img) {
-  const cv = document.createElement('canvas');
-  cv.width  = img.width;
-  cv.height = img.height;
-  const c = cv.getContext('2d');
-  c.drawImage(img, 0, 0);
-  const data = c.getImageData(0, 0, cv.width, cv.height);
-  const px = data.data;
-  for (let i = 0; i < px.length; i += 4) {
-    const lum = (px[i] + px[i + 1] + px[i + 2]) / 3;
-    if (lum < BLACK_LUM_THRESHOLD) px[i + 3] = 0;
-  }
-  c.putImageData(data, 0, 0);
-  return cv;
-}
 
 /**
  * 由 spec.frames 构建 frameMap[dir][col]={src_x,src_y,src_w,src_h}
@@ -100,19 +92,13 @@ export function preloadAmingSheet() {
       if (!map) throw new Error('frame map incomplete');
       _frameMap = map;
 
-      // 2. 加载雪碧图
+      // 2. 加载雪碧图（v2 自带透明，直接用 Image 即可）
       const img = new Image();
       img.onload = () => {
-        try {
-          _canvas  = _blackToAlpha(img);
-          _ready   = true;
-          _loading = false;
-          console.log('[aming-sprite] ready');
-        } catch (e) {
-          _failed = true;
-          _loading = false;
-          console.error('[aming-sprite] blackToAlpha failed:', e);
-        }
+        _image   = img;
+        _ready   = true;
+        _loading = false;
+        console.log('[aming-sprite] ready (v2, scale=0.40)');
       };
       img.onerror = () => {
         _failed = true;
@@ -152,7 +138,7 @@ const LEGACY_FOOT_OFFSET_Y = LEGACY_SPRITE_H;      // 48
 
 /**
  * 渲染主入口（接口与原 drawAming 完全一致：px/py 是 sprite 左上角）
- * 内部把脚底锚点 (px+16, py+48) 对齐到 sheet 帧的脚底锚点 (48,110)
+ * 内部把脚底锚点 (px+16, py+48) 对齐到 sheet 共享画布锚点 (anchor_x, anchor_y)
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} px - 原 sprite 左上角 X（player.px）
  * @param {number} py - 原 sprite 左上角 Y（player.py）
@@ -163,7 +149,9 @@ const LEGACY_FOOT_OFFSET_Y = LEGACY_SPRITE_H;      // 48
 export function drawAmingFromSheet(ctx, px, py, direction, isMoving, nowMs) {
   if (!_ready || !_frameMap) return false;
 
-  const dir = (_frameMap[direction] ? direction : 'down');
+  // 先做 left↔right 名义翻转（见 DIR_REMAP 注释），再走原有取帧逻辑
+  const logicalDir = DIR_REMAP[direction] || direction;
+  const dir = (_frameMap[logicalDir] ? logicalDir : 'down');
   const seq = STEP_SEQUENCE[dir];
   const seqLen = seq.length;
 
@@ -173,11 +161,9 @@ export function drawAmingFromSheet(ctx, px, py, direction, isMoving, nowMs) {
       _anim.frameIdx = (_anim.frameIdx + 1) % seqLen;
       _anim.lastTick = nowMs;
     } else if (_anim.frameIdx >= seqLen) {
-      // 方向切换瞬间索引可能越界（如 down 的 4 切到 left 只有 4 帧）
       _anim.frameIdx = _anim.frameIdx % seqLen;
     }
   } else {
-    // idle：定格该方向的待机帧；时间戳同步重置，避免下一次起步立刻补跳
     _anim.frameIdx = 0;
     _anim.lastTick = nowMs;
   }
@@ -186,36 +172,36 @@ export function drawAmingFromSheet(ctx, px, py, direction, isMoving, nowMs) {
   const f = _frameMap[dir][col];
   if (!f) return false;
 
-  // PHASE-20.1：统一缩放，使阿明视觉高度与其他 NPC（阿土伯/林师傅/秀兰）持平
-  // 仅 dest 端缩放：src 不变、JSON 不动、雪碧图不动、碰撞 walkSpeed 不动
-  const SCALE = 0.65;
+  // PHASE-20.4：阿明 sheet 原帧约 130×170，1:1 下显著大于其它 NPC（~60px）。
+  // SCALE=0.40 → 阿明高 ~68px，比成年 NPC 略高一档，符合少年身高比例。
+  const SCALE = 0.40;
 
   const cv = _spec.canvas;
-  const CANVAS_W  = cv.w        * SCALE;   // 96  * 0.65 = 62.4
-  const CANVAS_H  = cv.h        * SCALE;   // 112 * 0.65 = 72.8
-  const ANCHOR_X  = cv.anchor_x * SCALE;   // 48  * 0.65 = 31.2
-  const ANCHOR_Y  = cv.anchor_y * SCALE;   // 110 * 0.65 = 71.5
+  const CANVAS_W  = cv.w        * SCALE;
+  const CANVAS_H  = cv.h        * SCALE;
+  const ANCHOR_X  = cv.anchor_x * SCALE;
+  const ANCHOR_Y  = cv.anchor_y * SCALE;
 
   // 脚底世界坐标（与原像素小人脚底一致，保证碰撞/触发不偏移）
   const footX = px + LEGACY_FOOT_OFFSET_X;
   const footY = py + LEGACY_FOOT_OFFSET_Y;
 
-  // 画布左上角的世界坐标 = 脚底锚点 - 锚点偏移（缩放后的锚点）
+  // 画布左上角的世界坐标 = 脚底锚点 - 锚点偏移
   const canvasX = footX - ANCHOR_X;
   const canvasY = footY - ANCHOR_Y;
 
-  // 帧在画布内：水平居中 + 脚底贴齐画布底（缩放后的尺寸，防抖关键）
+  // 帧在画布内：水平居中 + 脚底贴齐画布底
   const destW   = f.src_w * SCALE;
   const destH   = f.src_h * SCALE;
   const offsetX = (CANVAS_W - destW) / 2;
   const offsetY = CANVAS_H - destH;
 
   ctx.drawImage(
-    _canvas,
-    f.src_x, f.src_y, f.src_w, f.src_h,        // src 不变
+    _image,
+    f.src_x, f.src_y, f.src_w, f.src_h,
     Math.round(canvasX + offsetX),
     Math.round(canvasY + offsetY),
-    Math.round(destW),                          // dest 缩放
+    Math.round(destW),
     Math.round(destH),
   );
 
