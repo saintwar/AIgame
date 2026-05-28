@@ -4,6 +4,118 @@
 
 ---
 
+## [Unreleased] · 部署脚本固化 + ES module / 美术资源缓存粘滞修复
+
+> **背景**：今日上午完成村庄美术升级（手绘 BG + 4 建筑 + 5 NPC + 程序化喷泉/树移除）后，部署到腾讯云 CloudBase Hosting，浏览器仍看到旧版（像素方块 BG、emoji 树、蓝圆喷泉）。逐层排查后定位为 **ES module 子模块 + 美术资源的浏览器缓存粘滞**：`index.html` 的 no-cache meta 只对 HTML 本身生效，对 `<script type="module">` 间接 `import` 的子模块、以及 JS 字符串字面量里的 PNG/JPG 路径均无效——浏览器复用 disk cache 的旧版本。本次工作把"一键部署 + 全量 cache busting"固化成脚本，根治此问题。
+
+### 新增：`scripts/deploy.sh`（一键部署 + 自动 bump 版本号）
+
+- 部署模式（命令行参数）：
+  - `bash scripts/deploy.sh`（默认 = `all`）：云函数 + 静态托管
+  - `bash scripts/deploy.sh hosting`：仅静态托管
+  - `bash scripts/deploy.sh fn`：仅云函数
+- 主流程：
+  1. **rsync 到临时目录**（`mktemp -d`），排除 `.git/ .codebuddy/ scripts/ docs/ cloudfunctions/ cloudbaserc.json` 等不应进入静态托管的内容。
+  2. **bump 版本号**：`STAMP="$(date +%Y%m%d%H%M%S)"`，对临时目录全量扫描并改写。
+  3. `tcb hosting deploy` 临时目录到环境 `saintwar-ai-d5g58v9z1a8b3afe9`。
+  4. 清理临时目录。
+- 前置依赖检查：`tcb` / `rsync` / `python3`，缺失即报红退出。
+- 对项目用户偏好的尊重：脚本顶部注释明确说明"此脚本本身是发布动作，AI 助手代为运行前必须先获得用户明确同意"。
+- 约束（红线）：脚本只在**临时目录**做改写，**绝不动工程源码**。
+
+### bump 版本号的扫描与改写规则
+
+- **扫描范围**：临时目录下所有 `.html` / `.css` / `.js` / `.mjs`。
+- **命中扩展名白名单**（命中即加/换 `?v=STAMP`）：
+  - 代码：`.js .mjs .css`
+  - 字体：`.woff .woff2 .ttf .otf .eot`
+  - 图片：`.png .jpg .jpeg .webp .gif .svg .ico .bmp`
+  - 媒体：`.mp3 .wav .ogg .mp4 .webm`
+  - 数据：`.json`
+- **改写位置**（4 类）：
+  1. HTML 属性 `src="..."` / `href="..."`（双引号或单引号）
+  2. CSS `url(...)`（含可选引号；HTML 内联 `<style>` 也覆盖）
+  3. JS 字符串字面量里的本地资源路径（限定起始：`./` `../` `/` `assets/` `js/` `css/` `font/` `music/` `images/` `image/`），不含换行、不含 `${`（避开模板字符串表达式）
+  4. JS `import 'xxx'` / `import xxx from 'yyy'` / `import('zzz')`
+- **URL 处理策略**（`bump_url`）：
+  - 外链 / `data:` / `blob:` / `mailto:` / `#fragment` / `javascript:` → 不动
+  - 已带 `?v=xxx` → 替换为新 STAMP
+  - 已带其他 query → 不动（避免破坏既有参数）
+  - 命中扩展名白名单且无 query → 追加 `?v=STAMP`
+  - 不命中 → 不动
+- **注释保护**（关键，避免误改文档示例）：在做 `re.sub` 前先用解析器把源串切成「注释段 / 非注释段」，**只对非注释段做替换**：
+  - HTML：`<!-- -->`
+  - CSS：`/* */`
+  - JS：`//` 单行 + `/* */` 块注释（不剥字符串——本就要替换字符串里的 URL）
+- **dry-run 验证**：今日实际跑通一次干跑，结果 = HTML 1 文件 +240 字节、JS 28 文件 +1700 字节、CSS 0 文件；HTML 注释里的 `?v=20260524` / `?v=Date.now()` 字面量、JS 注释里 `美术稿：assets/...jpg` 等示例字面量**全部保留未动**，验证注释保护正确。
+
+### 解决的核心问题：ES module 缓存粘滞
+
+- **现象**：改 `js/village-scene.js` 重新部署，浏览器仍命中旧的 `village-scene.js`（disk cache）。
+- **根因**：`index.html` 头部 `no-cache` meta 只能让浏览器拉新 HTML；HTML 里 `<script src="js/main.js?v=...">` 因 query 变化也能拉新 main.js；但 main.js 内部 `import './village-scene.js'` 是**裸 URL**，浏览器看到这个 URL 在 disk cache 里就直接复用，不再发请求。`?v=stamp` 没有传染到子模块。
+- **修复方式**：bump 阶段对 JS `import / from / import()` 也加 stamp，同步覆盖到所有 `js/render/*.js` 等子模块。链路：
+  ```
+  index.html
+    └─ <script src="js/main.js?v=STAMP">
+        └─ import './village-scene.js?v=STAMP'
+            └─ import './render/buildings-art.js?v=STAMP'
+                └─ 'assets/images/buildings/aming_house.png?v=STAMP'
+  ```
+  整条链路任一环节有改动，新 STAMP 都会让浏览器把它当全新 URL 去拉。
+
+### 解决的次要问题：美术资源缓存
+
+- 旧脚本（v0）只 bump `.js / .css / 字体`，明确把 `.png` 排除（注释写"图片由 CDN 缓存策略走"）。
+- 实战发现：今日替换的 `village-riverside-bg.png / 4 建筑 PNG / 5 NPC PNG`，URL 完全没变，浏览器命中旧 disk cache 的 PNG 内容，导致看到的还是旧美术。
+- 新脚本把图片加入 bump 白名单，且改写 JS 字符串字面量（如 `'assets/images/buildings/aming_house.png'`）。日后改任意美术资源，重新部署即可让用户立刻看到，无需清缓存。
+
+### CloudBase 控制台坑位记录（避免再次踩）
+
+- **静态托管 Hosting** 实际写入的桶：`3ca8-static-saintwar-ai-d5g58v9z1a8b3afe9-1300128993`
+- **对象存储 COS** 桶：`7361-saintwar-ai-d5g58v9z1a8b3afe9-...`（与 hosting 无关，可能用于云函数附属/数据库等）
+- 验证 hosting 部署是否生效，应使用：
+  - `tcb hosting list -e saintwar-ai-d5g58v9z1a8b3afe9` 查文件列表 + LastModified
+  - `tcb hosting detail -e saintwar-ai-d5g58v9z1a8b3afe9` 查域名/桶详情
+  - **不要**打开 CloudBase 控制台 → 对象存储里的 7361 桶来判断（那是另一个产品）
+
+### `tcb` 二进制的 PATH 注意
+
+- 当前机器 `tcb` 安装路径：`/Users/dengyifei/.workbuddy/binaries/node/versions/20.18.0/bin/tcb`
+- 用户 `~/.zshrc / ~/.zprofile` 未配置该路径；非交互 shell（如 AI 助手代跑 shell）默认 PATH 中无此目录。
+- 解决：脚本未写死 PATH。代跑时需先 `export PATH="/Users/dengyifei/.workbuddy/binaries/node/versions/20.18.0/bin:$PATH"`。后续若想免维护，可考虑在 `scripts/deploy.sh` 顶部加一条 PATH 兜底，或在 `~/.zshrc` 加一行。
+
+### DoD 验收（2026-05-28 21:01 真跑结果）
+
+| 项 | 结果 |
+|---|---|
+| `bash scripts/deploy.sh hosting` | ✅ 退出码 0 |
+| 本次 STAMP | `20260528210106` |
+| bump 改动统计 | 29 文件，+1940 字节（HTML 1 / CSS 0 / JS 28） |
+| `tcb hosting deploy` | ✅ 88/88 文件上传成功 |
+| 线上 `index.html` → `main.js` URL | ✅ `?v=20260528210106` |
+| 线上 `main.js` → 全部 `import` 子模块 | ✅ 全带 stamp |
+| 线上 `js/render/buildings-art.js` → 4 个建筑 PNG | ✅ 全带 stamp |
+| 线上 `js/render/village-bg.js` → BG JPG | ✅ 带 stamp |
+| BG 美术 / 建筑 PNG 实际可拉 | ✅ 200 OK，size 与本地一致 |
+| 注释中的旧字面量（`?v=20260524` 等） | ✅ 未被误改 |
+| 用户线上 Cmd+R 刷新（非硬刷新） | ✅ 看到手绘水彩 BG 新版（验收通过） |
+
+### 影响面 / 红线
+
+- **不动游戏运行时逻辑**：脚本只在临时目录改写资源 URL 后缀，**源码 `js/`、`assets/`、`index.html` 一字不动**。
+- **不动云函数代码**：`fn` 模式只调用 `tcb fn deploy`。
+- **不动用户存档系统 / 红线参数**：与 `tensionRiseRate / tensionFallRate / 黄金区 30~70 / slackFailGrace 0.5s` 等钓鱼手感参数无任何交集。
+- **可回退**：`scripts/deploy.sh` 是新增文件，删除即回到"手动 `tcb hosting deploy`"流程；过往部署的 `?v=stamp` 都是查询参数，对资源内容无副作用。
+
+### 后续可选优化（不是本次范围）
+
+1. 在脚本顶部加 PATH 兜底（自动探测 `~/.workbuddy/binaries/node/*/bin`）。
+2. `--dry-run` 选项（只 bump 不上传，方便人工检查改动）。
+3. 接入 git pre-push hook：禁止本地未提交时跑 deploy（避免线上和源码不一致）。
+4. 同样的 bump 逻辑写一份独立 Python 脚本进 `scripts/`，让 CI/CD（未来若引入）也能复用。
+
+---
+
 ## [Unreleased] · 村庄美术升级 + NPC 站位微调 + 碰撞数据排查工具
 
 ### 美术资源
