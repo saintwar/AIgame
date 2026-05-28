@@ -313,19 +313,7 @@ export function drawAmingHome(ctx, x, y, time) {
   ctx.fillRect(x + 98, y - 12, 16, 6);
 
   // ===== 烟雾粒子（3 个圆向上飘动） =====
-  const t = time / 100;
-  for (let i = 0; i < 3; i++) {
-    const phase = (t + i * 10) % 30;
-    const sx = x + 106 + Math.sin(t / 5 + i) * 4;
-    const sy = y - 12 - phase * 0.8;
-    const alpha = Math.max(0, 1 - phase / 30);
-    const size = 3 + i * 1.5;
-
-    ctx.fillStyle = `rgba(200,190,180,${alpha * 0.5})`;
-    ctx.beginPath();
-    ctx.arc(sx, sy, size, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  drawAmingHomeSmoke(ctx, x, y, time);
 
   // ===== 米白墙体 =====
   ctx.fillStyle = '#F4E4C1';
@@ -388,6 +376,27 @@ export function drawAmingHome(ctx, x, y, time) {
   ctx.beginPath();
   ctx.arc(doorX + 16, doorY + 15, 2, 0, Math.PI * 2);
   ctx.fill();
+}
+
+// ------------------------------------------------------------
+// 阿明家烟囱烟雾粒子（独立导出，供美术化后叠加调用）
+// 锚点：烟囱口位于 (x+106, y-12)（与程序化版屋顶烟囱出口对齐；
+// 美术 PNG 烟囱口约在 (x+99, y-13)，7px 偏差视觉容差内可复用）
+// ------------------------------------------------------------
+export function drawAmingHomeSmoke(ctx, x, y, time) {
+  const t = time / 100;
+  for (let i = 0; i < 3; i++) {
+    const phase = (t + i * 10) % 30;
+    const sx = x + 106 + Math.sin(t / 5 + i) * 4;
+    const sy = y - 12 - phase * 0.8;
+    const alpha = Math.max(0, 1 - phase / 30);
+    const size = 3 + i * 1.5;
+
+    ctx.fillStyle = `rgba(200,190,180,${alpha * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ============================================================

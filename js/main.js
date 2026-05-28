@@ -27,20 +27,25 @@ import './ui/float-text.js';
 import StaminaSystem from './stamina-system.js';
 
 console.log('🎮 宝岛钓手 booted @ 1280x720 HD 16:9');
-console.log('📐 Tile: 64px | Map: 20x11 | Player Start: (4,5)');
+console.log('📐 Tile: 32px | Map: 40x22 | Player Start: (8,14)');
 console.log('%c🛠️  GM 命令: GM.run("quest list") | Ctrl+G 打开管理面板', 'color:#ff9800');
 
 // 显示规格常量
+//   PHASE Step2：tile 系统从 T=64 / 20×11 切到 T=32 / 40×22（路径精度 ×2）
+//   - 画布像素 1280×720 不变；sprite 像素尺寸不变
+//   - tile 系统仅服务于：碰撞 / 寻路 / 钓点-挖蚯蚓-栈桥触发区
+//   - 数据层（NPC / 建筑 / 树木 / 钓点波纹 / 栈桥金边）改用"像素优先"，不再 *T+offset
+//   PLAYER_SPAWN / FISHING_SPOT 等值兼容老接口，单位已升级为新 tile 坐标（×2）
 window.GAME_CONFIG = Object.freeze({
   CANVAS_WIDTH: 1280,
   CANVAS_HEIGHT: 720,
-  TILE_SIZE: 64,
-  MAP_COLS: 20,
-  MAP_ROWS: 11,
+  TILE_SIZE: 32,
+  MAP_COLS: 40,
+  MAP_ROWS: 22,
   PLAYER_W: 32,
   PLAYER_H: 48,
-  PLAYER_SPAWN: { x: 4, y: 5 },
-  FISHING_SPOT: { x: 10, y: 9 },
+  PLAYER_SPAWN: { x: 8, y: 10 },     // 旧 (4,5) ×2
+  FISHING_SPOT: { x: 20, y: 18 },    // 旧 (10,9) ×2
   HUD_HEIGHT: 16
 });
 

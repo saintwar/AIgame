@@ -4,6 +4,30 @@
 
 ---
 
+## [Unreleased] · 村庄美术升级 + NPC 站位微调 + 碰撞数据排查工具
+
+### 美术资源
+- 新增 `assets/images/` 美术资源（村庄 BG / NPC 立绘 / 建筑等）。
+- 新增渲染模块：`js/render/village-bg.js`、`buildings-art.js`、`npc-atubo.js`、`npc-linshifu.js`、`npc-xiaofang.js`、`npc-xiulan.js`。
+- `js/render/buildings.js` 适配新美术。
+
+### NPC 站位调整（贴合新 BG 美术）
+- 秀兰阿姨 (352,352) → (352,**416**)，南移 1 格。
+- 林师傅 (864,352) → (**736**,352)，西移 2 格。
+- 小芳 (928,512) → (**864**,512)，西移 1 格。
+- `js/village-scene.js` 头顶名字标签 `py-8` → `py-18`，避免压住头顶。
+
+### 碰撞数据排查工具（新增 docs / scripts）
+- `scripts/dump-village-collision.py`：把 `villageMap` 导成 32px 网格 + 行列号空气墙图（`docs/village-collision-map.png`）。
+- `scripts/dump-bg-grid-overlay.py`：把村庄 BG 美术 + 32px 网格 + 当前碰撞数据半透明叠加（`docs/village-bg-overlay.png`），用于肉眼对照"美术实物 vs 碰撞数据"是否对齐。
+- 修复 `dump-village-collision.py` 第 72 行 `fill_rect` 多参数 bug，回滚为单段墙身。
+- **已知问题（待修）**：叠加图显示当前 villageMap 的 ROOF/WALL 与新 BG 美术整体错位（美术上无房子、却标了空气墙；美术上的 4 块农田未标碰撞），后续需重做 villageMap 贴合美术。
+
+### 其他
+- `index.html`、`js/main.js`、`js/click-to-move.js`、`js/digging-system.js`、`js/fishing-scene.js`：随美术资源升级的小幅适配。
+
+---
+
 ## [Unreleased] · PHASE 15 — 鱼个体差异化（拉力 / 行为 / HP 差异）
 
 ### 仗1：鱼种数据扩展（5 → 10）

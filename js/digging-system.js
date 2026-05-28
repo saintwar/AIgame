@@ -44,23 +44,46 @@ const LOCK_MS = 2000;
 const INTERACT_DIST = 1;
 
 /**
- * 16 格地块表（与 village-scene.js _renderMap 内 4 块 2T×2T 区域对齐）
- *   left-top   (4,1)(5,1)(4,2)(5,2)   farm
- *   right-top  (13,1)(14,1)(13,2)(14,2)   garden
- *   left-bottom (1,4)(2,4)(1,5)(2,5)   garden
- *   right-bottom (15,4)(16,4)(15,5)(16,5)   farm
+ * 16 块"可挖区域"表（PHASE Step2：T=64→T=32 升级）
+ * ────────────────────────────────────────────────────────
+ *   原 16 块独立可挖格（旧 T=64，单格 1×1）：
+ *     左上   农田  旧 (4,1)(5,1)(4,2)(5,2)
+ *     右上   花圃  旧 (13,1)(14,1)(13,2)(14,2)
+ *     左下   花圃  旧 (1,4)(2,4)(1,5)(2,5)
+ *     右下   农田  旧 (15,4)(16,4)(15,5)(16,5)
+ *
+ *   新 T=32 下，每个旧 tile 对应 2×2 新 tile（共 4 格）。
+ *   设计（方案 P）：4 个新 tile 共享 1 个 CD，玩家收获量 100% 不变。
+ *
+ *   数据结构：每条记录是一个 region = { tx, ty, type, regionId }
+ *     - tx/ty：region 左上角的新 tile 坐标（每个 region 共 4 格：[ty..ty+1][tx..tx+1]）
+ *     - regionId：CD 主键（用旧 tile 坐标命名以保持兼容性："tile_<oldTx>_<oldTy>"）
+ *
+ *   findTile(tx, ty)：根据玩家点击的新 tile (tx, ty)，反查所属 region
+ *     如果 tx,ty 落在某个 region 的 2×2 范围内 → 返回该 region；否则 null
+ *
+ *   旧存档兼容：CD key 仍是 "tile_<oldTx>_<oldTy>" 字符串，老玩家存档无需迁移
  */
 const DIG_TILES = (() => {
-  const tiles = [];
+  const regions = [];
+  // 旧坐标 → 新 region 左上角（乘 2）+ regionId（保留旧坐标编码）
+  const addRegion = (oldTx, oldTy, type) => {
+    regions.push({
+      tx: oldTx * 2,            // region 左上角新 tile 坐标
+      ty: oldTy * 2,
+      type,
+      regionId: `tile_${oldTx}_${oldTy}`   // CD 共享主键（旧坐标兼容）
+    });
+  };
   // 左上 农田
-  for (let ty = 1; ty <= 2; ty++) for (let tx = 4; tx <= 5; tx++) tiles.push({ tx, ty, type: 'farm' });
+  for (let oy = 1; oy <= 2; oy++) for (let ox = 4; ox <= 5; ox++) addRegion(ox, oy, 'farm');
   // 右上 花圃
-  for (let ty = 1; ty <= 2; ty++) for (let tx = 13; tx <= 14; tx++) tiles.push({ tx, ty, type: 'garden' });
+  for (let oy = 1; oy <= 2; oy++) for (let ox = 13; ox <= 14; ox++) addRegion(ox, oy, 'garden');
   // 左下 花圃
-  for (let ty = 4; ty <= 5; ty++) for (let tx = 1; tx <= 2; tx++) tiles.push({ tx, ty, type: 'garden' });
+  for (let oy = 4; oy <= 5; oy++) for (let ox = 1; ox <= 2; ox++) addRegion(ox, oy, 'garden');
   // 右下 农田
-  for (let ty = 4; ty <= 5; ty++) for (let tx = 15; tx <= 16; tx++) tiles.push({ tx, ty, type: 'farm' });
-  return tiles;
+  for (let oy = 4; oy <= 5; oy++) for (let ox = 15; ox <= 16; ox++) addRegion(ox, oy, 'farm');
+  return regions;
 })();
 
 /**
@@ -102,12 +125,24 @@ const FLOAT_PRESETS = {
 // 内部工具
 // ────────────────────────────────────────────────────────
 
-function tileId(tx, ty) {
-  return `tile_${tx}_${ty}`;
+/**
+ * 根据新 tile (tx, ty) 反查所属 region（2×2 范围内）
+ * 返回 region 对象或 null
+ */
+function findTile(tx, ty) {
+  for (const r of DIG_TILES) {
+    if (tx >= r.tx && tx <= r.tx + 1 && ty >= r.ty && ty <= r.ty + 1) return r;
+  }
+  return null;
 }
 
-function findTile(tx, ty) {
-  return DIG_TILES.find(t => t.tx === tx && t.ty === ty) || null;
+/**
+ * 返回该 tile 所属 region 的 CD 主键
+ * 不属于任何 region 时返回 null
+ */
+function tileId(tx, ty) {
+  const r = findTile(tx, ty);
+  return r ? r.regionId : null;
 }
 
 function rollTable(table) {
@@ -140,15 +175,17 @@ class DiggingSystem {
   // 公开查询
   // ────────────────────────────────────────────
 
-  /** 是否是可挖地块格 */
+  /** 是否是可挖地块格（落在任一 region 的 2×2 范围内） */
   isDigTile(tx, ty) {
     return !!findTile(tx, ty);
   }
 
-  /** 该格剩余 CD（ms），0=可挖 */
+  /** 该格（或其所属 region）剩余 CD（ms），0=可挖；不在 region 内 → 0 */
   getCDRemainMs(tx, ty) {
+    const key = tileId(tx, ty);
+    if (!key) return 0;
     const cdMap = Save.get('player.diggingCD') || {};
-    const until = cdMap[tileId(tx, ty)] || 0;
+    const until = cdMap[key] || 0;
     const left = until - Date.now();
     return left > 0 ? left : 0;
   }
@@ -157,30 +194,46 @@ class DiggingSystem {
     return this.getCDRemainMs(tx, ty) > 0;
   }
 
-  /** 所有 16 块地（供渲染层遍历） */
+  /**
+   * 所有可挖 region（供渲染层遍历），16 项。
+   * 每个 region 在新 T=32 网格上占 2×2 tile（共 64×64 像素）。
+   * - tx, ty：region 左上角的新 tile 坐标
+   * - regionSize：region 边长（tile 数，固定 2），用于渲染层画大金边/大蒙层
+   * - type：'farm' / 'garden'
+   * - regionId：CD 主键
+   */
   getAllTiles() {
-    return DIG_TILES;
+    return DIG_TILES.map(r => ({ ...r, regionSize: 2 }));
   }
 
   /**
-   * 找出玩家当前最近的可挖格（曼哈顿=1）
-   *   优先级：CD 已到 > CD 中（玩家高亮的格子也包括 CD 中的，便于看倒计时）
-   *   返回 { tile, dist } 或 null
+   * 找出玩家当前最近的可挖 region（玩家曼哈顿距离≤1 至 region 任意一格）
+   * 返回 { tile: region, dist } 或 null
    */
   getNearestAdjacentTile(playerTx, playerTy) {
     let best = null;
-    for (const t of DIG_TILES) {
-      const dist = Math.abs(t.tx - playerTx) + Math.abs(t.ty - playerTy);
+    for (const r of DIG_TILES) {
+      // region 占 [r.tx..r.tx+1, r.ty..r.ty+1]，求玩家到最近 region 格的曼哈顿距离
+      const cx = Math.max(r.tx, Math.min(playerTx, r.tx + 1));
+      const cy = Math.max(r.ty, Math.min(playerTy, r.ty + 1));
+      const dist = Math.abs(cx - playerTx) + Math.abs(cy - playerTy);
       if (dist <= INTERACT_DIST) {
-        if (!best || dist < best.dist) best = { tile: t, dist };
+        if (!best || dist < best.dist) best = { tile: r, dist };
       }
     }
     return best;
   }
 
-  /** 玩家是否相邻指定格 */
+  /**
+   * 玩家是否相邻指定格（tx, ty 是新 tile 坐标）
+   * 该格必须属于某个 region；玩家到 region 任意格的曼哈顿距离 ≤ 1 即视为相邻
+   */
   isAdjacent(playerTx, playerTy, tx, ty) {
-    return (Math.abs(playerTx - tx) + Math.abs(playerTy - ty)) <= INTERACT_DIST;
+    const r = findTile(tx, ty);
+    if (!r) return false;
+    const cx = Math.max(r.tx, Math.min(playerTx, r.tx + 1));
+    const cy = Math.max(r.ty, Math.min(playerTy, r.ty + 1));
+    return (Math.abs(cx - playerTx) + Math.abs(cy - playerTy)) <= INTERACT_DIST;
   }
 
   // ────────────────────────────────────────────
@@ -196,7 +249,7 @@ class DiggingSystem {
   tryDig(tx, ty) {
     const tile = findTile(tx, ty);
     if (!tile) return false;
-    const id = tileId(tx, ty);
+    const id = tile.regionId;   // 共享 CD 主键（4 个 tile 同 region 共享）
 
     // ① 防连点锁（运行时，不持久化）
     const now = Date.now();

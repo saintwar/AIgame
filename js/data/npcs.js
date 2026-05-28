@@ -1,10 +1,22 @@
-// NPC 数据表（720p HD · 坐标基于 20×11 地图）
+// NPC 数据表（720p HD · 像素坐标）
+//
+// PHASE Step2：从"tile 坐标 (x,y)" 切到"像素坐标 (cx,cy)"
+// ────────────────────────────────────────────────────────
+//  - 之前 villageScene init 中：npc.px = x*64+16, npc.py = y*64+16
+//    意味着 sprite 32×48 的左上角 = (x*64+16, y*64+16)
+//    所以 sprite 中心点（视觉锚点）原本就在 (x*64+32, y*64+32)
+//  - 现在切到 T=32，仍要让 NPC 出现在视觉上的同一像素位置
+//    → 直接存"sprite 中心像素 (cx, cy)"，与 T 解耦
+//  - 旧 (x,y) 映射到 (cx,cy)：cx = x*64+32, cy = y*64+32
+//
+// 渲染时 villageScene 会按 npc.px = cx - 16, npc.py = cy - 16 反算 sprite 左上角。
 
 export const NPCS = [
   {
     id: 'mom',
     name: '秀兰阿姨',
-    x: 5, y: 5,                    // 阿明家（1-2列）右侧空地
+    // 旧 (5,5) → 中心 (352, 352)；2026-05-28 南移 1 格(64px) → (352, 416)
+    cx: 352, cy: 416,
     sprite: { head: '#F4E4C1', body: '#3A6FA8', leg: '#3D2B1F' },
     role: '阿明的母亲',
     facing: 'down',
@@ -15,7 +27,8 @@ export const NPCS = [
   {
     id: 'chief',
     name: '阿土伯',
-    x: 9, y: 2,                   // 中央水池旁（广场石砖区）
+    // 旧 (9,2) → (608, 160)
+    cx: 608, cy: 160,
     sprite: { head: '#C9A876', body: '#9A9590', leg: '#A67C52' },
     role: '村长',
     facing: 'down',
@@ -25,7 +38,8 @@ export const NPCS = [
   {
     id: 'master_lin',
     name: '林师傅',
-    x: 13, y: 5,                  // 钓具店门前
+    // 旧 (13,5) → (864, 352)；2026-05-28 西移 2 格(128px) → (736, 352)
+    cx: 736, cy: 352,
     sprite: { head: '#E8C896', body: '#5C8A4C', leg: '#A67C52' },
     role: '钓具店老板',
     facing: 'down',
@@ -35,7 +49,8 @@ export const NPCS = [
   {
     id: 'xiaofang',
     name: '小芳',
-    x: 14, y: 7.5,                  // 7-11 杂货店门口
+    // 旧 (14, 7.5) → (928, 512)；2026-05-28 西移 1 格(64px) → (864, 512)
+    cx: 864, cy: 512,
     sprite: { head: '#3D2B1F', body: '#A83C3C', leg: '#3D2B1F' },
     role: '7-11 店员',
     facing: 'down',

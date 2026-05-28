@@ -192,7 +192,34 @@
          产物运行时报 "Cannot read properties of undefined (reading '4')"）。
          决策：209 格的网格无需第三方寻路库，60 行手写 A* 性能秒过，永不抖动。 -->
   <script src="js/click-to-move.js" defer></script>
+  <!-- 水社村美术底图模块（IIFE 挂 window.VillageBg）：
+       由 village-scene.js 在 _renderMap 阶段调用，替换原程序化瓦片地形。
+       defer + 在 main.js 之前 → 保证 main.js 启动时 window.VillageBg 已就绪。 -->
+  <script src="js/render/village-bg.js?v=20260528" defer></script>
+  <!-- 秀兰阿姨 NPC 美术贴图模块（IIFE 挂 window.NpcXiulan）：
+       由 village-scene.js _renderNPCs 在绘制 mom 时调用，替换原程序化 sprite。
+       defer + 在 main.js 之前 → 保证 main.js 启动时 window.NpcXiulan 已就绪。
+       未来其他 NPC 美术图（村长/林师傅/小芳）按相同模式追加新 script 即可。 -->
+  <script src="js/render/npc-xiulan.js?v=20260528" defer></script>
+  <!-- 村长阿土伯 NPC 美术贴图模块（IIFE 挂 window.NpcAtubo）：
+       由 village-scene.js _renderNPCs 在绘制 chief 时调用，替换原程序化 sprite。
+       美术稿 atubo.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
+  <script src="js/render/npc-atubo.js?v=20260528" defer></script>
+  <!-- 林师傅 NPC 美术贴图模块（IIFE 挂 window.NpcLinshifu）：
+       由 village-scene.js _renderNPCs 在绘制 master_lin 时调用，替换原程序化 sprite。
+       美术稿 linshifu.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
+  <script src="js/render/npc-linshifu.js?v=20260528" defer></script>
+  <!-- 小芳 NPC 美术贴图模块（IIFE 挂 window.NpcXiaofang）：
+       由 village-scene.js _renderNPCs 在绘制 xiaofang 时调用，替换原程序化 sprite。
+       美术稿 xiaofang.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
+  <script src="js/render/npc-xiaofang.js?v=20260528" defer></script>
+  <!-- 建筑美术贴图统一元数据表（IIFE 挂 window.BuildingsArt）：
+       由 village-scene.js Layer3 建筑绘制阶段调用，替换各 drawXxx 程序化版本。
+       支持村长家、渔具店等建筑独立声明渲染尺寸/锚点（参见 ART_SPEC v1.2 §2）。 -->
+  <script src="js/render/buildings-art.js?v=20260528" defer></script>
   <!-- PHASE 16-9：main.js 改用 <script type="module" defer src="...">
+
+
        原本走 inline 注入 + ?v=Date.now() 的写法是历史调试遗留，
        后果：① ?v=Date.now() 让 main.js 永远不命中浏览器缓存，
              二次访问也得重拉整张 ES module 依赖图（43 个 JS）；

@@ -310,7 +310,8 @@ class FishingScene {
       }
       // 特殊按键处理
       if (key === 'r' && self.taskComplete) {
-        self.pause(); SceneManager.switchToInstant('village', { spawnAt: { x: 10, y: 8 } });
+        // PHASE Step2：旧 tile (10,8) → 新 tile (21,16)，落在栈桥附近
+        self.pause(); SceneManager.switchToInstant('village', { spawnAt: { x: 21, y: 16 } });
       }
       if (key === 'escape' && !self.taskComplete) self._showEscapeConfirm();
     };
@@ -405,7 +406,8 @@ class FishingScene {
   _handleReturnVillage() {
     if (this.taskComplete) {
       this.pause();
-      SceneManager.switchToInstant('village', { spawnAt: { x: 10, y: 8 } });
+      // PHASE Step2：旧 tile (10,8) → 新 tile (21,16)
+      SceneManager.switchToInstant('village', { spawnAt: { x: 21, y: 16 } });
     } else {
       this._showEscapeConfirm();
     }
@@ -422,7 +424,7 @@ class FishingScene {
       </div>
     </div>`;
     document.getElementById('fishing-scene').appendChild(overlay);
-    overlay.querySelector('#esc-yes').onclick = () => { overlay.remove(); this.pause(); SceneManager.switchToInstant('village', { spawnAt: { x: 10, y: 8 } }); };
+    overlay.querySelector('#esc-yes').onclick = () => { overlay.remove(); this.pause(); SceneManager.switchToInstant('village', { spawnAt: { x: 21, y: 16 } }); };
     overlay.querySelector('#esc-no').onclick = () => overlay.remove();
   }
 

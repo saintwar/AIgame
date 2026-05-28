@@ -19,7 +19,7 @@ import {
   drawWoodenDock, drawFishingRipple, drawFountain, drawDistantMountains
 } from './render/dusk-effects.js';
 import { PALETTE } from './render/palette.js';
-import { drawChiefHouse, drawFishingShop, drawAmingHome, draw711Store } from './render/buildings.js';
+import { drawChiefHouse, drawFishingShop, drawAmingHome, drawAmingHomeSmoke, draw711Store } from './render/buildings.js';
 import {
   drawAming, drawXiulan, drawVillageChief, drawLin, drawXiaofang
 } from './render/characters.js';
@@ -60,18 +60,21 @@ class ArrowGuide {
 
   update(player) {
     if (!this.visible || !this.targetTile) return;
-    const dx = this.targetTile.x - Math.floor(player.px / 64);
-    const dy = this.targetTile.y - Math.floor(player.py / 64);
+    const T = window.GAME_CONFIG.TILE_SIZE;
+    const dx = this.targetTile.x - Math.floor(player.px / T);
+    const dy = this.targetTile.y - Math.floor(player.py / T);
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist <= 2.5) this.hide();
+    // PHASE Step2：原 2.5 tile (T=64) = 160px，T=32 下需放大到 5 tile 才能保持相同手感
+    if (dist <= 5.0) this.hide();
     this.bobPhase += 0.1;
   }
 
   render(ctx, player) {
     if (!this.visible || !this.targetTile) return;
 
-    const dx = (this.targetTile.x * 64 + 32) - player.px;
-    const dy = (this.targetTile.y * 64 + 32) - player.py;
+    const T = window.GAME_CONFIG.TILE_SIZE;
+    const dx = (this.targetTile.x * T + T / 2) - player.px;
+    const dy = (this.targetTile.y * T + T / 2) - player.py;
     const angle = Math.atan2(dy, dx);
     const bobY = Math.sin(this.bobPhase) * 4;
 
@@ -128,11 +131,15 @@ const TILE = {
 //   ⚠️ WOOD（栈桥）依然可走 —— 玩家在栈桥上按 F 即可钓鱼，钓向南侧（y+1 行）的圆圈
 const WALKABLE = new Set([TILE.GRASS, TILE.DIRT, TILE.STONE, TILE.WOOD]);
 
+// PHASE Step2：BUILDINGS 数据像素化
+//   旧体系下渲染位置 = (tx * 64, (ty+3) * 64)
+//   已合并 "+3 tile" 偏移与 tile→px 转换，直接存最终绘制像素 (drawX, drawY)
+//   绘制尺寸固定 128×128（与 BuildingsArt PNG 元数据匹配，与 T 无关）
 const BUILDINGS = [
-  { tx: 4, ty: 1, name: '村长家' },
-  { tx: 13, ty: 1, name: '钓具店' },
-  { tx: 1, ty: 4, name: '阿明家' },
-  { tx: 15, ty: 4, name: '7-11' }
+  { drawX: 4 * 64,  drawY: (1 + 3) * 64, name: '村长家' },  // (256, 256)
+  { drawX: 13 * 64, drawY: (1 + 3) * 64, name: '钓具店' },  // (832, 256)
+  { drawX: 1 * 64,  drawY: (4 + 3) * 64, name: '阿明家' },  // (64, 448)
+  { drawX: 15 * 64, drawY: (4 + 3) * 64, name: '7-11' }     // (960, 448)
 ];
 
 // 开场旁白文本
@@ -154,10 +161,9 @@ class VillageScene {
     this.ch = 720;
 
     this.player = {
-      // PHASE 13-9-fix：constructor 默认值与 init() 中 spawnAt fallback 同步为 (4, 7)
-      //   真正生效的是 init() 第 ~243 行的 spawnAt fallback（前 2 仗失败的真正根因）
-      //   这里仅作占位/兜底，避免后续误读
-      tx: 4, ty: 7,
+      // PHASE Step2：新 tile 体系下 (4,7) → (8,14)
+      //   constructor 默认值与 init() 中 spawnAt fallback 同步
+      tx: 8, ty: 14,
       px: 0, py: 0,
       direction: 'down',
       frame: 0,
@@ -240,14 +246,8 @@ class VillageScene {
   init(params) {
     this._generateMap();
 
-    // PHASE 13-9-fix：spawnAt 默认值 y: 5 → 7（前 2 仗失败的真正根因）
-    //   旧 bug：13-8/13-9 改的是 constructor 中 this.player = { tx, ty } 的默认值，
-    //          但 init() 此处会用 spawnAt 覆写！main.js 进入村庄时不传 spawnAt，
-    //          就走 fallback {x:4, y:5} → 永远落在村长家墙身 [5][4] WALL 上 → 开局卡墙
-    //   修复：把 fallback 的 y 从 5 改为 7（任务推荐 +2 格），落到 [7][4]=GRASS 安全格
-    //         位置：村长家正南 2 格（屋檐外的草地），叙事上像"刚从家门口走出来"
-    //   ⚠️ 同时同步 constructor 默认值（行 153~167）以保持代码一致，避免后续误读
-    const spawn = params?.spawnAt || { x: 4, y: 7 };
+    // PHASE Step2：新 tile 体系下 spawn 默认值 (4,7) → (8,14)
+    const spawn = params?.spawnAt || { x: 8, y: 14 };
     this.player.tx = spawn.x;
     this.player.ty = spawn.y;
     this._syncPlayerPixel();
@@ -257,8 +257,11 @@ class VillageScene {
 
     this.npcs = NPCS.map(n => ({
       ...n,
-      px: n.x * 64 + 16,   // 角色宽 32px，左边缘对齐 tile + 16
-      py: n.y * 64 + 16,   // 角色高 48px，脚底在 tile 顶边 + 48
+      // PHASE Step2：NPC 数据已像素化（cx, cy 是 sprite 中心像素）
+      //   渲染层用 px=cx-16, py=cy-16 还原 32×48 sprite 的左上角
+      //   （与旧 T=64 时 x*64+16 等价：当时 sprite 中心就是 x*64+32）
+      px: n.cx - 16,
+      py: n.cy - 16,
       bobOffset: 0
     }));
 
@@ -750,10 +753,13 @@ class VillageScene {
       return;
     }
 
-    // 从 NPCS 数据中动态获取 NPC 坐标
+    // 从 NPCS 数据中动态获取 NPC tile 坐标
+    // PHASE Step2：NPC 数据已像素化（cx/cy），这里换算成当前 T 下的 tile 坐标供 ArrowGuide 使用
     const _npcPos = (id) => {
       const npc = NPCS.find(n => n.id === id);
-      return npc ? { x: npc.x, y: npc.y } : null;
+      if (!npc) return null;
+      const T_ = window.GAME_CONFIG.TILE_SIZE;
+      return { x: Math.floor(npc.cx / T_), y: Math.floor(npc.cy / T_) };
     };
 
     // q002 优先（getStatus 会在 q001 未完成时返回 'not_started'）
@@ -765,7 +771,8 @@ class VillageScene {
         const pos = _npcPos('xiaofang');
         if (pos) this.arrow.setTarget(pos.x, pos.y, '✅ 回找小芳');
       } else {
-        this.arrow.setTarget(10, 9, '→ 钓点');
+        // PHASE Step2：钓点新 tile 坐标
+        this.arrow.setTarget(20, 18, '→ 钓点');
       }
       return;
     }
@@ -784,7 +791,8 @@ class VillageScene {
         const pos = _npcPos('master_lin');
         if (pos) this.arrow.setTarget(pos.x, pos.y, '✅ 回找林师傅');
       } else {
-        this.arrow.setTarget(10, 9, '→ 钓点');
+        // PHASE Step2：钓点新 tile 坐标
+        this.arrow.setTarget(20, 18, '→ 钓点');
       }
       return;
     }
@@ -802,7 +810,8 @@ class VillageScene {
       return;
     }
     if (q === 'active') {
-      this.arrow.setTarget(10, 9, '→ 钓点');
+      // PHASE Step2：钓点新 tile 坐标
+      this.arrow.setTarget(20, 18, '→ 钓点');
       return;
     }
     if (q === 'available_to_complete') {
@@ -851,10 +860,32 @@ class VillageScene {
 
   // ========================================================
   // 地图生成
+  //
+  // PHASE Step2：T=64/20×11 → T=32/40×22 重写
+  //   规则：所有旧 tile 坐标 ×2，单 tile 扩成 2×2 区域
+  //         例如旧 [1][4]=ROOF → 新 [2..3][8..9] 全部=ROOF
+  //         旧范围 [9][1..18]=DEEP → 新范围 [18..19][2..37]=DEEP
+  //   工具：fillRect(tile, x0, y0, x1, y1) 闭区间填充新 tile 坐标
+  //
+  // 旧 (T=64) 数据存档：
+  //   边界树 row0, row(ROWS-1)=10, col0, col(COLS-1)=19
+  //   深水 row 9, 10 [x=1..18]
+  //   栈桥 WOOD [8][9..11]
+  //   钓点 FISHING [9][9..11]
+  //   建筑屋顶 ROOF（每个 2×2 旧 tile，扩到新 4×4）
+  //     村长家 [1..2][4..5] / 钓具店 [1..2][13..14]
+  //     阿明家 [4..5][1..2] / 7-11   [4..5][15..16]
+  //   建筑墙身 WALL（每个屋下方 1×2 旧 tile，扩到新 2×4）
+  //     村长 [5][4..5] / 钓具 [5][14] / 7-11 [8][15..16]
+  //     （阿明家 [8][1..2] 是 TREE 兜底，不重复打 WALL）
+  //   广场石砖 STONE [2..3][8..9]
+  //   水平干道 DIRT [5][3..14]（草地→泥土，覆盖已被 ROOF/WALL 占的不动）
+  //   纵向干道 DIRT [2..8][8]
+  //   散树 TREE [1][2] [1][17] [8][1] [8][2] [8][17] [8][18]
   // ========================================================
   _generateMap() {
-    const COLS = 20;
-    const ROWS = 11;
+    const COLS = window.GAME_CONFIG.MAP_COLS;
+    const ROWS = window.GAME_CONFIG.MAP_ROWS;
 
     this.villageMap = [];
     for (let y = 0; y < ROWS; y++) {
@@ -864,99 +895,94 @@ class VillageScene {
       }
     }
 
-    for (let x = 0; x < COLS; x++) {
-      this.villageMap[0][x] = TILE.TREE;
-      this.villageMap[ROWS - 1][x] = TILE.TREE;
-    }
-    for (let y = 0; y < ROWS; y++) {
-      this.villageMap[y][0] = TILE.TREE;
-      this.villageMap[y][COLS - 1] = TILE.TREE;
-    }
+    // 闭区间矩形填充工具（坐标都是新 T=32 网格的 tile）
+    const fillRect = (tile, x0, y0, x1, y1) => {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (y < 0 || y >= ROWS || x < 0 || x >= COLS) continue;
+          this.villageMap[y][x] = tile;
+        }
+      }
+    };
 
-    for (let x = 1; x < COLS - 1; x++) {
-      this.villageMap[9][x] = TILE.DEEP;
-      this.villageMap[10][x] = TILE.DEEP;
-    }
+    // ── 边界树 ───────────────────────────────────────────
+    // 旧：第 0 行 / ROWS-1=10 行 / 第 0 列 / COLS-1=19 列
+    // 新：第 0~1 行 / 20~21 行 / 第 0~1 列 / 38~39 列
+    fillRect(TILE.TREE, 0, 0, COLS - 1, 1);              // 上边界 2 行
+    fillRect(TILE.TREE, 0, ROWS - 2, COLS - 1, ROWS - 1);// 下边界 2 行
+    fillRect(TILE.TREE, 0, 0, 1, ROWS - 1);              // 左边界 2 列
+    fillRect(TILE.TREE, COLS - 2, 0, COLS - 1, ROWS - 1);// 右边界 2 列
 
-    this.villageMap[8][9] = TILE.WOOD;
-    this.villageMap[8][10] = TILE.WOOD;
-    this.villageMap[8][11] = TILE.WOOD;
+    // ── 深水 DEEP ────────────────────────────────────────
+    // 旧 [9..10][1..18] → 新 [18..21][2..37]
+    fillRect(TILE.DEEP, 2, 18, COLS - 3, 21);
 
-    // 钓点扩大一倍：2x2 tile 区域
-    this.villageMap[9][9] = TILE.FISHING;
-    this.villageMap[9][10] = TILE.FISHING;
-    this.villageMap[9][11] = TILE.FISHING;
+    // ── 栈桥 WOOD ────────────────────────────────────────
+    // 旧 [8][9..11] → 新 [16..17][18..23]
+    fillRect(TILE.WOOD, 18, 16, 23, 17);
 
-    this.villageMap[1][4] = TILE.ROOF;
-    this.villageMap[1][5] = TILE.ROOF;
-    this.villageMap[2][4] = TILE.ROOF;
-    this.villageMap[2][5] = TILE.ROOF;
+    // ── 钓点 FISHING（2×2 旧 tile → 4×4 新 tile） ─────────
+    // 旧 [9][9..11] → 新 [18..19][18..23]（覆盖 DEEP）
+    fillRect(TILE.FISHING, 18, 18, 23, 19);
 
-    this.villageMap[1][13] = TILE.ROOF;
-    this.villageMap[1][14] = TILE.ROOF;
-    this.villageMap[2][13] = TILE.ROOF;
-    this.villageMap[2][14] = TILE.ROOF;
+    // ── 建筑屋顶 ROOF（每个旧 2×2 → 新 4×4） ──────────────
+    // 村长家 旧 [1..2][4..5] → 新 [2..5][8..11]
+    fillRect(TILE.ROOF, 8, 2, 11, 5);
+    // 钓具店 旧 [1..2][13..14] → 新 [2..5][26..29]
+    fillRect(TILE.ROOF, 26, 2, 29, 5);
+    // 阿明家 旧 [4..5][1..2] → 新 [8..11][2..5]
+    fillRect(TILE.ROOF, 2, 8, 5, 11);
+    // 7-11   旧 [4..5][15..16] → 新 [8..11][30..33]
+    fillRect(TILE.ROOF, 30, 8, 33, 11);
 
-    this.villageMap[4][1] = TILE.ROOF;
-    this.villageMap[4][2] = TILE.ROOF;
-    this.villageMap[5][1] = TILE.ROOF;
-    this.villageMap[5][2] = TILE.ROOF;
+    // ── 建筑墙身 WALL（屋下方 1×2 → 新 2×4） ──────────────
+    // PHASE 13-8 策略：sprite 视觉占 2×2 旧 tile，仅在下半行打 WALL
+    // 村长家 墙身 旧 [5][4..5] → 新 [10..11][8..11]
+    fillRect(TILE.WALL, 8, 10, 11, 11);
+    // 钓具店 墙身 旧 [5][14] → 新 [10..11][28..29]
+    //   ⚠️ 旧 [5][13] 留给林师傅 NPC（不封）→ 新 [10..11][26..27] 仍保留为 GRASS
+    fillRect(TILE.WALL, 28, 10, 29, 11);
+    // 阿明家 墙身 旧 [8][1..2] 已是 TREE → 不打 WALL
+    // 7-11   墙身 旧 [8][15..16] → 新 [16..17][30..33]
+    fillRect(TILE.WALL, 30, 16, 33, 17);
 
-    this.villageMap[4][15] = TILE.ROOF;
-    this.villageMap[4][16] = TILE.ROOF;
-    this.villageMap[5][15] = TILE.ROOF;
-    this.villageMap[5][16] = TILE.ROOF;
+    // ── 广场石砖 STONE ───────────────────────────────────
+    // 旧 [2..3][8..9] → 新 [4..7][16..19]
+    fillRect(TILE.STONE, 16, 4, 19, 7);
 
-    // PHASE 13-8：建筑物碰撞「高度 50%」补丁（取代 13-7 的整体 sprite 覆盖）
-    //   13-7 旧策略：把每个房子 sprite 视觉占的 2×2 = 4 格全部标 WALL
-    //               → 房子上半（屋顶/装饰）也被封死，紧邻房子的出生点 / NPC 互动位被覆盖
-    //               → 阿明开局卡在村长家右下角 [5][4]，按方向键纹丝不动
-    //   13-8 新策略：2D 像素游戏通用做法 —— 碰撞只覆盖 sprite 的「下半墙身」
-    //               每个房子视觉占 [上半行][下半行][左..右]，仅在「下半行」打 WALL
-    //               上半行（屋顶/高墙）保持原 tile（GRASS/DIRT），玩家可走入但视觉被屋顶遮挡
-    //   留口规则保留：林师傅 NPC 站位 [5][13] 不封 / 阿明家下半墙身已是 TREE 无需重复
-    // 村长家 sprite 视觉占格：[4..5][4..5]，墙身 = [5][4..5]
-    this.villageMap[5][4] = TILE.WALL;
-    this.villageMap[5][5] = TILE.WALL;
-    // 钓具店 sprite 视觉占格：[4..5][13..14]，墙身 = [5][13..14]
-    //   ⚠️ [5][13] 留给林师傅 NPC（13-7 同样规则）—— 商店门口可走 + NPC 不卡墙
-    this.villageMap[5][14] = TILE.WALL;
-    // 阿明家 sprite 视觉占格：[7..8][1..2]，墙身 = [8][1..2]
-    //   ⚠️ [8][1]/[8][2] 已是 TREE（行 848-849），TREE 本身不可走 → 墙身碰撞天然成立，无需追加
-    // 7-11 sprite 视觉占格：[7..8][15..16]，墙身 = [8][15..16]
-    this.villageMap[8][15] = TILE.WALL;
-    this.villageMap[8][16] = TILE.WALL;
-
-    // PHASE 13-7：栈桥踩水说明
-    //   13-6 已将 FISHING 移出 WALKABLE，[9][9..11] 三格在 _canMoveTo 中返回 false，玩家无法移入
-    //   若仍有"视觉穿模"感（角色 sprite 高度 > 1 tile，头/脚溢出），属 sprite 渲染问题而非碰撞缺陷
-    //   现有碰撞盒 hbHalf=8 (16×16，半格)，中心位于 (px, py+24)；走到栈桥前缘 ty=8 时
-    //   下一步目标 ty=9 = FISHING/DEEP 全不可走 → canY=false → 停在栈桥边界，符合"移动死边界"
-    //   故本次不再追加格子碰撞，避免影响 13-6 已稳定的 FISHING tile 视觉
-
-    this.villageMap[2][8] = TILE.STONE;
-    this.villageMap[2][9] = TILE.STONE;
-    this.villageMap[3][8] = TILE.STONE;
-    this.villageMap[3][9] = TILE.STONE;
-
-    for (let x = 3; x <= 14; x++) {
-      if (this.villageMap[5][x] === TILE.GRASS) {
-        this.villageMap[5][x] = TILE.DIRT;
+    // ── 水平干道 DIRT（草地→泥土，已被覆盖的不动） ────────
+    // 旧 [5][3..14] → 新 [10..11][6..29]
+    for (let y = 10; y <= 11; y++) {
+      for (let x = 6; x <= 29; x++) {
+        if (this.villageMap[y][x] === TILE.GRASS) {
+          this.villageMap[y][x] = TILE.DIRT;
+        }
       }
     }
 
-    for (let y = 2; y <= 8; y++) {
-      if (this.villageMap[y][8] === TILE.GRASS) {
-        this.villageMap[y][8] = TILE.DIRT;
+    // ── 纵向干道 DIRT ────────────────────────────────────
+    // 旧 [2..8][8] → 新 [4..17][16..17]
+    for (let y = 4; y <= 17; y++) {
+      for (let x = 16; x <= 17; x++) {
+        if (this.villageMap[y][x] === TILE.GRASS) {
+          this.villageMap[y][x] = TILE.DIRT;
+        }
       }
     }
 
-    this.villageMap[1][2] = TILE.TREE;
-    this.villageMap[1][17] = TILE.TREE;
-    this.villageMap[8][1] = TILE.TREE;
-    this.villageMap[8][2] = TILE.TREE;
-    this.villageMap[8][17] = TILE.TREE;
-    this.villageMap[8][18] = TILE.TREE;
+    // ── 散树 TREE（旧单 tile → 新 2×2） ─────────────────
+    // 旧 [1][2]   → 新 [2..3][4..5]
+    fillRect(TILE.TREE, 4, 2, 5, 3);
+    // 旧 [1][17]  → 新 [2..3][34..35]
+    fillRect(TILE.TREE, 34, 2, 35, 3);
+    // 旧 [8][1]   → 新 [16..17][2..3]
+    fillRect(TILE.TREE, 2, 16, 3, 17);
+    // 旧 [8][2]   → 新 [16..17][4..5]
+    fillRect(TILE.TREE, 4, 16, 5, 17);
+    // 旧 [8][17]  → 新 [16..17][34..35]
+    fillRect(TILE.TREE, 34, 16, 35, 17);
+    // 旧 [8][18]  → 新 [16..17][36..37]
+    fillRect(TILE.TREE, 36, 16, 37, 17);
   }
 
   // ========================================================
@@ -1294,8 +1320,9 @@ class VillageScene {
         //   但 ROOF 不在 WALKABLE，寻路终点会落到相邻可走格 → 自然不与 ClickToMove 冲突）
         {
           const { x, y } = toCanvasXY(e);
-          const gx = Math.floor(x / 64);
-          const gy = Math.floor(y / 64);
+          const T_ = window.GAME_CONFIG.TILE_SIZE;
+          const gx = Math.floor(x / T_);
+          const gy = Math.floor(y / T_);
           if (diggingSystem.isDigTile(gx, gy)
               && diggingSystem.isAdjacent(this.player.tx, this.player.ty, gx, gy)) {
             diggingSystem.tryDig(gx, gy);
@@ -1398,10 +1425,11 @@ class VillageScene {
           this._fishingHintHover = false;
         }
         // PHASE 18 仗3 hotfix：无面板时记录鼠标当前所在格（供 digging-overlay CD 倒计时按需显示）
-        //   T=64；超出地图范围 → 不更新（保留上一次值无所谓，render 端会用 isDigTile 二次过滤）
+        //   T 由 GAME_CONFIG.TILE_SIZE 提供；超出地图范围 → 不更新（保留上一次值无所谓，render 端会用 isDigTile 二次过滤）
         {
           const { x, y } = toCanvasXY(e);
-          this._hoverTile = { tx: Math.floor(x / 64), ty: Math.floor(y / 64) };
+          const T_ = window.GAME_CONFIG.TILE_SIZE;
+          this._hoverTile = { tx: Math.floor(x / T_), ty: Math.floor(y / T_) };
         }
         // 无面板：恢复默认（ClickToMove 自己会按 hover 网格设置 cursor）
         return;
@@ -1578,13 +1606,17 @@ class VillageScene {
     let nearestNpc = null;
     let nearestDist = Infinity;
 
+    // PHASE Step2：NPC 互动距离阈值保持像素一致（96 px = 1.5 旧 tile = 3 新 tile）
+    //   tileDist 单位是"新 tile"，T=32 → 阈值 = 96/32 = 3.0
+    const NPC_INTERACT_TILES = 3.0;
+
     for (const npc of this.npcs) {
       const dx = this.player.px - npc.px;
       const dy = this.player.py - npc.py;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const tileDist = dist / 64;
+      const tileDist = dist / window.GAME_CONFIG.TILE_SIZE;
 
-      if (tileDist <= 1.5 && dist < nearestDist) {
+      if (tileDist <= NPC_INTERACT_TILES && dist < nearestDist) {
         nearestDist = dist;
         nearestNpc = npc;
       }
@@ -1823,15 +1855,22 @@ class VillageScene {
   // 玩家像素坐标同步
   // ========================================================
   _syncPlayerPixel() {
-    this.player.px = this.player.tx * 64 + 32;
-    this.player.py = this.player.ty * 64 + 24;
+    const T = window.GAME_CONFIG.TILE_SIZE;
+    this.player.px = this.player.tx * T + T / 2;
+    // PHASE Step2：原 "+24" 是旧 T=64 下的 0.375 T 偏移（让几何中心位于 tile 内 0.75 处）。
+    //   新 T=32 下保持同比例 → T*3/8（=12px）。
+    //   此改动会让 spawn 时 py 像素小幅上移（旧 472 → 新 460，差 12px），
+    //   但能确保所有"tile 反推（floor((py + T*3/8)/T)）"在新 T 下仍自洽。
+    this.player.py = this.player.ty * T + T * 3 / 8;
   }
 
   // ========================================================
   // 碰撞检测
   // ========================================================
   _getTileAt(tx, ty) {
-    if (ty < 0 || ty >= 11 || tx < 0 || tx >= 20) return TILE.TREE;
+    const ROWS = window.GAME_CONFIG.MAP_ROWS;
+    const COLS = window.GAME_CONFIG.MAP_COLS;
+    if (ty < 0 || ty >= ROWS || tx < 0 || tx >= COLS) return TILE.TREE;
     return this.villageMap[ty][tx];
   }
 
@@ -1947,18 +1986,20 @@ class VillageScene {
       const nextPx = this.player.px + dx * speed;
       const nextPy = this.player.py + dy * speed;
 
+      const T = window.GAME_CONFIG.TILE_SIZE;
       const hbCx = nextPx;
-      const hbCy = nextPy + 24;
+      // PHASE Step2：几何中心 y 偏移 = T*3/8（与 _syncPlayerPixel 一致）
+      const hbCy = nextPy + T * 3 / 8;
       const hbHalf = 8;
 
-      const txX = Math.floor(hbCx / 64);
-      const tyMinX = Math.floor((hbCy - hbHalf) / 64);
-      const tyMaxX = Math.floor((hbCy + hbHalf - 1) / 64);
+      const txX = Math.floor(hbCx / T);
+      const tyMinX = Math.floor((hbCy - hbHalf) / T);
+      const tyMaxX = Math.floor((hbCy + hbHalf - 1) / T);
       const canX = this._canMoveTo(txX, tyMinX) && this._canMoveTo(txX, tyMaxX);
 
-      const txMinY = Math.floor((hbCx - hbHalf) / 64);
-      const txMaxY = Math.floor((hbCx + hbHalf - 1) / 64);
-      const tyY = Math.floor(hbCy / 64);
+      const txMinY = Math.floor((hbCx - hbHalf) / T);
+      const txMaxY = Math.floor((hbCx + hbHalf - 1) / T);
+      const tyY = Math.floor(hbCy / T);
       const canY = this._canMoveTo(txMinY, tyY) && this._canMoveTo(txMaxY, tyY);
 
       if (canX) this.player.px = nextPx;
@@ -1977,12 +2018,14 @@ class VillageScene {
       this.animTimer = 0;
     }
 
-    this.player.tx = Math.floor(this.player.px / 64);
-    this.player.ty = Math.floor((this.player.py + 24) / 64);
+    const T_ = window.GAME_CONFIG.TILE_SIZE;
+    this.player.tx = Math.floor(this.player.px / T_);
+    // PHASE Step2：偏移与 _syncPlayerPixel 保持比例自洽（T*3/8）
+    this.player.ty = Math.floor((this.player.py + T_ * 3 / 8) / T_);
     if (this.player.tx < 0) this.player.tx = 0;
-    if (this.player.tx >= 20) this.player.tx = 19;
+    if (this.player.tx >= window.GAME_CONFIG.MAP_COLS) this.player.tx = window.GAME_CONFIG.MAP_COLS - 1;
     if (this.player.ty < 0) this.player.ty = 0;
-    if (this.player.ty >= 11) this.player.ty = 10;
+    if (this.player.ty >= window.GAME_CONFIG.MAP_ROWS) this.player.ty = window.GAME_CONFIG.MAP_ROWS - 1;
 
     // PHASE 13-6：钓鱼触发区从"钓点 FISHING tile"改为"栈桥 WOOD tile"
     //   语义：玩家站在栈桥任意一格（WOOD）即触发钓鱼提示；按 F 开始钓鱼
@@ -2081,29 +2124,47 @@ class VillageScene {
     drawLakeWaves(ctx, this.time * 1000);
 
     // Layer 2: 建筑长投影（在建筑下方）
-    const T = 64;
+    // PHASE Step2：BUILDINGS 已像素化（drawX/drawY），不再依赖 T
     BUILDINGS.forEach(b => {
-      const bx = b.tx * T;
-      const by = (b.ty + 3) * T;
-      drawBuildingShadow(ctx, bx, by, 128, 128);
+      drawBuildingShadow(ctx, b.drawX, b.drawY, 128, 128);
     });
 
     // Layer 3: 建筑（差异化绘制）
+    // 美术图就绪走 BuildingsArt 统一元数据表（含尺寸/锚点偏移），否则回退程序化绘制。
     const now = performance.now();
-    drawChiefHouse(ctx,  4*64, (1+3)*64);
-    drawFishingShop(ctx, 13*64, (1+3)*64);
-    drawAmingHome(ctx,   1*64, (4+3)*64, now);
-    draw711Store(ctx,   15*64, (4+3)*64, now);
+    const BA = window.BuildingsArt;
+    const tryArt = (key, ctx2, x, y) =>
+      !!(BA && typeof BA.draw === 'function' && BA.draw(key, ctx2, x, y));
+
+    // PHASE Step2：4 个建筑直接用像素值，与 T 解耦
+    const chiefX = 4 * 64, chiefY = (1 + 3) * 64;  // (256, 256)
+    if (!tryArt('chief_house', ctx, chiefX, chiefY)) drawChiefHouse(ctx, chiefX, chiefY);
+
+    const shopX = 13 * 64, shopY = (1 + 3) * 64;   // (832, 256)
+    if (!tryArt('fishing_shop', ctx, shopX, shopY)) drawFishingShop(ctx, shopX, shopY);
+    const amingX = 1 * 64, amingY = (4 + 3) * 64;  // (64, 448)
+    if (tryArt('aming_house', ctx, amingX, amingY)) {
+      // 美术 PNG 已含静态烟雾，但保留动态烟雾粒子叠加（袅袅炊烟生气感）
+      drawAmingHomeSmoke(ctx, amingX, amingY, now);
+    } else {
+      drawAmingHome(ctx, amingX, amingY, now);
+    }
+
+    const sevenX = 15 * 64, sevenY = (4 + 3) * 64; // (960, 448)
+    if (!tryArt('seven_eleven', ctx, sevenX, sevenY)) draw711Store(ctx, sevenX, sevenY, now);
 
     // Layer 3.5: 建筑描金边（保留夕阳侧光强化）
     BUILDINGS.forEach(b => {
-      const bx = b.tx * T;
-      const by = (b.ty + 3) * T;
-      drawGoldRim(ctx, bx, by, 128, 128);
+      drawGoldRim(ctx, b.drawX, b.drawY, 128, 128);
     });
 
     // Layer 4: 装饰物
-    drawWoodenDock(ctx);                          // ⭐ 栈桥木纹
+    // PHASE Step2 验收：村庄背景图（village-bg）已自带栈桥木纹，
+    // 程序化 drawWoodenDock 与 BG 重叠产生深色板覆盖（见截图反馈），
+    // 这里去掉调用；栈桥功能（WOOD tile 可走、按 F 钓鱼、金色脉冲外框、
+    // 倒影 reflections）全部由 villageMap 数据 + 其他模块承担，不受影响。
+    // drawWoodenDock 函数本身保留（dusk-effects.js）以便未来复用。
+    // drawWoodenDock(ctx);
     drawFountain(ctx, 544, 160, this.time * 1000);  // ⭐ 喷泉水花
     this._renderDecorations();
 
@@ -2114,9 +2175,10 @@ class VillageScene {
     this._renderPlayer();
 
     // Layer 6.5: 钓点波纹 ⭐ Phase B 新增（玩家之后）
-    // 2x2 钓点，在两个中心位置绘制波纹
-    drawFishingRipple(ctx, 9*64+32, 9*64+32, this.time * 1000);
-    drawFishingRipple(ctx, 10*64+32, 9*64+32, this.time * 1000 + 600);
+    // PHASE Step2：钓点波纹中心改为像素硬值（与旧 T=64 时 (9*64+32, 9*64+32)/(10*64+32, 9*64+32) 完全一致）
+    //   2 个圆心: (608, 608) 与 (672, 608)
+    drawFishingRipple(ctx, 608, 608, this.time * 1000);
+    drawFishingRipple(ctx, 672, 608, this.time * 1000 + 600);
 
     // Layer 7: 引导箭头、交互提示、小地图、任务HUD
     this.arrow.render(ctx, this.player);
@@ -2372,8 +2434,9 @@ class VillageScene {
     ctx.restore();
   }
 
-  // 绘制单个 tile 颜色（原渲染逻辑保留）
+  // 绘制单个 tile 颜色（PHASE 18+ 起停用，由 VillageBg 美术图替代；保留作 fallback）
   _drawTileColor(ctx, tile, px, py) {
+    const T = window.GAME_CONFIG.TILE_SIZE;
     switch (tile) {
       case TILE.GRASS: ctx.fillStyle = '#5C8A4C'; break;
       case TILE.DIRT: ctx.fillStyle = '#C9A876'; break;
@@ -2387,7 +2450,7 @@ class VillageScene {
       case TILE.FISHING: ctx.fillStyle = '#7AB8C4'; break;
       default: ctx.fillStyle = '#5C8A4C';
     }
-    ctx.fillRect(px, py, 64, 64);
+    ctx.fillRect(px, py, T, T);
 
     if (tile === TILE.WOOD) {
       ctx.strokeStyle = 'rgba(0,0,0,0.2)';
@@ -2395,7 +2458,7 @@ class VillageScene {
       for (let i = 0; i < 4; i++) {
         ctx.beginPath();
         ctx.moveTo(px, py + 16 * i + 8);
-        ctx.lineTo(px + 64, py + 16 * i + 8);
+        ctx.lineTo(px + T, py + 16 * i + 8);
         ctx.stroke();
       }
     }
@@ -2405,11 +2468,11 @@ class VillageScene {
       ctx.strokeStyle = `rgba(255,255,255,${pulse * 0.8})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(px + 32, py + 32, 24, 0, Math.PI * 2);
+      ctx.arc(px + T/2, py + T/2, 24, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = `rgba(255,255,255,${0.3 + pulse * 0.4})`;
       ctx.beginPath();
-      ctx.arc(px + 32, py + 32, 12, 0, Math.PI * 2);
+      ctx.arc(px + T/2, py + T/2, 12, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -2425,39 +2488,30 @@ class VillageScene {
 
   _renderMap() {
     const ctx = this.ctx;
-    const T = 64;
+    const T = window.GAME_CONFIG.TILE_SIZE;
 
-    for (let y = 0; y < 11; y++) {
-      for (let x = 0; x < 20; x++) {
-        const tile = this.villageMap[y][x];
-        const px = x * T;
-        const py = y * T;
-
-        if (tile === TILE.GRASS || tile === TILE.WALL) {
-          // PHASE 13-7：WALL 是建筑物碰撞标记（4 个房子 sprite 视觉占格）
-          //   渲染时按 GRASS 处理（画草地贴图）—— 因为房子 sprite 是不规则形状（屋顶斜面），
-          //   sprite 内部有透明像素，需要底层是草地以保持视觉一致；
-          //   _drawTileColor 中 WALL 颜色 #F4E4C1 米黄色仅作 fallback，本路径不会触发
-          ctx.drawImage(getGrassTile(), px, py);
-        } else {
-          this._drawTileColor(ctx, tile, px, py);
-        }
-      }
+    // PHASE 18+：用美术成品图替代原程序化瓦片地形
+    //   - 来源：assets/images/scenes/village-riverside-bg.jpg（1280×720，1:1 贴图）
+    //   - 由 window.VillageBg.draw 异步加载，loading 期间走自带的素色兜底（草绿渐变）
+    //   - tile 数据（this.villageMap）保持不动 → 碰撞 / 可走 / 钓点 / 建筑 / NPC 全部不受影响
+    //   - 原程序化绘制（getGrassTile / drawFarmland / drawFlowerbed / _drawTileColor）
+    //     全部停用，因为 BG 图本身已包含草地/泥土/石板/水/菜地/花圃等所有地形元素
+    //   - 视觉违和点（已知，等后续手绘资产替换）：
+    //     1) 4 个建筑（村长家/钓具店/阿明家/7-11）画在 BG 草地上，BG 本身没有建筑造型
+    //     2) 像素风 NPC + 手绘 BG 风格混搭
+    //   - 栈桥木纹 drawWoodenDock 仍在调用方（_render 中第 2106 行）叠加，与 BG 栈桥重叠
+    //     但坐标位置接近（BG 栈桥居中略偏上），暂时接受
+    if (window.VillageBg && typeof window.VillageBg.draw === 'function') {
+      window.VillageBg.draw(ctx, this.cw, this.ch);
+    } else {
+      // 极端兜底：模块未加载（理论不会触发，index.html 已 defer 引入）→ 用纯草绿色铺底
+      ctx.fillStyle = '#7fa860';
+      ctx.fillRect(0, 0, this.cw, this.ch);
     }
 
-    // 左上红色色块 → 菜苗农田（覆盖 ROOF tiles at [1][4],[1][5],[2][4],[2][5]）
-    drawFarmland(ctx, 4 * T, 1 * T, 2 * T, 2 * T);
-
-    // 右上红色色块 → 像素花圃（覆盖 ROOF tiles at [1][13],[1][14],[2][13],[2][14]）
-    drawFlowerbed(ctx, 13 * T, 1 * T, 2 * T, 2 * T);
-
-    // 左下红色色块 → 像素花圃（覆盖 ROOF tiles at [4][1],[4][2],[5][1],[5][2]）
-    drawFlowerbed(ctx, 1 * T, 4 * T, 2 * T, 2 * T);
-
-    // 右下红色色块 → 菜苗农田（覆盖 ROOF tiles at [4][15],[4][16],[5][15],[5][16]）
-    drawFarmland(ctx, 15 * T, 4 * T, 2 * T, 2 * T);
-
     // PHASE 18 仗3：挖蚯蚓 — 16 格地块叠加层（CD 倒计时 / 低体力灰显 / 相邻金边高亮）
+    //   保留：digging overlay 是交互反馈（半透明黑蒙层 + 倒计时数字 + 金边高亮），
+    //   与底图无关，必须叠在 BG 之上
     this._renderDiggingOverlay(ctx, T);
   }
 
@@ -2467,6 +2521,9 @@ class VillageScene {
   //   - CD 中：黑色半透明蒙层（常驻）；倒计时数字按需显示 — 玩家相邻该格 或 鼠标悬停该格
   //     （hotfix：原 16 格倒计时全屏常驻太吵，改为"按需"，玩家不关心的格仅留蒙层提示状态）
   //   - 玩家相邻该格 且 CD 已到 且 体力 ≥ 2：描金边 #FFD700 / 2px / 1.2s sin 呼吸
+  //
+  // PHASE Step2：每个 region 在新 T=32 网格上占 2×2 tile（共 64×64 像素），
+  //   通过 t.regionSize 还原 4 块大金边（视觉与旧 T=64 时一致）。
   // ========================================================
   _renderDiggingOverlay(ctx, T) {
     const tiles = diggingSystem.getAllTiles();
@@ -2480,8 +2537,11 @@ class VillageScene {
     const breath = 0.5 + 0.5 * Math.sin(this.time * (2 * Math.PI / 1.2));
 
     for (const t of tiles) {
+      const rs = t.regionSize || 1;     // region 边长（tile 数）
       const x = t.tx * T;
       const y = t.ty * T;
+      const w = rs * T;                  // region 像素宽（64 px）
+      const h = rs * T;                  // region 像素高（64 px）
       const cdLeft = diggingSystem.getCDRemainMs(t.tx, t.ty);
       const onCD = cdLeft > 0;
 
@@ -2490,7 +2550,7 @@ class VillageScene {
         ctx.save();
         ctx.globalAlpha = 0.6;          // 总体压暗
         ctx.fillStyle = '#888888';
-        ctx.fillRect(x, y, T, T);
+        ctx.fillRect(x, y, w, h);
         ctx.restore();
       }
 
@@ -2499,14 +2559,16 @@ class VillageScene {
         ctx.save();
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
-        ctx.fillRect(x, y, T, T);
+        ctx.fillRect(x, y, w, h);
         ctx.restore();
 
         // hotfix：按需显示倒计时（避免 16 格全屏常驻数字太吵）
-        //   - 玩家曼哈顿距离 ≤ 1 → 显示（"走近就能看见自己马上能挖的那一格还剩多久"）
-        //   - 鼠标悬停该格    → 显示（"想看哪一格悬停哪一格"）
-        const playerNear = (Math.abs(px - t.tx) + Math.abs(py - t.ty)) <= 1;
-        const mouseHover = !!(hover && hover.tx === t.tx && hover.ty === t.ty);
+        //   - 玩家曼哈顿距离 ≤ 1 至 region 任意格 → 显示
+        //   - 鼠标悬停 region 内任意格           → 显示
+        const playerNear = diggingSystem.isAdjacent(px, py, t.tx, t.ty);
+        const mouseHover = !!(hover
+          && hover.tx >= t.tx && hover.tx <= t.tx + rs - 1
+          && hover.ty >= t.ty && hover.ty <= t.ty + rs - 1);
         if (playerNear || mouseHover) {
           // 倒计时 mm:ss
           const mm = Math.floor(cdLeft / 60000);
@@ -2519,13 +2581,13 @@ class VillageScene {
           ctx.textBaseline = 'middle';
           ctx.shadowColor = '#000';
           ctx.shadowBlur = 4;
-          ctx.fillText(txt, x + T / 2, y + T / 2);
+          ctx.fillText(txt, x + w / 2, y + h / 2);
           ctx.restore();
         }
       }
 
       // ③ 玩家相邻 + 可挖（非 CD 且 体力够）→ 金边呼吸高亮
-      const adjacent = (Math.abs(px - t.tx) + Math.abs(py - t.ty)) <= 1;
+      const adjacent = diggingSystem.isAdjacent(px, py, t.tx, t.ty);
       if (adjacent && !onCD && !lowStamina) {
         ctx.save();
         ctx.strokeStyle = '#FFD700';
@@ -2533,7 +2595,7 @@ class VillageScene {
         ctx.globalAlpha = 0.55 + 0.45 * breath;     // 0.55 ↔ 1.0 呼吸
         ctx.shadowColor = '#FFD700';
         ctx.shadowBlur = 6 + 6 * breath;
-        ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
         ctx.restore();
       }
     }
@@ -2543,10 +2605,11 @@ class VillageScene {
 
   _renderDecorations() {
     const ctx = this.ctx;
-    const T = 64;
 
-    const fx = 8.5 * T;
-    const fy = 2.5 * T;
+    // PHASE Step2：装饰物中心改用像素硬值（与旧 T=64 时一致）
+    //   喷泉中心：旧 (8.5*64, 2.5*64) = (544, 160)
+    const fx = 544;
+    const fy = 160;
 
     ctx.fillStyle = '#7AB8C4';
     ctx.beginPath();
@@ -2571,11 +2634,12 @@ class VillageScene {
     ctx.fill();
 
     // 静态树木（无动画）
+    //   旧坐标 (8,8) (12,8) → 像素中心 (8*64+32, 8*64+32)=(544, 544) 与 (12*64+32, 544)=(800, 544)
     ctx.font = '48px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🌳', 8 * T + 32, 8 * T + 32);
-    ctx.fillText('🌳', 12 * T + 32, 8 * T + 32);
+    ctx.fillText('🌳', 544, 544);
+    ctx.fillText('🌳', 800, 544);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
   }
@@ -2637,16 +2701,37 @@ class VillageScene {
     const time = this.time * 1000;
 
     // 从 this.npcs 读取正确坐标，映射到对应的渲染函数
-    const drawMap = { mom: drawXiulan, chief: drawVillageChief, master_lin: drawLin, xiaofang: drawXiaofang };
+    //
+    // PHASE 18+：NPC 逐个美术化，按 ART_SPEC v1.1 标准（64×80 PNG）
+    //   - 秀兰阿姨（mom）：assets/images/npcs/xiulan.png（首版 120×150，待按 64×80 重交付）
+    //   - 村长阿土伯（chief）：assets/images/npcs/atubo.png（64×80 标准尺寸）
+    //   每个 NPC 有独立 IIFE 模块（window.NpcXiulan / window.NpcAtubo），由 index.html
+    //   在 main.js 之前 defer 加载。模块内部已处理"图片未加载/失败"的兜底（简易椭圆）。
+    //   仅在 window.Npc* 未挂载（极端环境异常）时才退回原程序化 sprite。
+    //   其他 NPC 暂保持程序化 sprite，等后续美术资源到齐再按相同模式追加。
+    const drawXiulanResolved = (window.NpcXiulan && typeof window.NpcXiulan.draw === 'function')
+      ? window.NpcXiulan.draw
+      : drawXiulan;
+    const drawAtuboResolved = (window.NpcAtubo && typeof window.NpcAtubo.draw === 'function')
+      ? window.NpcAtubo.draw
+      : drawVillageChief;
+    const drawLinResolved = (window.NpcLinshifu && typeof window.NpcLinshifu.draw === 'function')
+      ? window.NpcLinshifu.draw
+      : drawLin;
+    const drawXiaofangResolved = (window.NpcXiaofang && typeof window.NpcXiaofang.draw === 'function')
+      ? window.NpcXiaofang.draw
+      : drawXiaofang;
+    const drawMap = { mom: drawXiulanResolved, chief: drawAtuboResolved, master_lin: drawLinResolved, xiaofang: drawXiaofangResolved };
+
 
     this.npcs.forEach(npc => {
       const drawFn = drawMap[npc.id];
       if (drawFn) {
         drawFn(ctx, npc.px, npc.py, npc.facing || 'down', time);
       }
-      // NPC 头顶名字标签
+      // NPC 头顶名字标签（2026-05-28：底部 y 由 py-8 累计上移 10px → py-18，避免压头）
       if (!dialogueSystem.isActive()) {
-        drawNameTag(ctx, npc.px + 16, npc.py - 8, npc.name);
+        drawNameTag(ctx, npc.px + 16, npc.py - 18, npc.name);
       }
     });
 
@@ -2715,7 +2800,7 @@ class VillageScene {
     if (dialogueSystem.isActive()) return;
     const cfg = this.playerNameConfig;
     if (!cfg || !cfg.enabled) return;
-    drawNameTag(this.ctx, this.player.px + 16, this.player.py - 8, cfg.text);
+    drawNameTag(this.ctx, this.player.px + 16, this.player.py - 18, cfg.text);
   }
 
   _renderPlayer() {
@@ -2738,14 +2823,16 @@ class VillageScene {
     if (dialogueSystem.isActive()) return;
 
     const ctx = this.ctx;
+    // PHASE Step2：NPC 提示距离阈值与 _tryInteract 同步（96 px = 3 新 tile）
+    const HINT_TILES = 3.0;
 
     for (const npc of this.npcs) {
       const dx = this.player.px - npc.px;
       const dy = this.player.py - npc.py;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const tileDist = dist / 64;
+      const tileDist = dist / window.GAME_CONFIG.TILE_SIZE;
 
-      if (tileDist <= 1.5) {
+      if (tileDist <= HINT_TILES) {
         const hintX = npc.px + 16;   // 角色中心 x
         const hintY = npc.py - 40 + npc.bobOffset;
 
@@ -2786,19 +2873,20 @@ class VillageScene {
     const lowStamina = !!(SS && typeof SS.getCurrent === 'function' && SS.getCurrent() < 2);
     if (lowStamina) return;   // 体力不足 → 已有飘字反馈，不显示提示
 
-    const T = 64;
+    const T = window.GAME_CONFIG.TILE_SIZE;
     const px = this.player.tx;
     const py = this.player.ty;
     const tiles = diggingSystem.getAllTiles();
     const ctx = this.ctx;
 
     for (const t of tiles) {
-      // 仅 玩家相邻（曼哈顿 ≤ 1） + 非 CD 的格子
-      if ((Math.abs(px - t.tx) + Math.abs(py - t.ty)) > 1) continue;
+      // PHASE Step2：t 是 region（2×2 新 tile），用 isAdjacent 判定相邻
+      if (!diggingSystem.isAdjacent(px, py, t.tx, t.ty)) continue;
       if (diggingSystem.getCDRemainMs(t.tx, t.ty) > 0) continue;
 
-      // 提示框中心：格子顶部正上方 24px
-      const cx = t.tx * T + T / 2;
+      const rs = t.regionSize || 1;
+      // 提示框中心：region 顶部正上方 24px（region 宽 = rs*T）
+      const cx = t.tx * T + (rs * T) / 2;
       const cy = t.ty * T - 24;
 
       // 量字宽 → 自适应胶囊尺寸（与 NPC 金圆同色板，扩展为胶囊容纳长文案）
@@ -2845,11 +2933,11 @@ class VillageScene {
 
     const ctx = this.ctx;
 
-    // PHASE 13-6：栈桥金色脉冲外框（玩家站栈桥时强化"这里可以钓鱼"视觉引导）
-    //   栈桥像素范围：x=[9*64, 12*64)=[576, 768)，y=[8*64, 9*64)=[512, 576)，整体 192×64
+    // PHASE 13-6 / Step2：栈桥金色脉冲外框（玩家站栈桥时强化"这里可以钓鱼"视觉引导）
+    //   栈桥像素范围 = (9*64, 8*64, 3*64, 64) = (576, 512, 192, 64)（与旧 T=64 完全一致）
     //   2Hz 脉冲：透明度在 0.30~0.90 之间正弦振荡（基础 rgba(255,215,128,0.6) ± 0.3）
     //   只画 stroke 不 fill —— 不会盖住站在栈桥上的阿明像素
-    const dockX = 9 * 64, dockY = 8 * 64, dockW = 3 * 64, dockH = 64;
+    const dockX = 576, dockY = 512, dockW = 192, dockH = 64;
     const pulse = 0.6 + 0.3 * Math.sin(this.time * 2 * Math.PI * 2); // 2Hz
     ctx.strokeStyle = `rgba(255, 215, 128, ${pulse})`;
     ctx.lineWidth = 3;
@@ -2880,8 +2968,12 @@ class VillageScene {
     const mapY = 28;
     const mapW = 288;
     const mapH = 162;
-    const tileW = 14.4;
-    const tileH = 14.72;
+    // PHASE Step2：tileW/tileH 与 GAME_CONFIG 解耦
+    const cols = window.GAME_CONFIG.MAP_COLS;
+    const rows = window.GAME_CONFIG.MAP_ROWS;
+    const T_ = window.GAME_CONFIG.TILE_SIZE;
+    const tileW = mapW / cols;
+    const tileH = mapH / rows;
     const centerX = mapX + mapW / 2;
     const centerY = mapY + mapH / 2;
     const radius = Math.min(mapW, mapH) / 2;
@@ -2907,8 +2999,8 @@ class VillageScene {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(mapX, mapY, mapW, mapH);
 
-    for (let y = 0; y < 11; y++) {
-      for (let x = 0; x < 20; x++) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
         const tile = this.villageMap[y][x];
         let color = '#5C8A4C';
         switch (tile) {
@@ -2930,8 +3022,11 @@ class VillageScene {
     }
 
     for (const npc of this.npcs) {
-      const nx = mapX + npc.x * tileW + tileW / 2;
-      const ny = mapY + npc.y * tileH + tileH / 2;
+      // PHASE Step2：NPC 用像素中心 cx/cy 定位
+      const npcCx = npc.cx != null ? npc.cx : (npc.px + 16);
+      const npcCy = npc.cy != null ? npc.cy : (npc.py + 16);
+      const nx = mapX + (npcCx / T_) * tileW;
+      const ny = mapY + (npcCy / T_) * tileH;
 
       if (!npc.questId) continue;
 
@@ -2966,8 +3061,9 @@ class VillageScene {
 
     const q001Status = questSystem.getStatus('q001_first_fish');
     if (q001Status === 'active' || q001Status === 'available_to_complete') {
-      const fx = mapX + 10 * tileW + tileW / 2;
-      const fy = mapY + 9 * tileH + tileH / 2;
+      // PHASE Step2：钓点新 tile 坐标 (20,18)
+      const fx = mapX + 20 * tileW + tileW / 2;
+      const fy = mapY + 18 * tileH + tileH / 2;
       const pulse = Math.sin(this.time * 4) * 2;
 
       ctx.fillStyle = '#7AB8C4';
@@ -2976,8 +3072,10 @@ class VillageScene {
       ctx.fill();
     }
 
-    const playerMapX = mapX + Math.floor(this.player.px / 64) * tileW + tileW / 2;
-    const playerMapY = mapY + Math.floor((this.player.py + 24) / 64) * tileH + tileH / 2;
+    // PHASE Step2：玩家小地图位置改为像素映射（不再离散化为 tile），避免抖动
+    // 几何中心 y 偏移 = T*3/8（与 _syncPlayerPixel / 碰撞框一致）
+    const playerMapX = mapX + (this.player.px / T_) * tileW;
+    const playerMapY = mapY + ((this.player.py + T_ * 3 / 8) / T_) * tileH;
 
     ctx.fillStyle = '#FFFF00';
     ctx.beginPath();
@@ -3304,8 +3402,10 @@ class VillageScene {
     ctx.fillText('G 网格 M 静音 ESC 跳过', panelX + 16, y);
 
     // 碰撞箱（红色方块）
+    // PHASE Step2：几何中心偏移 = T*3/8
+    const T_dbg = window.GAME_CONFIG.TILE_SIZE;
     const hbCx = this.player.px;
-    const hbCy = this.player.py + 24;
+    const hbCy = this.player.py + T_dbg * 3 / 8;
     const hbHalf = 8;
     ctx.strokeStyle = '#FF0000';
     ctx.lineWidth = 1;
@@ -3314,22 +3414,26 @@ class VillageScene {
 
   _renderGrid() {
     const ctx = this.ctx;
-    const T = 64;
+    const T = window.GAME_CONFIG.TILE_SIZE;
+    const COLS = window.GAME_CONFIG.MAP_COLS;
+    const ROWS = window.GAME_CONFIG.MAP_ROWS;
+    const W = COLS * T;
+    const H = ROWS * T;
 
     ctx.strokeStyle = 'rgba(255,255,255,0.125)';
     ctx.lineWidth = 1;
 
-    for (let y = 0; y <= 11; y++) {
+    for (let y = 0; y <= ROWS; y++) {
       ctx.beginPath();
       ctx.moveTo(0, y * T);
-      ctx.lineTo(1280, y * T);
+      ctx.lineTo(W, y * T);
       ctx.stroke();
     }
 
-    for (let x = 0; x <= 20; x++) {
+    for (let x = 0; x <= COLS; x++) {
       ctx.beginPath();
       ctx.moveTo(x * T, 0);
-      ctx.lineTo(x * T, 704);
+      ctx.lineTo(x * T, H);
       ctx.stroke();
     }
 

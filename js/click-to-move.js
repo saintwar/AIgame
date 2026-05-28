@@ -8,10 +8,10 @@
  *
  * 移动模型：方案 A2 —— 像素级平滑推进（与 WASD 同源同速）
  *   - A* 在网格上算出整格序列 [[tx1,ty1],...]，保证不穿墙不走斜向
- *   - 每帧朝当前航点中心 (tx*64+32, ty*64+24) 推进 player.speed (3 px/帧)
+ *   - 每帧朝当前航点中心 (tx*T+T/2, ty*T+T*3/8) 推进 player.speed (3 px/帧)
  *   - 到达航点中心 → 切下一个航点
  *   - direction 按 dx/dy 自动设置，与 WASD 视觉一致
- *   - 终点对齐：最后一格强制 px=tx*64+32 / py=ty*64+24，避免半格漂移
+ *   - 终点对齐：最后一格强制 px=tx*T+T/2 / py=ty*T+T*3/8，避免半格漂移
  *
  * 接入点（方案 B1，4 处 hook，由 village-scene.js 主动调用）：
  *   1. init() 末尾   → ClickToMove.attach(villageScene)
@@ -40,12 +40,17 @@
   let onArriveCallback = null;  // 抵达终点后触发（NPC 对话 / 钓鱼提示）
   let isWalking = false;
   let hoverGridX = -1, hoverGridY = -1;
+  let hoverNpc = null;          // 当前像素 hover 命中的 NPC（用于描金边/气泡）
   let lastClickTime = 0;
   let clickFeedback = null;     // { gx, gy, startTime } | null
   let listeners = null;         // { onClick, onMove, onLeave } 用于 detach
 
-  const T = 64;                  // tile size（与 GAME_CONFIG.TILE_SIZE 一致）
-  const COLS = 20, ROWS = 11;
+  // tile 尺寸 / 地图尺寸——惰性同步自 window.GAME_CONFIG
+  //   - main.js 是 type=module defer，可能晚于本文件执行 → 不能在模块顶层立即取值
+  //   - 在 attach() 中同步即可（attach 由 villageScene.init() 末尾调用，此时 GAME_CONFIG 必定就绪）
+  // PHASE Step2：兜底默认值已更新为 T=32 / 40×22
+  let T = 32;                     // 默认值兜底（防止 attach 前误调）
+  let COLS = 40, ROWS = 22;
   const CLICK_DEBOUNCE_MS = 50;
   const FEEDBACK_DURATION_MS = 200;
 
@@ -129,8 +134,11 @@
     // 把 NPC 标为障碍（避免寻路从 NPC 身上经过）
     if (scene.npcs) {
       for (const npc of scene.npcs) {
-        const nx = Math.floor(npc.px / T);
-        const ny = Math.floor((npc.py + 24) / T);
+        // PHASE Step2：NPC 已像素化（cx/cy 直接是几何中心像素），直接用 cy/T 反推
+        const npcCx = npc.cx != null ? npc.cx : (npc.px + 16);
+        const npcCy = npc.cy != null ? npc.cy : (npc.py + 16);
+        const nx = Math.floor(npcCx / T);
+        const ny = Math.floor(npcCy / T);
         if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
           m[ny][nx] = 1;
         }
@@ -165,9 +173,10 @@
    */
   function playerGrid() {
     const p = scene.player;
+    // PHASE Step2：偏移 = T*3/8
     return {
       gx: Math.floor(p.px / T),
-      gy: Math.floor((p.py + 24) / T)
+      gy: Math.floor((p.py + T * 3 / 8) / T)
     };
   }
 
@@ -306,7 +315,7 @@
 
   /**
    * 每帧推进（由 villageScene._update 调用）
-   * 模型：朝当前航点中心 (tx*T+32, ty*T+24) 推进 speed 像素，到达后切下一个。
+   * 模型：朝当前航点中心 (tx*T+T/2, ty*T+T*3/8) 推进 speed 像素，到达后切下一个。
    * 与 WASD 共用 player.px/py/direction，避免双轨视觉割裂。
    *
    * @returns {boolean} 本帧是否由本模块控制了玩家移动
@@ -334,8 +343,9 @@
       const finalPt = path[path.length - 1];
       if (finalPt) {
         // 终点对齐网格中心，避免半格漂移
-        scene.player.px = finalPt[0] * T + 32;
-        scene.player.py = finalPt[1] * T + 24;
+        // PHASE Step2：偏移 = T*3/8（与 _syncPlayerPixel 保持一致）
+        scene.player.px = finalPt[0] * T + T / 2;
+        scene.player.py = finalPt[1] * T + T * 3 / 8;
         scene.player.tx = finalPt[0];
         scene.player.ty = finalPt[1];
       }
@@ -348,8 +358,9 @@
     }
 
     const [tgx, tgy] = path[pathIndex];
-    const targetPx = tgx * T + 32;
-    const targetPy = tgy * T + 24;
+    const targetPx = tgx * T + T / 2;
+    // PHASE Step2：偏移 = T*3/8
+    const targetPy = tgy * T + T * 3 / 8;
     const dx = targetPx - scene.player.px;
     const dy = targetPy - scene.player.py;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -375,8 +386,9 @@
     }
 
     // 同步玩家 tile 坐标（村庄场景 _update 末尾同款语义）
+    // PHASE Step2：偏移 = T*3/8
     scene.player.tx = Math.floor(scene.player.px / T);
-    scene.player.ty = Math.floor((scene.player.py + 24) / T);
+    scene.player.ty = Math.floor((scene.player.py + T * 3 / 8) / T);
 
     // 行走帧动画（与 WASD 段同款节流：~0.125s 切一帧）
     scene.animTimer = (scene.animTimer || 0) + (1 / 60);
@@ -416,37 +428,44 @@
   function renderOverlay(ctx) {
     if (!isSceneInteractive()) return;
 
-    // hover 边框
-    if (hoverGridX >= 0 && hoverGridX < COLS && hoverGridY >= 0 && hoverGridY < ROWS) {
+    // ── ① NPC hover：按像素 sprite 矩形描金边 + 头顶气泡（与 onClick 命中区域 1:1） ──
+    if (hoverNpc) {
+      const npcCx = hoverNpc.cx != null ? hoverNpc.cx : (hoverNpc.px + 16);
+      const npcCy = hoverNpc.cy != null ? hoverNpc.cy : (hoverNpc.py + 16);
+      const hbX = npcCx - NPC_HB_HALF_W;
+      const hbY = npcCy - NPC_HB_UP;
+      const hbW = NPC_HB_HALF_W * 2;
+      const hbH = NPC_HB_UP + NPC_HB_DOWN;
+
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#FFE4B5';
+      ctx.shadowColor = '#FFD76A';
+      ctx.shadowBlur = 8;
+      ctx.strokeRect(hbX + 0.5, hbY + 0.5, hbW - 1, hbH - 1);
+      ctx.shadowBlur = 0;
+
+      // 头顶气泡 "💬 点击对话"（NPC sprite 顶端再上方 4px）
+      ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const tipX = npcCx;
+      const tipY = hbY - 4;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText('💬 点击对话', tipX, tipY);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('💬 点击对话', tipX, tipY);
+      ctx.restore();
+    }
+    // ── ② 普通格 hover（钓点/可走/不可走）：仅在不在 NPC sprite 上时显示 ───
+    else if (hoverGridX >= 0 && hoverGridX < COLS && hoverGridY >= 0 && hoverGridY < ROWS) {
       const walkable = isWalkable(hoverGridX, hoverGridY);
-      // NPC 格视觉特殊处理：show 金色描边（约束：NPC hover 描金边 1px #FFE4B5）
-      const isNpc = isNpcAt(hoverGridX, hoverGridY);
       const isFishing = isFishingSpotAt(hoverGridX, hoverGridY);
 
       ctx.save();
-      if (isNpc) {
-        // PHASE 16-4.8 仗4：NPC 描金边升级 —— 加 shadowBlur 发光（吉卜力风）
-        // 约束 5：仅 hover 时启用；离开 NPC 自动清除（每帧重绘，无残留）
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#FFE4B5';
-        ctx.shadowColor = '#FFD76A';
-        ctx.shadowBlur = 8;
-        ctx.strokeRect(hoverGridX * T + 1, hoverGridY * T + 1, T - 2, T - 2);
-        ctx.shadowBlur = 0;
-
-        // 头顶气泡 "💬 点击对话"（NPC 中心上方）
-        ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        const tipX = hoverGridX * T + T / 2;
-        const tipY = hoverGridY * T - 2;
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText('💬 点击对话', tipX, tipY);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('💬 点击对话', tipX, tipY);
-      } else if (isFishing) {
-        // PHASE 16-4.8 仗4：钓点 hover 升级 —— 头顶 "🎣 点击前往" 提示
+      if (isFishing) {
+        // PHASE 16-4.8 仗4：钓点 hover —— 头顶 "🎣 点击前往" 提示
         ctx.lineWidth = 2;
         ctx.strokeStyle = 'rgba(255,224,138,0.9)';
         ctx.shadowColor = '#FFD76A';
@@ -497,28 +516,76 @@
   }
 
   /**
-   * 网格格子上是否有 NPC？
+   * NPC 像素 hitbox（点击与 hover 共用）
+   * ─────────────────────────────────────
+   * 设计：
+   *   - 旧实现按 tile 命中（floor(cx/T)），在 T=32 下 NPC 视觉(32×48~64×80)
+   *     远大于 1 格，导致"只有脚下那 1 格能点"。
+   *   - 改为按 NPC 几何中心 cx/cy 直接构造像素矩形，与 tile 系统解耦。
+   *
+   * 矩形：以 cx 为水平中心，宽 40（覆盖 32 sprite + 4px 宽容度）
+   *      cy 为 sprite 中上部锚点，垂直范围 [cy-32, cy+32]（共 64px），
+   *      涵盖从头顶到脚跟整条身高，且不会侵入相邻 NPC（最近间距 >=80px）
+   */
+  const NPC_HB_HALF_W = 20;   // 水平半宽
+  const NPC_HB_UP     = 32;   // cy 向上延伸（头顶）
+  const NPC_HB_DOWN   = 32;   // cy 向下延伸（脚底）
+
+  function npcAtPixel(px, py) {
+    if (!scene || !scene.npcs) return null;
+    for (const npc of scene.npcs) {
+      const npcCx = npc.cx != null ? npc.cx : (npc.px + 16);
+      const npcCy = npc.cy != null ? npc.cy : (npc.py + 16);
+      if (px >= npcCx - NPC_HB_HALF_W && px <= npcCx + NPC_HB_HALF_W &&
+          py >= npcCy - NPC_HB_UP     && py <= npcCy + NPC_HB_DOWN) {
+        return npc;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 屏幕坐标 → canvas 内逻辑像素（与 screenToGrid 同源，仅不做 floor 除以 T）
+   */
+  function screenToPixel(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      px: (clientX - rect.left) * scaleX,
+      py: (clientY - rect.top)  * scaleY
+    };
+  }
+
+  /**
+   * 兼容旧接口：网格格子上是否有 NPC？
+   * （仅 renderOverlay 内 hover 边框判断在用；点击/cursor 已切到 npcAtPixel）
+   * 仍按"NPC 锚点 tile"判定，避免一个 NPC 占多格描边互相干扰。
    */
   function isNpcAt(gx, gy) {
     if (!scene || !scene.npcs) return null;
     for (const npc of scene.npcs) {
-      const nx = Math.floor(npc.px / T);
-      const ny = Math.floor((npc.py + 24) / T);
+      const npcCx = npc.cx != null ? npc.cx : (npc.px + 16);
+      const npcCy = npc.cy != null ? npc.cy : (npc.py + 16);
+      const nx = Math.floor(npcCx / T);
+      const ny = Math.floor(npcCy / T);
       if (nx === gx && ny === gy) return npc;
     }
     return null;
   }
 
   /**
-   * 网格格子是否是钓点（栈桥 WOOD 触发钓鱼）
-   * 村庄场景的钓鱼触发是站在栈桥 WOOD([8][9..11]) 上按 F，
-   * 所以视觉反馈也按"点击栈桥格 = 走过去钓鱼"对待。
-   * 同时 FISHING tile（水中圆圈）也归为"钓点 hover 视觉"，但实际不可走 → 寻路会走到栈桥。
+   * 网格格子是否是"钓点 hover 视觉"（栈桥 WOOD 触发钓鱼）
+   *
+   * PHASE Step2 验收调整：
+   *   - 仅 WOOD（栈桥，可走）算钓点 hover；玩家走过去后底部出现"🎣 按 F 开始钓鱼"
+   *   - 浮台下方 6×2 的 FISHING tile（水中圆圈）已是不可走 + 不再显示"🎣 点击前往"，
+   *     hover 时按普通"不可走水域"画红框，避免误导玩家以为那里能去。
    */
   function isFishingSpotAt(gx, gy) {
     if (!scene || !scene.villageMap) return false;
     const tile = scene.villageMap[gy] && scene.villageMap[gy][gx];
-    return tile === 3 /* WOOD */ || tile === 9 /* FISHING */;
+    return tile === 3 /* WOOD */;
   }
 
   // ────────────────────────────────────────────────────────
@@ -537,20 +604,27 @@
     if (now - lastClickTime < CLICK_DEBOUNCE_MS) return;
     lastClickTime = now;
 
-    const { gx, gy } = screenToGrid(e.clientX, e.clientY);
-    if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return;
-
-    // 优先：点击 NPC 格 → 走过去 + 触发对话
-    const npc = isNpcAt(gx, gy);
+    // ── ① 优先：像素级 NPC 命中（覆盖整个 sprite 轮廓，不再限 1 格）─────
+    const { px: cpx, py: cpy } = screenToPixel(e.clientX, e.clientY);
+    const npc = npcAtPixel(cpx, cpy);
     if (npc) {
-      // 寻路终点是 NPC 格，buildMatrix 已把 NPC 标为障碍 → moveTo 内部会走"目标
-      // 不可走 → 4 邻最近可走格"分支，自动走到 NPC 旁 1 格。
-      moveTo(gx, gy, () => {
+      // 寻路终点 = NPC 锚点 tile；buildMatrix 已把 NPC 标为障碍 →
+      // moveTo 内部"目标不可走→4 邻最近可走格"分支自动走到 NPC 旁。
+      const npcCx = npc.cx != null ? npc.cx : (npc.px + 16);
+      const npcCy = npc.cy != null ? npc.cy : (npc.py + 16);
+      const tgx = Math.floor(npcCx / T);
+      const tgy = Math.floor(npcCy / T);
+      moveTo(tgx, tgy, () => {
         // 抵达后调用 villageScene 现有 _tryInteract（按距离自动选最近 NPC，等价于 E 键）
         if (typeof scene._tryInteract === 'function') scene._tryInteract();
       });
+      showClickFeedback(tgx, tgy);
       return;
     }
+
+    // ── ② 普通格子点击 ─────────────────────────────────────────────
+    const { gx, gy } = screenToGrid(e.clientX, e.clientY);
+    if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return;
 
     // 点击栈桥（WOOD）/ 钓点（FISHING）→ 走过去；onFishingSpot 会在 _update 自检后变 true
     // 现有按 F 钓鱼提示无需额外触发，玩家走到栈桥后 _renderFishingHint 会自动出现
@@ -561,15 +635,20 @@
     if (!isSceneInteractive()) {
       hoverGridX = -1;
       hoverGridY = -1;
+      hoverNpc = null;
       return;
     }
     const { gx, gy } = screenToGrid(e.clientX, e.clientY);
     hoverGridX = gx;
     hoverGridY = gy;
 
-    // 鼠标光标：NPC / 钓点 → pointer，可走 → default，不可走 → not-allowed
+    // 像素级 NPC 命中（与 onClick 同源），用于描金边/气泡/cursor
+    const { px: cpx, py: cpy } = screenToPixel(e.clientX, e.clientY);
+    hoverNpc = npcAtPixel(cpx, cpy);
+
+    // 鼠标光标：NPC（像素命中）/ 钓点 → pointer，可走 → default，不可走 → not-allowed
     if (canvas) {
-      if (isNpcAt(gx, gy) || isFishingSpotAt(gx, gy)) {
+      if (hoverNpc || isFishingSpotAt(gx, gy)) {
         canvas.style.cursor = 'pointer';
       } else if (isWalkable(gx, gy)) {
         canvas.style.cursor = 'crosshair';
@@ -582,6 +661,7 @@
   function onLeave() {
     hoverGridX = -1;
     hoverGridY = -1;
+    hoverNpc = null;
     if (canvas) canvas.style.cursor = 'default';
   }
 
@@ -600,6 +680,13 @@
     // 若已 attach 过（场景重启），先 detach 再重绑
     if (scene) detach();
 
+    // 同步 tile/地图尺寸（main.js 此时必定已加载完毕）
+    if (window.GAME_CONFIG) {
+      T = window.GAME_CONFIG.TILE_SIZE;
+      COLS = window.GAME_CONFIG.MAP_COLS;
+      ROWS = window.GAME_CONFIG.MAP_ROWS;
+    }
+
     scene = villageScene;
     canvas = villageScene.canvas;
 
@@ -616,6 +703,7 @@
     cancelPath();
     hoverGridX = -1;
     hoverGridY = -1;
+    hoverNpc = null;
     clickFeedback = null;
 
     // PHASE 16-4.8 仗1-HOTFIX2：内嵌 A* 后无需 PF 检查
@@ -637,6 +725,7 @@
     cancelPath();
     hoverGridX = -1;
     hoverGridY = -1;
+    hoverNpc = null;
     clickFeedback = null;
   }
 
