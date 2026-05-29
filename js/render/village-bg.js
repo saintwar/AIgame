@@ -95,11 +95,9 @@
     isFailed: () => _failed,
   };
 
-  // HOTFIX 20260530：模块加载时立即主动加载 BG 图，
-  //   不再依赖第一次 draw() 调用触发 _ensureLoaded（之前发现某些渲染路径
-  //   下 draw() 不会被调用，导致 BG 图永远停在 loading 状态，画面回退到
-  //   素色 fallback + 程序化瓦片）。
-  //   此处主动 fire 一次 _ensureLoaded 后，_img 异步就绪后任意一帧
-  //   _renderMap → drawVillageBg → drawImage 即可正常贴图。
+  // 20260530：模块加载时主动预拉 BG 图（轻量优化）
+  //   原行为：第一次 draw() 调用时才 _ensureLoaded → 首帧大概率拿不到 BG
+  //   现行为：脚本加载就 fire，渲染前就有时间下载 → 首帧拿到 BG 概率提升
+  //   小改动，无副作用，纯粹让首帧更稳。
   _ensureLoaded();
 })();
