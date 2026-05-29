@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8" />
+<title>Obstacle Drawer — 拖框 → 导出 JSON</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body{margin:0;background:#1a1a1a;color:#eee;font:13px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;}
+  .toolbar{position:sticky;top:0;z-index:10;background:#222;padding:8px 12px;border-bottom:1px solid #333;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .toolbar label{display:flex;gap:4px;align-items:center;}
+  .toolbar select,.toolbar input,.toolbar button{background:#333;color:#eee;border:1px solid #555;border-radius:3px;padding:3px 8px;font-size:13px;}
+  .toolbar button{cursor:pointer;}
+  .toolbar button:hover{background:#444;}
+  .toolbar .pri{background:#2a6;border-color:#2a6;}
+  .toolbar .pri:hover{background:#3b7;}
+  .toolbar .danger{background:#a33;border-color:#a33;}
+  #status{margin-left:auto;font-size:12px;color:#9c9;}
+
+  /* 屏幕中央醒目错误条，避免被 toolbar 截断看不到 */
+  #errBar{position:fixed;top:50px;left:50%;transform:translateX(-50%);background:#a22;color:#fff;padding:8px 16px;border-radius:4px;font-weight:bold;display:none;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.5);max-width:90vw;}
+  #errBar.show{display:block;}
+  #okBar{position:fixed;top:50px;left:50%;transform:translateX(-50%);background:#262;color:#bfb;padding:8px 16px;border-radius:4px;display:none;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.5);}
+  #okBar.show{display:block;}
+
+  #wrap{display:flex;align-items:flex-start;gap:0;}
+  #stage{position:relative;width:1280px;height:720px;flex:0 0 1280px;background:#000;cursor:crosshair;user-select:none;}
+  #stage canvas{position:absolute;top:0;left:0;width:1280px;height:720px;image-rendering:pixelated;}
+  #bg{z-index:1;}
+  #ref{z-index:2;pointer-events:none;}
+  #draw{z-index:3;pointer-events:none;}
+  #grid{z-index:4;pointer-events:none;}
+  .crosshair{position:absolute;z-index:5;pointer-events:none;background:rgba(255,255,0,.55);}
+  .crosshair.h{left:0;right:0;height:1px;}
+  .crosshair.v{top:0;bottom:0;width:1px;}
+
+  #side{flex:1;min-width:340px;max-height:calc(100vh - 50px);overflow:auto;padding:8px 12px;border-left:1px solid #333;background:#1d1d1d;}
+  #side h3{margin:6px 0 4px;font-size:13px;color:#9cf;}
+  .item{background:#262626;border:1px solid #383838;border-radius:4px;padding:6px;margin-bottom:6px;}
+  .item.sel{border-color:#fc6;background:#2c2820;}
+  .item .row{display:flex;gap:4px;margin-bottom:3px;align-items:center;}
+  .item input,.item select{background:#333;color:#eee;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:12px;}
+  .item .id{flex:1;}
+  .item .num{width:54px;}
+  .item .lab{width:18px;color:#888;text-align:right;font-size:11px;}
+  .item .grp{display:flex;gap:3px;align-items:center;}
+  .item .del{background:#733;border:1px solid #a44;color:#fee;padding:2px 6px;border-radius:3px;cursor:pointer;font-size:11px;}
+  .item .typ-building{border-left:3px solid #f55;}
+  .item .typ-tree{border-left:3px solid #5d5;}
+  .item .typ-fence{border-left:3px solid #a85;}
+  .item .typ-crop{border-left:3px solid #fc4;}
+
+  #emptyHint{color:#666;font-style:italic;padding:20px 6px;text-align:center;}
+
+  .hint{font-size:11px;color:#888;line-height:1.6;padding:4px 0 8px;border-top:1px dashed #333;margin-top:8px;}
+  .hint kbd{background:#333;border:1px solid #555;border-radius:3px;padding:0 4px;font-family:ui-monospace,monospace;}
+
+  #export{position:fixed;right:0;bottom:0;left:0;background:#222;border-top:1px solid #444;padding:6px 12px;display:none;z-index:20;}
+  #export.show{display:block;}
+  #export textarea{width:100%;height:200px;background:#111;color:#9f9;border:1px solid #444;font:11px/1.4 ui-monospace,monospace;padding:6px;}
+  #export .bar{display:flex;gap:8px;align-items:center;margin-bottom:4px;}
+
+  /* 最高优先级的早期错误显示 */
+  #earlyErr{position:fixed;top:0;left:0;right:0;background:#900;color:#fff;padding:10px 16px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap;z-index:99999;display:none;max-height:60vh;overflow:auto;border-bottom:2px solid #f55;}
+  #earlyErr.show{display:block;}
+</style>
+<script>
+// 最早期的错误捕获——必须在所有其他 JS 之前
+(function(){
+  const box = document.createElement('div');
+  box.id = 'earlyErr';
+  function show(text){
+    box.textContent = text;
+    box.classList.add('show');
+    if(!box.parentNode && document.body) document.body.appendChild(box);
+  }
+  window.addEventListener('error', function(e){
+    show('🔥 JS 错误\n\n' + (e.message||'') + '\n\n文件: ' + (e.filename||'') + '\n行:列 = ' + (e.lineno||'?') + ':' + (e.colno||'?') + '\n\n' + (e.error && e.error.stack ? e.error.stack : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function(e){
+    show('🔥 Promise 错误\n\n' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)) + '\n\n' + (e.reason && e.reason.stack ? e.reason.stack : ''));
+  });
+  // DOM ready 后挂上
+  if(document.readyState !== 'loading') document.body && document.body.appendChild(box);
+  else document.addEventListener('DOMContentLoaded', ()=>document.body.appendChild(box));
+  window.__earlyErrBox = box;
+  window.__earlyErrShow = show;
+})();
+</script>
+</head><body>
+<div id="errBar"></div>
+<div id="okBar"></div>
+
+<div class="toolbar">
+  <label>类型 <select id="type">
+    <option value="building">building</option>
+    <option value="tree" selected>tree</option>
+    <option value="fence">fence</option>
+    <option value="crop">crop</option>
+    <option value="well">well (→crops)</option>
+  </select></label>
+  <label>id 前缀 <input id="prefix" value="crop_" size="10"></label>
+  <label><input type="checkbox" id="snap" checked> 吸附 <input id="snapSize" type="number" value="8" min="1" max="64" style="width:40px"> px</label>
+  <label><input type="checkbox" id="showRef" checked> 显示已有 10 个</label>
+  <label><input type="checkbox" id="showGrid"> 网格 32px</label>
+  <button id="undo">↶ 撤销</button>
+  <button id="clear" class="danger">清空全部</button>
+  <button id="importBtn">📥 导入 JSON</button>
+  <button id="loadExisting">📋 加载已有10个进列表</button>
+  <button id="exportBtn" class="pri">📤 导出 JSON</button>
+  <input id="fileInput" type="file" accept=".json,application/json" style="display:none">
+  <span id="status">就绪</span>
+</div>
+
+<div id="importPanel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;border:1px solid #555;border-radius:6px;padding:12px;z-index:30;width:560px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+  <div style="margin-bottom:6px;color:#9cf;font-weight:bold">📥 导入 JSON</div>
+  <div style="font-size:12px;color:#aaa;margin-bottom:6px">把 obstacles-shuishe.json 整段粘贴进来 → 替换当前列表（已有 10 个 + 你画的全部清空，改用导入数据）</div>
+  <textarea id="importTxt" spellcheck="false" style="width:100%;height:200px;background:#111;color:#9f9;border:1px solid #444;font:11px/1.4 ui-monospace,monospace;padding:6px;box-sizing:border-box"></textarea>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <button id="importFile">📁 选文件…</button>
+    <button id="importApply" class="pri">✅ 导入</button>
+    <button id="importCancel">取消</button>
+  </div>
+</div>
+
+<div id="wrap">
+  <div id="stage">
+    <canvas id="bg" width="1280" height="720"></canvas>
+    <canvas id="ref" width="1280" height="720"></canvas>
+    <canvas id="grid" width="1280" height="720"></canvas>
+    <canvas id="draw" width="1280" height="720"></canvas>
+    <div id="chx" class="crosshair h" style="display:none"></div>
+    <div id="chv" class="crosshair v" style="display:none"></div>
+  </div>
+
+  <div id="side">
+    <h3>已绘制 <span id="cnt">0</span></h3>
+    <div id="list"></div>
+    <div id="emptyHint">在左侧底图上拖框开始绘制。<br>切换"类型"决定下一个框的归属。</div>
+
+    <div class="hint">
+      <b>操作</b><br>
+      • 鼠标左键拖框 = 新增 obstacle<br>
+      • 点击列表项 = 选中（高亮黄边）<br>
+      • <kbd>⌫</kbd> / <kbd>Del</kbd> = 删除选中<br>
+      • <kbd>Esc</kbd> = 取消选中<br>
+      • 修改输入框数值 → 实时刷新画布<br>
+      • <b>blockRect 默认 = rect</b>，建筑可手动改成 sprite 下半 64px<br>
+      • <b>sortAnchorY 默认 = rect.y + rect.h</b><br>
+      • 类型 well 会以 crop 类型保存到 crops 数组（id 前缀建议 well_）<br>
+      • 导出 = 已有 10 + 新画的，合并成完整 obstacles-shuishe.json
+    </div>
+  </div>
+</div>
+
+<div id="export">
+  <div class="bar">
+    <button id="copyJson" class="pri">📋 复制全部</button>
+    <button id="dlJson">💾 下载 obstacles-shuishe.json</button>
+    <button id="closeExport">关闭</button>
+    <span style="color:#888">把内容覆盖到 <code>assets/data/obstacles-shuishe.json</code></span>
+  </div>
+  <textarea id="jsonOut" spellcheck="false"></textarea>
+</div>
+
+<script>
+'use strict';
+
+// 早期探针：如果你在浏览器顶部看到绿条 "💡 主脚本已开始执行"，说明 JS 至少没有语法错
+;(function(){
+  const tag = document.createElement('div');
+  tag.id = 'startupTag';
+  tag.textContent = '💡 主脚本已开始执行（如果一直显示这条 = 后面有运行时异常被全局 error 捕获）';
+  tag.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#262;color:#bfb;padding:6px 12px;font:12px ui-monospace,monospace;z-index:99998;border-radius:0 0 4px 4px;';
+  if(document.body) document.body.appendChild(tag);
+  else document.addEventListener('DOMContentLoaded', ()=>document.body.appendChild(tag));
+  setTimeout(()=>tag.remove(), 3500);
+})();
+
+// ======== 资源 ========
+const BG_URL   = '../assets/maps/shuishe.png';
+const REF_URL  = '../assets/data/obstacles-shuishe.json';
+
+const bgC = document.getElementById('bg');
+const bgX = bgC.getContext('2d');
+const refC = document.getElementById('ref');
+const refX = refC.getContext('2d');
+const gridC = document.getElementById('grid');
+const gridX = gridC.getContext('2d');
+const drawC = document.getElementById('draw');
+const drawX = drawC.getContext('2d');
+
+const stage = document.getElementById('stage');
+const status = document.getElementById('status');
+const listEl = document.getElementById('list');
+const cntEl  = document.getElementById('cnt');
+const emptyHint = document.getElementById('emptyHint');
+
+const chx = document.getElementById('chx');
+const chv = document.getElementById('chv');
+
+const typeSel  = document.getElementById('type');
+const prefixIn = document.getElementById('prefix');
+const snapCb   = document.getElementById('snap');
+const snapSz   = document.getElementById('snapSize');
+const showRef  = document.getElementById('showRef');
+const showGrid = document.getElementById('showGrid');
+
+let existing = null;   // 已有 obstacle JSON（参照层用）
+let items = [];        // 你新画的：{id,type,rect:{x,y,w,h},blockRect:{...},sortAnchorY,occluder}
+let selId = null;
+let undoStack = [];
+
+// ======== 类型默认值 ========
+function typeDefaults(t){
+  return {
+    building: { occluder:true , idHint:'building_' },
+    tree:     { occluder:true , idHint:'tree_' },
+    fence:    { occluder:false, idHint:'fence_' },
+    crop:     { occluder:false, idHint:'crop_' },
+    well:     { occluder:true , idHint:'well_' },
+  }[t];
+}
+typeSel.addEventListener('change', () => {
+  prefixIn.value = typeDefaults(typeSel.value).idHint;
+});
+
+// ======== 加载底图 + 已有 JSON ========
+let bgReady = false, refReady = false;
+const refReadyP = new Promise(res => { window.__refReadyResolve = res; });
+
+function loadAll(){
+  // 底图
+  const img = new Image();
+  img.onload = () => {
+    bgX.clearRect(0,0,1280,720);
+    bgX.drawImage(img, 0, 0, 1280, 720);
+    // 画一个细边框，让用户一眼看出底图加载到了
+    bgX.strokeStyle = 'rgba(0,255,128,0.6)';
+    bgX.lineWidth = 2;
+    bgX.strokeRect(1, 1, 1278, 718);
+    bgReady = true;
+    setStatus(`✅ 底图加载成功 (${img.naturalWidth}×${img.naturalHeight})`);
+  };
+  img.onerror = (e) => {
+    bgX.fillStyle = '#400';
+    bgX.fillRect(0,0,1280,720);
+    bgX.fillStyle = '#fdd';
+    bgX.font = 'bold 24px sans-serif';
+    bgX.fillText('底图加载失败: ' + BG_URL, 40, 360);
+    setStatus('❌ 底图加载失败：' + BG_URL + ' (打开 DevTools Network 看详细)', true);
+  };
+  img.src = BG_URL + '?t=' + Date.now();  // 防缓存
+
+  // 已有 obstacle
+  fetch(REF_URL + '?t=' + Date.now())
+    .then(r => {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(j=>{
+      existing = j;
+      const total = (j.buildings?.length||0)+(j.trees?.length||0)+(j.fences?.length||0)+(j.crops?.length||0);
+      refReady = true;
+      window.__refReadyResolve();
+      redrawRef();
+      setStatus(`✅ 已有 obstacle JSON 加载成功（${total} 个）`);
+    }).catch(e => setStatus('❌ obstacles JSON 加载失败：' + e.message, true));
+}
+
+// ======== 网格 ========
+function redrawGrid(){
+  gridX.clearRect(0,0,1280,720);
+  if(!showGrid.checked) return;
+  gridX.strokeStyle = 'rgba(120,180,255,0.18)';
+  gridX.lineWidth = 1;
+  for(let x=0;x<=1280;x+=32){
+    gridX.beginPath(); gridX.moveTo(x+0.5,0); gridX.lineTo(x+0.5,720); gridX.stroke();
+  }
+  for(let y=0;y<=720;y+=32){
+    gridX.beginPath(); gridX.moveTo(0,y+0.5); gridX.lineTo(1280,y+0.5); gridX.stroke();
+  }
+}
+showGrid.addEventListener('change', redrawGrid);
+
+// ======== 已有 obstacle 参照层 ========
+function redrawRef(){
+  refX.clearRect(0,0,1280,720);
+  if(!showRef.checked || !existing) return;
+  const groups = [
+    {key:'buildings', color:'rgba(255,80,80,'},
+    {key:'trees',     color:'rgba(80,220,120,'},
+    {key:'fences',    color:'rgba(200,160,80,'},
+    {key:'crops',     color:'rgba(255,200,80,'},
+  ];
+  refX.font = '11px ui-monospace,monospace';
+  for(const g of groups){
+    const arr = existing[g.key] || [];
+    for(const o of arr){
+      const r = o.rect, b = o.blockRect;
+      // 浅色 rect 虚框
+      refX.strokeStyle = g.color + '0.55)';
+      refX.setLineDash([4,3]);
+      refX.lineWidth = 1;
+      refX.strokeRect(r.x+0.5, r.y+0.5, r.w, r.h);
+      refX.setLineDash([]);
+      // 半透明 block 填充
+      refX.fillStyle = g.color + '0.18)';
+      refX.fillRect(b.x, b.y, b.w, b.h);
+      refX.strokeStyle = g.color + '0.85)';
+      refX.lineWidth = 1.5;
+      refX.strokeRect(b.x+0.5, b.y+0.5, b.w, b.h);
+      // id 标签
+      refX.fillStyle = g.color + '0.95)';
+      refX.fillText(o.id, r.x+3, r.y+11);
+    }
+  }
+}
+showRef.addEventListener('change', redrawRef);
+
+// ======== 你新画的层 ========
+function redrawDraw(){
+  drawX.clearRect(0,0,1280,720);
+  drawX.font = 'bold 12px ui-monospace,monospace';
+  for(const it of items){
+    const isSel = it.id === selId;
+    const colorMap = {
+      building:'#ff5050', tree:'#55dd66', fence:'#cc9944', crop:'#ffcc44', well:'#66ccff'
+    };
+    const c = colorMap[it.type] || '#fff';
+    const r = it.rect, b = it.blockRect;
+    // rect 虚线
+    drawX.strokeStyle = c;
+    drawX.setLineDash([6,4]);
+    drawX.lineWidth = isSel ? 3 : 2;
+    drawX.strokeRect(r.x+0.5, r.y+0.5, r.w, r.h);
+    drawX.setLineDash([]);
+    // blockRect 实线 + 半透明填充
+    drawX.fillStyle = hex2rgba(c, 0.30);
+    drawX.fillRect(b.x, b.y, b.w, b.h);
+    drawX.strokeStyle = c;
+    drawX.lineWidth = isSel ? 3 : 2;
+    drawX.strokeRect(b.x+0.5, b.y+0.5, b.w, b.h);
+    // sortAnchorY 黄线
+    drawX.strokeStyle = '#ffeb3b';
+    drawX.lineWidth = 2;
+    drawX.beginPath();
+    drawX.moveTo(r.x, it.sortAnchorY+0.5);
+    drawX.lineTo(r.x+r.w, it.sortAnchorY+0.5);
+    drawX.stroke();
+    // id 标签
+    drawX.fillStyle = '#fff';
+    drawX.strokeStyle = 'rgba(0,0,0,0.85)';
+    drawX.lineWidth = 3;
+    drawX.strokeText(it.id, r.x+4, r.y+14);
+    drawX.fillText(it.id, r.x+4, r.y+14);
+    // 选中外框
+    if(isSel){
+      drawX.strokeStyle = '#ffeb3b';
+      drawX.lineWidth = 1;
+      drawX.setLineDash([2,2]);
+      drawX.strokeRect(r.x-2.5, r.y-2.5, r.w+5, r.h+5);
+      drawX.setLineDash([]);
+    }
+  }
+}
+function hex2rgba(hex, a){
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ======== 鼠标拖框 ========
+let dragging = false;
+let startX=0, startY=0, curX=0, curY=0;
+
+function getXY(e){
+  const rect = stage.getBoundingClientRect();
+  // canvas 是 1:1 px：rect.width === 1280
+  let x = Math.round(e.clientX - rect.left);
+  let y = Math.round(e.clientY - rect.top);
+  x = Math.max(0, Math.min(1280, x));
+  y = Math.max(0, Math.min(720, y));
+  if(snapCb.checked){
+    const s = Math.max(1, parseInt(snapSz.value)||8);
+    x = Math.round(x/s)*s;
+    y = Math.round(y/s)*s;
+  }
+  return [x,y];
+}
+
+stage.addEventListener('mousemove', e=>{
+  const [x,y] = getXY(e);
+  curX = x; curY = y;
+  // 十字线
+  chx.style.display='block'; chv.style.display='block';
+  chx.style.top = y+'px';
+  chv.style.left = x+'px';
+  if(dragging){
+    const x0 = Math.min(startX, x), y0 = Math.min(startY, y);
+    const w  = Math.abs(x-startX), h = Math.abs(y-startY);
+    setStatus(`拖框中 (${x0},${y0}) ${w}×${h}`);
+    // 实时画临时矩形
+    redrawDraw();
+    drawX.strokeStyle = '#ff0';
+    drawX.lineWidth = 2;
+    drawX.setLineDash([4,4]);
+    drawX.strokeRect(x0+0.5, y0+0.5, w, h);
+    drawX.setLineDash([]);
+  }else{
+    setStatus(`鼠标 (${x},${y})`);
+  }
+});
+
+stage.addEventListener('mouseleave', ()=>{
+  chx.style.display='none'; chv.style.display='none';
+});
+
+stage.addEventListener('mousedown', e=>{
+  if(e.button !== 0) return;
+  const [x,y] = getXY(e);
+  startX = x; startY = y;
+  dragging = true;
+});
+
+window.addEventListener('mouseup', e=>{
+  if(!dragging) return;
+  dragging = false;
+  const [x,y] = getXY(e);
+  const x0 = Math.min(startX, x), y0 = Math.min(startY, y);
+  const w  = Math.abs(x-startX), h = Math.abs(y-startY);
+  if(w < 4 || h < 4){
+    redrawDraw();
+    setStatus('框太小（<4px），已忽略');
+    return;
+  }
+  addItem(x0,y0,w,h);
+});
+
+function addItem(x,y,w,h){
+  pushUndo();
+  const tRaw = typeSel.value;
+  const realType = (tRaw === 'well') ? 'crop' : tRaw;
+  const id = uniqueId(prefixIn.value || 'obj_');
+  const it = {
+    id, type: realType, _drawerType: tRaw,
+    rect:      { x, y, w, h },
+    blockRect: { x, y, w, h },
+    sortAnchorY: y + h,
+    occluder: typeDefaults(tRaw).occluder
+  };
+  items.push(it);
+  selId = id;
+  renderList();
+  redrawDraw();
+  setStatus(`新增 ${id}  rect=(${x},${y},${w},${h})`);
+}
+
+function uniqueId(prefix){
+  let n = 1;
+  while(items.some(it => it.id === prefix + String(n).padStart(2,'0'))) n++;
+  return prefix + String(n).padStart(2,'0');
+}
+
+// ======== 列表 UI ========
+function renderList(){
+  cntEl.textContent = items.length;
+  emptyHint.style.display = items.length ? 'none' : 'block';
+  listEl.innerHTML = '';
+  for(const it of items){
+    const d = document.createElement('div');
+    d.className = 'item typ-'+it.type+(it.id===selId?' sel':'');
+    d.dataset.id = it.id;
+    d.innerHTML = `
+      <div class="row">
+        <input class="id" value="${it.id}" data-k="id" />
+        <select data-k="type">
+          ${['building','tree','fence','crop'].map(t=>`<option value="${t}" ${t===it.type?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <button class="del">×</button>
+      </div>
+      <div class="row">
+        <span class="lab">R</span>
+        <input class="num" type="number" value="${it.rect.x}" data-k="rect.x">
+        <input class="num" type="number" value="${it.rect.y}" data-k="rect.y">
+        <input class="num" type="number" value="${it.rect.w}" data-k="rect.w">
+        <input class="num" type="number" value="${it.rect.h}" data-k="rect.h">
+      </div>
+      <div class="row">
+        <span class="lab">B</span>
+        <input class="num" type="number" value="${it.blockRect.x}" data-k="blockRect.x">
+        <input class="num" type="number" value="${it.blockRect.y}" data-k="blockRect.y">
+        <input class="num" type="number" value="${it.blockRect.w}" data-k="blockRect.w">
+        <input class="num" type="number" value="${it.blockRect.h}" data-k="blockRect.h">
+      </div>
+      <div class="row">
+        <span class="lab">Y</span>
+        <input class="num" type="number" value="${it.sortAnchorY}" data-k="sortAnchorY">
+        <label style="font-size:11px;color:#aaa;margin-left:8px;">
+          <input type="checkbox" ${it.occluder?'checked':''} data-k="occluder"> occluder
+        </label>
+      </div>
+    `;
+    d.addEventListener('click', ev=>{
+      if(ev.target.tagName === 'BUTTON' || ev.target.tagName === 'INPUT' || ev.target.tagName==='SELECT') return;
+      selId = it.id; renderList(); redrawDraw();
+    });
+    d.querySelector('.del').addEventListener('click', ()=>{
+      pushUndo();
+      items = items.filter(x=>x.id!==it.id);
+      if(selId===it.id) selId=null;
+      renderList(); redrawDraw();
+      setStatus(`删除 ${it.id}`);
+    });
+    d.querySelectorAll('input,select').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const k = inp.dataset.k;
+        if(!k) return;
+        let v;
+        if(inp.type==='checkbox') v = inp.checked;
+        else if(inp.type==='number') v = parseInt(inp.value)||0;
+        else v = inp.value;
+        if(k.includes('.')){
+          const [a,b] = k.split('.');
+          it[a][b] = v;
+        }else{
+          it[k] = v;
+        }
+        renderList(); redrawDraw();
+      });
+    });
+    listEl.appendChild(d);
+  }
+}
+
+// ======== 撤销 ========
+function pushUndo(){
+  undoStack.push(JSON.stringify(items));
+  if(undoStack.length > 50) undoStack.shift();
+}
+document.getElementById('undo').addEventListener('click', ()=>{
+  if(!undoStack.length){ setStatus('无可撤销'); return; }
+  items = JSON.parse(undoStack.pop());
+  selId = null; renderList(); redrawDraw();
+  setStatus('已撤销');
+});
+document.getElementById('clear').addEventListener('click', ()=>{
+  if(!items.length) return;
+  if(!confirm('清空你画的全部 '+items.length+' 个？')) return;
+  pushUndo();
+  items = []; selId=null; renderList(); redrawDraw();
+});
+
+// ======== 键盘 ========
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName==='SELECT') return;
+  if((e.key==='Backspace' || e.key==='Delete') && selId){
+    pushUndo();
+    items = items.filter(x=>x.id!==selId);
+    selId=null; renderList(); redrawDraw();
+    setStatus('已删除选中');
+    e.preventDefault();
+  }else if(e.key==='Escape'){
+    selId=null; renderList(); redrawDraw();
+  }else if(e.key.toLowerCase()==='g'){
+    showGrid.checked = !showGrid.checked;
+    redrawGrid();
+  }
+});
+
+// ======== 导出 ========
+const exportPanel = document.getElementById('export');
+const jsonOut = document.getElementById('jsonOut');
+
+function buildMergedJson(){
+  const j = JSON.parse(JSON.stringify(existing || {
+    version:'21.0', mapId:'shuishe',
+    buildings:[], trees:[], fences:[], crops:[]
+  }));
+  j.buildings = j.buildings || [];
+  j.trees     = j.trees     || [];
+  j.fences    = j.fences    || [];
+  j.crops     = j.crops     || [];
+  for(const it of items){
+    const o = {
+      id: it.id, type: it.type,
+      rect: it.rect, blockRect: it.blockRect,
+      sortAnchorY: it.sortAnchorY,
+      occluder: !!it.occluder
+    };
+    if(it.type==='building') j.buildings.push(o);
+    else if(it.type==='tree') j.trees.push(o);
+    else if(it.type==='fence') j.fences.push(o);
+    else if(it.type==='crop') j.crops.push(o);
+  }
+  return j;
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const merged = buildMergedJson();
+  jsonOut.value = JSON.stringify(merged, null, 2);
+  exportPanel.classList.add('show');
+  setStatus(`导出：已有 ${(existing?.buildings?.length||0)+(existing?.trees?.length||0)+(existing?.fences?.length||0)+(existing?.crops?.length||0)} + 新画 ${items.length}`);
+});
+document.getElementById('closeExport').addEventListener('click', ()=> exportPanel.classList.remove('show'));
+document.getElementById('copyJson').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(jsonOut.value); setStatus('✅ 已复制到剪贴板'); }
+  catch(e){ jsonOut.select(); document.execCommand('copy'); setStatus('✅ 已复制（fallback）'); }
+});
+document.getElementById('dlJson').addEventListener('click', ()=>{
+  const blob = new Blob([jsonOut.value], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'obstacles-shuishe.json';
+  a.click();
+});
+
+// ======== 导入 JSON ========
+const importPanel = document.getElementById('importPanel');
+const importTxt   = document.getElementById('importTxt');
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  importTxt.value = '';
+  importPanel.style.display='block';
+  importTxt.focus();
+});
+document.getElementById('importCancel').addEventListener('click', ()=> importPanel.style.display='none');
+document.getElementById('importFile').addEventListener('click', ()=> document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=> { importTxt.value = r.result; setStatus('已读取文件 '+f.name); };
+  r.readAsText(f);
+});
+document.getElementById('importApply').addEventListener('click', ()=>{
+  const txt = importTxt.value.trim();
+  if(!txt){ setStatus('粘贴框为空', true); return; }
+  try{
+    const j = JSON.parse(txt);
+    importJsonToItems(j, /*replaceExisting=*/true);
+    importPanel.style.display='none';
+    setStatus(`✅ 已导入 ${items.length} 个 obstacle 到列表（可继续编辑）`);
+  }catch(err){
+    setStatus('❌ JSON 解析失败：'+err.message, true);
+  }
+});
+
+// 把 JSON（含 buildings/trees/fences/crops 4 数组）平摊为 items
+function importJsonToItems(j, replaceExisting){
+  pushUndo();
+  const newItems = [];
+  for(const k of ['buildings','trees','fences','crops']){
+    const arr = j[k] || [];
+    for(const o of arr){
+      newItems.push({
+        id: o.id,
+        type: o.type || k.replace(/s$/,''),
+        rect: { ...o.rect },
+        blockRect: { ...(o.blockRect || o.rect) },
+        sortAnchorY: o.sortAnchorY ?? (o.rect.y + o.rect.h),
+        occluder: o.occluder !== false,
+        _drawerType: o.type
+      });
+    }
+  }
+  items = newItems;
+  if(replaceExisting){
+    // 已有 10 个参照层也清掉，避免重复显示
+    existing = { ...j, buildings:[], trees:[], fences:[], crops:[] };
+    showRef.checked = false;
+    redrawRef();
+  }
+  selId = null;
+  renderList();
+  redrawDraw();
+  saveLocal();
+}
+
+// "加载已有10个进列表" — 一键把当前底图自带的 10 obstacle 提到可编辑列表里
+document.getElementById('loadExisting').addEventListener('click', async ()=>{
+  if(!existing){
+    setStatus('⏳ 已有 JSON 还没加载完，等一下…');
+    try{
+      await Promise.race([
+        refReadyP,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('JSON 加载超时 5s')), 5000))
+      ]);
+    }catch(e){
+      setStatus('❌ 加载失败：' + e.message + '。请刷新页面 (⌘⇧R) 强制清缓存', true);
+      return;
+    }
+  }
+  if(!existing){ setStatus('❌ existing 仍为 null，无法加载', true); return; }
+  if(items.length && !confirm(`列表当前有 ${items.length} 项，会被替换为已有 10 个，是否继续？`)) return;
+  importJsonToItems(existing, /*replaceExisting=*/true);
+  setStatus(`✅ 已把 ${items.length} 个原始 obstacle 加载到列表，可直接编辑`);
+});
+
+// ======== localStorage 自动保存 ========
+const LS_KEY = 'obstacle-drawer-items-v1';
+function saveLocal(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({items, ts:Date.now()})); }catch(e){}
+}
+function loadLocal(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const j = JSON.parse(raw);
+    if(!j.items || !j.items.length) return false;
+    if(!confirm(`检测到上次未保存的 ${j.items.length} 个 obstacle（${new Date(j.ts).toLocaleString()}），是否恢复？`)) return false;
+    items = j.items;
+    renderList(); redrawDraw();
+    setStatus(`✅ 已恢复 ${items.length} 个`);
+    return true;
+  }catch(e){ return false; }
+}
+// 自动落盘：每 1.5s 检查一次 items，变了就 save（避免对函数声明做赋值，绕开严格模式禁用）
+let _lastSavedSig = '';
+setInterval(()=>{
+  try{
+    const sig = JSON.stringify(items);
+    if(sig !== _lastSavedSig){
+      _lastSavedSig = sig;
+      saveLocal();
+    }
+  }catch(e){}
+}, 1500);
+
+// ======== status ========
+const errBar = document.getElementById('errBar');
+const okBar  = document.getElementById('okBar');
+let _okTimer = 0, _errTimer = 0;
+function setStatus(msg, isErr){
+  status.textContent = msg;
+  status.style.color = isErr ? '#f88' : '#9c9';
+  if(isErr){
+    errBar.textContent = '⚠ ' + msg;
+    errBar.classList.add('show');
+    clearTimeout(_errTimer);
+    _errTimer = setTimeout(()=>errBar.classList.remove('show'), 6000);
+  }else{
+    okBar.textContent = msg;
+    okBar.classList.add('show');
+    clearTimeout(_okTimer);
+    _okTimer = setTimeout(()=>okBar.classList.remove('show'), 1800);
+  }
+}
+
+// 全局错误捕获 → 弹出红条
+window.addEventListener('error', e=>{
+  setStatus('JS 错误: ' + (e.message || e.error), true);
+  console.error('[drawer]', e);
+});
+window.addEventListener('unhandledrejection', e=>{
+  setStatus('Promise 错误: ' + (e.reason?.message || e.reason), true);
+  console.error('[drawer]', e);
+});
+
+// ======== 启动 ========
+loadAll();
+redrawGrid();
+renderList();
+loadLocal();
+</script>
+</body></html>

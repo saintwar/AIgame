@@ -1,0 +1,555 @@
+{
+  "__comment_schema": [
+    "============================================================",
+    "obstacles-shuishe.json — PHASE 21 障碍物/遮挡数据 (水社村)",
+    "version: 21.0  |  坐标系: 地图像素坐标，原点左上角，Y 向下",
+    "网格参考: T=32px, COLS=40, ROWS=22, 画布 1280×704（HUD 占下方 16px）",
+    "============================================================",
+    "字段说明：",
+    "  id            : 唯一字符串，<type>_<位置>_<序号>",
+    "  type          : building | tree | fence | crop",
+    "  rect          : 视觉包围盒 {x,y,w,h}，sprite 占位区域",
+    "  blockRect     : 物理碰撞矩形 {x,y,w,h}，必须 ⊆ rect，玩家不可进入",
+    "  sortAnchorY   : Y-sort 锚点 (整数像素 y)；玩家脚底 y < 此值 → 被该 obstacle 遮挡",
+    "                  经验值：建筑取墙身上沿 y；树取树干根部 y；栅栏取栅栏底边 y",
+    "  occluder      : 是否参与 Y-sort 遮挡 (true/false)",
+    "============================================================",
+    "数据来源（21-A 21-A 真实坐标版）：",
+    "  本文件由 js/village-scene.js::BUILDINGS + _generateMap() 反向导出，",
+    "  坐标已 1:1 对齐当前游戏运行时的物理碰撞与 sprite 渲染位置。",
+    "  建筑 sprite 固定 128×128，drawX/drawY 即左上角像素。",
+    "  树/边界树 tile 区域 × T(32) 直接换算为像素 rect。",
+    "  栅栏(fences) 与 菜地(crops) 在当前水社村源码中【不存在物理实体】，",
+    "  保留空数组占位，待后续地图（清水镇等）若引入再填。",
+    "============================================================",
+    "校验规则（validate-collision.html 实施）：",
+    "  - id 全局唯一",
+    "  - blockRect ⊆ rect",
+    "  - rect.y ≤ sortAnchorY ≤ rect.y + rect.h",
+    "============================================================"
+  ],
+  "version": "21.0",
+  "mapId": "shuishe",
+  "buildings": [
+    {
+      "id": "building_01",
+      "type": "building",
+      "rect": {
+        "x": 240,
+        "y": 272,
+        "w": 152,
+        "h": 104
+      },
+      "blockRect": {
+        "x": 240,
+        "y": 272,
+        "w": 152,
+        "h": 104
+      },
+      "sortAnchorY": 376,
+      "occluder": true
+    },
+    {
+      "id": "building_02",
+      "type": "building",
+      "rect": {
+        "x": 216,
+        "y": 328,
+        "w": 24,
+        "h": 48
+      },
+      "blockRect": {
+        "x": 216,
+        "y": 328,
+        "w": 24,
+        "h": 48
+      },
+      "sortAnchorY": 376,
+      "occluder": true
+    },
+    {
+      "id": "building_03",
+      "type": "building",
+      "rect": {
+        "x": 696,
+        "y": 272,
+        "w": 32,
+        "h": 80
+      },
+      "blockRect": {
+        "x": 696,
+        "y": 272,
+        "w": 32,
+        "h": 80
+      },
+      "sortAnchorY": 352,
+      "occluder": true
+    },
+    {
+      "id": "building_04",
+      "type": "building",
+      "rect": {
+        "x": 728,
+        "y": 272,
+        "w": 24,
+        "h": 48
+      },
+      "blockRect": {
+        "x": 728,
+        "y": 272,
+        "w": 24,
+        "h": 48
+      },
+      "sortAnchorY": 320,
+      "occluder": true
+    },
+    {
+      "id": "building_05",
+      "type": "building",
+      "rect": {
+        "x": 760,
+        "y": 272,
+        "w": 200,
+        "h": 104
+      },
+      "blockRect": {
+        "x": 760,
+        "y": 272,
+        "w": 200,
+        "h": 104
+      },
+      "sortAnchorY": 376,
+      "occluder": true
+    },
+    {
+      "id": "building_06",
+      "type": "building",
+      "rect": {
+        "x": 912,
+        "y": 480,
+        "w": 168,
+        "h": 96
+      },
+      "blockRect": {
+        "x": 912,
+        "y": 480,
+        "w": 168,
+        "h": 96
+      },
+      "sortAnchorY": 576,
+      "occluder": true
+    },
+    {
+      "id": "building_07",
+      "type": "building",
+      "rect": {
+        "x": 0,
+        "y": 440,
+        "w": 184,
+        "h": 104
+      },
+      "blockRect": {
+        "x": 0,
+        "y": 440,
+        "w": 184,
+        "h": 104
+      },
+      "sortAnchorY": 544,
+      "occluder": true
+    },
+    {
+      "id": "building_08",
+      "type": "building",
+      "rect": {
+        "x": 184,
+        "y": 440,
+        "w": 40,
+        "h": 88
+      },
+      "blockRect": {
+        "x": 184,
+        "y": 440,
+        "w": 40,
+        "h": 88
+      },
+      "sortAnchorY": 528,
+      "occluder": true
+    }
+  ],
+  "trees": [
+    {
+      "id": "tree_01",
+      "type": "tree",
+      "rect": {
+        "x": 336,
+        "y": 416,
+        "w": 32,
+        "h": 32
+      },
+      "blockRect": {
+        "x": 336,
+        "y": 416,
+        "w": 32,
+        "h": 32
+      },
+      "sortAnchorY": 448,
+      "occluder": true
+    },
+    {
+      "id": "tree_02",
+      "type": "tree",
+      "rect": {
+        "x": 720,
+        "y": 360,
+        "w": 32,
+        "h": 24
+      },
+      "blockRect": {
+        "x": 720,
+        "y": 360,
+        "w": 32,
+        "h": 24
+      },
+      "sortAnchorY": 384,
+      "occluder": true
+    },
+    {
+      "id": "tree_03",
+      "type": "tree",
+      "rect": {
+        "x": 848,
+        "y": 512,
+        "w": 32,
+        "h": 32
+      },
+      "blockRect": {
+        "x": 848,
+        "y": 512,
+        "w": 32,
+        "h": 32
+      },
+      "sortAnchorY": 544,
+      "occluder": true
+    },
+    {
+      "id": "tree_04",
+      "type": "tree",
+      "rect": {
+        "x": 1088,
+        "y": 536,
+        "w": 32,
+        "h": 32
+      },
+      "blockRect": {
+        "x": 1088,
+        "y": 536,
+        "w": 32,
+        "h": 32
+      },
+      "sortAnchorY": 568,
+      "occluder": true
+    },
+    {
+      "id": "tree_05",
+      "type": "tree",
+      "rect": {
+        "x": 456,
+        "y": 448,
+        "w": 48,
+        "h": 104
+      },
+      "blockRect": {
+        "x": 456,
+        "y": 448,
+        "w": 48,
+        "h": 104
+      },
+      "sortAnchorY": 552,
+      "occluder": true
+    },
+    {
+      "id": "tree_06",
+      "type": "tree",
+      "rect": {
+        "x": 432,
+        "y": 472,
+        "w": 88,
+        "h": 40
+      },
+      "blockRect": {
+        "x": 432,
+        "y": 472,
+        "w": 88,
+        "h": 40
+      },
+      "sortAnchorY": 512,
+      "occluder": true
+    },
+    {
+      "id": "tree_07",
+      "type": "tree",
+      "rect": {
+        "x": 48,
+        "y": 136,
+        "w": 72,
+        "h": 56
+      },
+      "blockRect": {
+        "x": 48,
+        "y": 136,
+        "w": 72,
+        "h": 56
+      },
+      "sortAnchorY": 192,
+      "occluder": true
+    },
+    {
+      "id": "tree_08",
+      "type": "tree",
+      "rect": {
+        "x": 136,
+        "y": 80,
+        "w": 56,
+        "h": 56
+      },
+      "blockRect": {
+        "x": 136,
+        "y": 80,
+        "w": 56,
+        "h": 56
+      },
+      "sortAnchorY": 136,
+      "occluder": true
+    },
+    {
+      "id": "tree_09",
+      "type": "tree",
+      "rect": {
+        "x": 0,
+        "y": 320,
+        "w": 64,
+        "h": 88
+      },
+      "blockRect": {
+        "x": 0,
+        "y": 320,
+        "w": 64,
+        "h": 88
+      },
+      "sortAnchorY": 408,
+      "occluder": true
+    },
+    {
+      "id": "tree_10",
+      "type": "tree",
+      "rect": {
+        "x": 1232,
+        "y": 504,
+        "w": 48,
+        "h": 64
+      },
+      "blockRect": {
+        "x": 1232,
+        "y": 504,
+        "w": 48,
+        "h": 64
+      },
+      "sortAnchorY": 568,
+      "occluder": true
+    },
+    {
+      "id": "tree_11",
+      "type": "tree",
+      "rect": {
+        "x": 1176,
+        "y": 392,
+        "w": 104,
+        "h": 112
+      },
+      "blockRect": {
+        "x": 1176,
+        "y": 392,
+        "w": 104,
+        "h": 112
+      },
+      "sortAnchorY": 504,
+      "occluder": true
+    },
+    {
+      "id": "tree_12",
+      "type": "tree",
+      "rect": {
+        "x": 1176,
+        "y": 192,
+        "w": 104,
+        "h": 200
+      },
+      "blockRect": {
+        "x": 1176,
+        "y": 192,
+        "w": 104,
+        "h": 200
+      },
+      "sortAnchorY": 392,
+      "occluder": true
+    },
+    {
+      "id": "tree_13",
+      "type": "tree",
+      "rect": {
+        "x": 1096,
+        "y": 104,
+        "w": 64,
+        "h": 96
+      },
+      "blockRect": {
+        "x": 1096,
+        "y": 104,
+        "w": 64,
+        "h": 96
+      },
+      "sortAnchorY": 200,
+      "occluder": true
+    },
+    {
+      "id": "tree_14",
+      "type": "tree",
+      "rect": {
+        "x": 976,
+        "y": 16,
+        "w": 80,
+        "h": 96
+      },
+      "blockRect": {
+        "x": 976,
+        "y": 16,
+        "w": 80,
+        "h": 96
+      },
+      "sortAnchorY": 112,
+      "occluder": true
+    },
+    {
+      "id": "tree_15",
+      "type": "tree",
+      "rect": {
+        "x": 1040,
+        "y": 120,
+        "w": 56,
+        "h": 56
+      },
+      "blockRect": {
+        "x": 1040,
+        "y": 120,
+        "w": 56,
+        "h": 56
+      },
+      "sortAnchorY": 176,
+      "occluder": true
+    }
+  ],
+  "__fences_note": [
+    "水社村源码中无 fence 物理实体（grep fence/栅栏 0 命中）。",
+    "周边屏障由 4 圈 TREE 边界带承担（上下各 2 行、左右各 2 列），",
+    "已并入 walkable mask，不需在此重复登记。",
+    "保留空数组以维持 schema 兼容；后续地图引入栅栏时按 schema 填即可。"
+  ],
+  "fences": [],
+  "__crops_note": [
+    "水社村源码中无 crop/farmland 物理实体。",
+    "js/render/farmland.js 仅做装饰渲染，不参与 walkable，亦无 blockRect。",
+    "保留空数组占位。"
+  ],
+  "crops": [
+    {
+      "id": "crop_01",
+      "type": "crop",
+      "rect": {
+        "x": 256,
+        "y": 64,
+        "w": 120,
+        "h": 112
+      },
+      "blockRect": {
+        "x": 256,
+        "y": 64,
+        "w": 120,
+        "h": 112
+      },
+      "sortAnchorY": 176,
+      "occluder": false
+    },
+    {
+      "id": "crop_02",
+      "type": "crop",
+      "rect": {
+        "x": 840,
+        "y": 64,
+        "w": 120,
+        "h": 120
+      },
+      "blockRect": {
+        "x": 840,
+        "y": 64,
+        "w": 120,
+        "h": 120
+      },
+      "sortAnchorY": 184,
+      "occluder": false
+    },
+    {
+      "id": "crop_03",
+      "type": "crop",
+      "rect": {
+        "x": 968,
+        "y": 256,
+        "w": 128,
+        "h": 120
+      },
+      "blockRect": {
+        "x": 968,
+        "y": 256,
+        "w": 128,
+        "h": 120
+      },
+      "sortAnchorY": 376,
+      "occluder": false
+    },
+    {
+      "id": "crop_04",
+      "type": "crop",
+      "rect": {
+        "x": 64,
+        "y": 256,
+        "w": 120,
+        "h": 120
+      },
+      "blockRect": {
+        "x": 64,
+        "y": 256,
+        "w": 120,
+        "h": 120
+      },
+      "sortAnchorY": 376,
+      "occluder": false
+    },
+    {
+      "id": "well_01",
+      "type": "crop",
+      "rect": {
+        "x": 512,
+        "y": 120,
+        "w": 64,
+        "h": 72
+      },
+      "blockRect": {
+        "x": 512,
+        "y": 120,
+        "w": 64,
+        "h": 72
+      },
+      "sortAnchorY": 192,
+      "occluder": true
+    }
+  ]
+}

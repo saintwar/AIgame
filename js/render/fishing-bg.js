@@ -363,6 +363,24 @@ function _buildCache(w, h) {
 }
 
 export function drawFishingBg(ctx, w, h) {
+  // —— 优先使用美术贴图（加载完成后接管背景）——
+  const img = _ensureBgImage();
+  if (img && img.complete && img.naturalWidth > 0) {
+    if (!_imgCache || _imgCacheW !== w || _imgCacheH !== h) {
+      _imgCache = document.createElement('canvas');
+      _imgCache.width = w; _imgCache.height = h;
+      const c = _imgCache.getContext('2d');
+      c.imageSmoothingEnabled = true;
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(img, 0, 0, w, h);
+      _imgCacheW = w; _imgCacheH = h;
+    }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_imgCache, 0, 0);
+    return;
+  }
+
+  // —— 贴图未就绪：回退到程序化生成（原行为）——
   if (!_cache || _cacheW !== w || _cacheH !== h) {
     _cache = _buildCache(w, h);
     _cacheW = w;
@@ -370,4 +388,32 @@ export function drawFishingBg(ctx, w, h) {
   }
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(_cache, 0, 0);
+}
+
+// —— 美术贴图懒加载（仅加载一次）——
+const _BG_SRC = 'assets/images/scenes/fishing-bg.jpg';
+let _bgImg = null;
+let _bgLoading = false;
+let _bgFailed = false;
+let _imgCache = null;
+let _imgCacheW = 0;
+let _imgCacheH = 0;
+
+function _ensureBgImage() {
+  if (_bgImg || _bgLoading || _bgFailed) return _bgImg;
+  _bgLoading = true;
+  const img = new Image();
+  img.onload = () => {
+    _bgImg = img;
+    _bgLoading = false;
+    _imgCache = null; // 触发缓存重建
+    console.log('[fishing-bg] 底图加载完成:', _BG_SRC, `${img.width}x${img.height}`);
+  };
+  img.onerror = () => {
+    _bgFailed = true;
+    _bgLoading = false;
+    console.warn('[fishing-bg] 底图加载失败，回退到程序化背景:', _BG_SRC);
+  };
+  img.src = _BG_SRC;
+  return null;
 }

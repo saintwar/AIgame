@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PHASE 21 — Obstacle Validator</title>
+<style>
+  body{margin:0;font-family:Menlo,Consolas,monospace;background:#1e1e1e;color:#ddd}
+  #bar{padding:8px;background:#252526;border-bottom:1px solid #444;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #bar button{background:#0e639c;color:#fff;border:0;padding:4px 10px;cursor:pointer;border-radius:3px}
+  #bar button.off{background:#555}
+  #bar input[type=file]{color:#ddd}
+  #wrap{position:relative;display:inline-block}
+  canvas{display:block}
+  #tip{position:fixed;pointer-events:none;background:rgba(0,0,0,.85);color:#fff;padding:4px 8px;font-size:12px;border-radius:3px;display:none;z-index:99;white-space:pre}
+  #status{margin-left:auto;color:#9cdcfe}
+  .err{color:#f48771}
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>PHASE 21 Validator</strong>
+  <label>地图: <input type="file" id="mapFile" accept="image/*"></label>
+  <label>JSON: <input type="file" id="jsonFile" accept=".json"></label>
+  <button data-k="block" class="on">■ blockRect</button>
+  <button data-k="rect"  class="on">▢ rect</button>
+  <button data-k="anchor" class="on">— sortAnchorY</button>
+  <button data-k="label" class="on">id 标签</button>
+  <span id="status">加载: ../assets/maps/shuishe.png + ../assets/data/obstacles-shuishe.json</span>
+</div>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<div id="tip"></div>
+
+<script>
+const MAP_DEFAULT='../assets/maps/shuishe.png';
+const JSON_DEFAULT='../assets/data/obstacles-shuishe.json';
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),tip=document.getElementById('tip'),status=document.getElementById('status');
+const show={block:true,rect:true,anchor:true,label:true};
+let img=null,data=null,errs=[];
+
+document.querySelectorAll('#bar button[data-k]').forEach(b=>b.onclick=()=>{
+  const k=b.dataset.k;show[k]=!show[k];b.className=show[k]?'on':'off';draw();
+});
+document.getElementById('mapFile').onchange=e=>{const f=e.target.files[0];if(f)loadImg(URL.createObjectURL(f))};
+document.getElementById('jsonFile').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>{try{setData(JSON.parse(r.result))}catch(x){status.innerHTML='<span class=err>JSON 解析失败: '+x.message+'</span>'}};r.readAsText(f)};
+
+function loadImg(src){const i=new Image();i.onload=()=>{img=i;cv.width=i.width;cv.height=i.height;draw()};
+  i.onerror=()=>{status.innerHTML='<span class=err>地图加载失败，请用上方按钮手动选择</span>';cv.width=1280;cv.height=720;draw()};i.src=src}
+function setData(j){data=j;
+  errs=[];const all=collect(j);const ids=new Set();
+  all.forEach(o=>{
+    if(!o.id)errs.push('缺 id');
+    if(ids.has(o.id))errs.push('重复 id: '+o.id);ids.add(o.id);
+    if(!o.rect||!o.blockRect)errs.push(o.id+' 缺 rect/blockRect');
+    else{const r=o.rect,b=o.blockRect;
+      if(b.x<r.x||b.y<r.y||b.x+b.w>r.x+r.w||b.y+b.h>r.y+r.h)
+        if(b.w>0&&b.h>0)errs.push(o.id+' blockRect 不在 rect 内');}
+    if(o.sortAnchorY!=null&&o.rect){const r=o.rect;
+      if(o.sortAnchorY<r.y||o.sortAnchorY>r.y+r.h)errs.push(o.id+' sortAnchorY 越界');}
+  });
+  status.innerHTML=errs.length?'<span class=err>校验失败 '+errs.length+' 项: '+errs.slice(0,3).join('; ')+'</span>'
+    :'<span style=color:#4ec9b0>✓ 校验通过 ('+all.length+' 个 obstacle)</span>';
+  draw();
+}
+function collect(j){return [].concat(j.buildings||[],j.trees||[],j.fences||[],j.crops||[]).filter(o=>o.id&&!o._TODO||o.id)}
+
+function draw(){
+  if(!cv.width)return;
+  ctx.fillStyle='#333';ctx.fillRect(0,0,cv.width,cv.height);
+  if(img)ctx.drawImage(img,0,0);
+  if(!data)return;
+  collect(data).forEach(o=>{
+    if(show.rect&&o.rect){ctx.strokeStyle='#5af';ctx.setLineDash([4,4]);ctx.lineWidth=1;
+      ctx.strokeRect(o.rect.x,o.rect.y,o.rect.w,o.rect.h);ctx.setLineDash([])}
+    if(show.block&&o.blockRect&&o.blockRect.w>0){ctx.fillStyle='rgba(255,60,60,.35)';
+      ctx.fillRect(o.blockRect.x,o.blockRect.y,o.blockRect.w,o.blockRect.h);
+      ctx.strokeStyle='#f33';ctx.lineWidth=1;ctx.strokeRect(o.blockRect.x,o.blockRect.y,o.blockRect.w,o.blockRect.h)}
+    if(show.anchor&&o.sortAnchorY!=null&&o.rect){ctx.strokeStyle='#ff0';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(o.rect.x,o.sortAnchorY);ctx.lineTo(o.rect.x+o.rect.w,o.sortAnchorY);ctx.stroke()}
+    if(show.label&&o.rect){ctx.fillStyle='#0f0';ctx.font='12px monospace';
+      ctx.fillText(o.id,o.rect.x+2,o.rect.y+12)}
+  });
+}
+
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();
+  const x=Math.round((e.clientX-r.left)*cv.width/r.width);
+  const y=Math.round((e.clientY-r.top)*cv.height/r.height);
+  let hit='—';
+  if(data){const h=collect(data).find(o=>o.blockRect&&x>=o.blockRect.x&&x<o.blockRect.x+o.blockRect.w&&y>=o.blockRect.y&&y<o.blockRect.y+o.blockRect.h);
+    if(h)hit=h.id+' (block)';
+    else{const v=collect(data).find(o=>o.rect&&x>=o.rect.x&&x<o.rect.x+o.rect.w&&y>=o.rect.y&&y<o.rect.y+o.rect.h);if(v)hit=v.id+' (rect)'}}
+  tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';
+  tip.textContent='x='+x+' y='+y+'\nhit: '+hit;
+});
+cv.addEventListener('mouseleave',()=>tip.style.display='none');
+
+// 默认加载（同目录或相对路径存在时）
+loadImg(MAP_DEFAULT);
+fetch(JSON_DEFAULT).then(r=>r.ok?r.json():Promise.reject()).then(setData).catch(()=>{});
+</script>
+</body>
+</html>

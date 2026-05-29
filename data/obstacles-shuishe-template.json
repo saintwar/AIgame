@@ -1,0 +1,102 @@
+{
+  "__comment_schema": [
+    "============================================================",
+    "obstacles-shuishe.json — PHASE 21 障碍物/遮挡数据 (water-she 地图)",
+    "version: 21.0  |  坐标系: 地图像素坐标，原点左上角，Y 向下",
+    "============================================================",
+    "字段说明：",
+    "  id            : 唯一字符串，<type>_<位置>_<序号>，如 building_amin / tree_center_01",
+    "  type          : building | tree | fence | crop  (扩展时新增)",
+    "  rect          : 视觉包围盒 {x,y,w,h}，整张 sprite 占位区域",
+    "  blockRect     : 物理碰撞矩形 {x,y,w,h}，必须 ⊆ rect，玩家不可进入",
+    "                  建筑沿用现有 128×64 物理矩形数据，不要改尺寸",
+    "  sortAnchorY   : Y-sort 锚点 (整数像素 y)，玩家 y < 此值 → 玩家被该 obstacle 遮挡",
+    "                  经验取值：建筑=屋檐底沿，树=树干根部，栅栏=栅栏底边",
+    "  occluder      : 是否参与 Y-sort 遮挡 (true/false)；地面菜地一般 false",
+    "============================================================",
+    "填写流程：",
+    "  1. 4 个建筑已预填，核对 blockRect 与现有物理数据一致即可",
+    "  2. trees / fences / crops 数组当前为空，对照游戏截图用",
+    "     validate-collision.html 框选填入",
+    "  3. 每个 tree 给了 1 个示例 (tree_center_01 占位坐标)，对照修正后复制扩展",
+    "  4. 保存后用 validate-collision.html 全量校验，无红字即过关",
+    "============================================================"
+  ],
+  "version": "21.0",
+  "mapId": "shuishe",
+
+  "buildings": [
+    {
+      "id": "building_amin",
+      "type": "building",
+      "_note": "阿明家：屋檐可走，blockRect 仅墙体",
+      "rect":       { "x": 320, "y": 180, "w": 192, "h": 160 },
+      "blockRect":  { "x": 352, "y": 256, "w": 128, "h": 64  },
+      "sortAnchorY": 304,
+      "occluder": true
+    },
+    {
+      "id": "building_xiulan",
+      "type": "building",
+      "_note": "秀兰家",
+      "rect":       { "x": 560, "y": 220, "w": 192, "h": 160 },
+      "blockRect":  { "x": 592, "y": 296, "w": 128, "h": 64  },
+      "sortAnchorY": 344,
+      "occluder": true
+    },
+    {
+      "id": "building_tackleshop",
+      "type": "building",
+      "_note": "钓具店",
+      "rect":       { "x": 800, "y": 200, "w": 192, "h": 160 },
+      "blockRect":  { "x": 832, "y": 276, "w": 128, "h": 64  },
+      "sortAnchorY": 324,
+      "occluder": true
+    },
+    {
+      "id": "building_seven_eleven",
+      "type": "building",
+      "_note": "7-11",
+      "rect":       { "x": 1040, "y": 240, "w": 192, "h": 160 },
+      "blockRect":  { "x": 1072, "y": 316, "w": 128, "h": 64  },
+      "sortAnchorY": 364,
+      "occluder": true
+    }
+  ],
+
+  "trees": [
+    {
+      "_TODO": "对照游戏截图框选填入；以下为占位示例，CodeBuddy 改坐标后扩展",
+      "id": "tree_center_01",
+      "type": "tree",
+      "rect":       { "x": 480, "y": 420, "w": 48, "h": 80 },
+      "blockRect":  { "x": 496, "y": 484, "w": 16, "h": 16 },
+      "sortAnchorY": 496,
+      "occluder": true
+    }
+  ],
+
+  "fences": [
+    {
+      "_TODO": "栅栏对照截图填入；示例如下，sortAnchorY = 栅栏底边 y",
+      "id": "fence_north_01",
+      "type": "fence",
+      "rect":       { "x": 200, "y": 380, "w": 96, "h": 24 },
+      "blockRect":  { "x": 200, "y": 396, "w": 96, "h": 8  },
+      "sortAnchorY": 404,
+      "occluder": false
+    }
+  ],
+
+  "crops": [
+    {
+      "_TODO": "菜地一般不参与遮挡，occluder=false；blockRect 视玩法决定（可踩则全 0）",
+      "id": "crop_field_01",
+      "type": "crop",
+      "rect":       { "x": 700, "y": 500, "w": 128, "h": 64 },
+      "blockRect":  { "x": 0,   "y": 0,   "w": 0,   "h": 0  },
+      "sortAnchorY": 564,
+      "occluder": false
+    }
+  ]
+}

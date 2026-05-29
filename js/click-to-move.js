@@ -113,7 +113,16 @@
    */
   function isWalkable(gx, gy) {
     if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return false;
-    return scene._canMoveTo(gx, gy);
+    if (!scene._canMoveTo(gx, gy)) return false;
+    // PHASE 21-B：A* 寻路也要尊重像素级 obstacle（buildings/trees/fences/crops）
+    // 用瓦片中心点做查询；半径取 hbHalf 等价值（约 T*3/8）保证与移动期判定一致
+    const obs = window.ObstacleService;
+    if (obs && obs.isBlocked) {
+      const cx = gx * T + T / 2;
+      const cy = gy * T + T / 2;
+      if (obs.isBlocked(cx, cy, Math.floor(T * 3 / 8))) return false;
+    }
+    return true;
   }
 
   /**

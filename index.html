@@ -197,6 +197,11 @@
          产物运行时报 "Cannot read properties of undefined (reading '4')"）。
          决策：209 格的网格无需第三方寻路库，60 行手写 A* 性能秒过，永不抖动。 -->
   <script src="js/click-to-move.js" defer></script>
+  <!-- PHASE 21-B：障碍碰撞服务（IIFE 挂 window.ObstacleService）
+       加载 assets/data/obstacles-shuishe.json，提供像素级 isBlocked 查询。
+       由 village-scene.js 在 _canMoveTo 旁叠加调用；加载失败/未就绪时静默回退到 PHASE 20 行为。
+       defer + 在 main.js 之前 → 保证 main.js 启动时 window.ObstacleService 已就绪。 -->
+  <script src="js/services/obstacle-service.js?v=20260529" defer></script>
   <!-- 水社村美术底图模块（IIFE 挂 window.VillageBg）：
        由 village-scene.js 在 _renderMap 阶段调用，替换原程序化瓦片地形。
        defer + 在 main.js 之前 → 保证 main.js 启动时 window.VillageBg 已就绪。 -->

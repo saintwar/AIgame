@@ -347,6 +347,11 @@ class VillageScene {
     this.narrOpacity = 0;
     this.tutorialCardActive = false;
 
+    // PHASE 21-B：启动障碍碰撞服务（幂等；加载失败会静默回退到 PHASE 20 行为）
+    if (window.ObstacleService && typeof window.ObstacleService.init === 'function') {
+      window.ObstacleService.init();
+    }
+
     const introPlayed = window.Save?.get('flags.intro_played') || false;
     // 判定是否"从其他场景返回村庄"（如钓鱼场景回村）：
     //   场景已 enter 过一次后，此后 start() 都是返场，应保持游戏内状态、不要再弹标题。
@@ -1999,12 +2004,28 @@ class VillageScene {
       const txX = Math.floor(hbCx / T);
       const tyMinX = Math.floor((hbCy - hbHalf) / T);
       const tyMaxX = Math.floor((hbCy + hbHalf - 1) / T);
-      const canX = this._canMoveTo(txX, tyMinX) && this._canMoveTo(txX, tyMaxX);
+      // PHASE 21-B：tile 可走 + 像素 blockRect 不撞 → 才允许移动
+      // 关键：X 轴判定用 "只动 X 的下一帧位置"，Y 轴判定用 "只动 Y 的下一帧位置"，
+      //       与 tile 判定的"分轴可走"语义一致，避免在斜向遇到障碍时卡死
+      const obs = window.ObstacleService;
+      const _blocked = (obs && obs.isBlocked)
+        ? (cx, cy) => obs.isBlocked(cx, cy, hbHalf)
+        : () => false;
+
+      // X-only 下一帧中心（沿用 hbCy = nextPy + T*3/8 的 y 偏移规则，但 Y 分量取 player.py，不是 nextPy）
+      const xOnlyCx = nextPx;
+      const xOnlyCy = this.player.py + T * 3 / 8;
+      const blockX = _blocked(xOnlyCx, xOnlyCy);
+      const canX = this._canMoveTo(txX, tyMinX) && this._canMoveTo(txX, tyMaxX) && !blockX;
 
       const txMinY = Math.floor((hbCx - hbHalf) / T);
       const txMaxY = Math.floor((hbCx + hbHalf - 1) / T);
       const tyY = Math.floor(hbCy / T);
-      const canY = this._canMoveTo(txMinY, tyY) && this._canMoveTo(txMaxY, tyY);
+      // Y-only 下一帧中心
+      const yOnlyCx = this.player.px;
+      const yOnlyCy = nextPy + T * 3 / 8;
+      const blockY = _blocked(yOnlyCx, yOnlyCy);
+      const canY = this._canMoveTo(txMinY, tyY) && this._canMoveTo(txMaxY, tyY) && !blockY;
 
       if (canX) this.player.px = nextPx;
       if (canY) this.player.py = nextPy;
@@ -2198,6 +2219,11 @@ class VillageScene {
     // 调试信息
     if (this.debug) this._renderDebug();
     if (this.showGrid) this._renderGrid();
+
+    // PHASE 21-B：障碍可视化（控制台执行 window.DEBUG_OBSTACLES=true 即开）
+    if (window.DEBUG_OBSTACLES && window.ObstacleService && window.ObstacleService.drawDebug) {
+      window.ObstacleService.drawDebug(ctx, 0, 0);
+    }
 
     // 金币 HUD（常驻）
     if (this.coinHUD) this.coinHUD.render(ctx);
