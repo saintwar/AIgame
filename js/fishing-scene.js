@@ -16,6 +16,8 @@ import {
 } from './fish-storage.js';
 // PHASE 21-1 v3.0 W1 D1：三鱼群数据结构 + 游动 AI（占位渲染）
 import { FishGroupSystem } from './systems/fish-group-system.js';
+// PHASE 21-1 v3.0 W1 D2：三鱼群鼠标 hover 检测 + 信息浮窗（密度图 / 体型暗示）
+import { FishGroupHoverUI } from './systems/fish-group-hover-ui.js';
 
 // ============================================================
 // CONFIG
@@ -233,6 +235,14 @@ class FishingScene {
     //   挂载点对齐 Nina 指令书 §4：init 末尾 → new + init({canvas, ctx})
     this.fishGroupSystem = new FishGroupSystem();
     this.fishGroupSystem.init({ canvas: this.canvas, ctx: this.ctx });
+    // PHASE 21-1 v3.0 W1 D2：FishGroupHoverUI 鼠标 hover 检测 + 信息浮窗
+    //   依赖 fishGroupSystem 已 init（顺序不可调），canvas 监听器在 init 内绑定
+    this.fishGroupHoverUI = new FishGroupHoverUI();
+    this.fishGroupHoverUI.init({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      fishGroupSystem: this.fishGroupSystem,
+    });
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -278,6 +288,12 @@ class FishingScene {
     if (this.fishGroupSystem) {
       this.fishGroupSystem.dispose();
       this.fishGroupSystem = null;
+    }
+    // PHASE 21-1 v3.0 W1 D2：dispose hover UI（解绑 canvas mousemove/leave 监听器）
+    //   注意顺序：必须先于 canvas 被置 null，否则 dispose 内部 removeEventListener 失败
+    if (this.fishGroupHoverUI) {
+      this.fishGroupHoverUI.dispose();
+      this.fishGroupHoverUI = null;
     }
     this.canvas = null;
     this.ctx = null;
@@ -528,6 +544,10 @@ class FishingScene {
     //   故此处 dt * 1000 转回毫秒传入。
     if (this.fishGroupSystem) {
       this.fishGroupSystem.update(dt * 1000);
+    }
+    // PHASE 21-1 v3.0 W1 D2：推进 hover UI 状态机（同样毫秒单位）
+    if (this.fishGroupHoverUI) {
+      this.fishGroupHoverUI.update(dt * 1000);
     }
     this.input.clearPressed();
   }
@@ -1227,8 +1247,8 @@ class FishingScene {
       this.shakeCount++;
     }
     if (this.fsm.is('Playing')) this._renderPlaying();
-    // PHASE 21-1 v3.0 W1 D1：三鱼群占位渲染（背景之后、前景人物/钓竿之前；Playing 路径不画，避免搏斗时干扰焦点）
-    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting')) this._renderRodAndBob(floatOffset); if (this.fsm.is('Casting')) this._renderCasting(floatOffset); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming')) this._renderAimBar(); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
+    // PHASE 21-1 v3.0 W1 D1+D2：三鱼群占位渲染 + hover UI（背景之后、前景人物/钓竿之前；Playing 路径不画，避免搏斗时干扰焦点）
+    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting')) this._renderRodAndBob(floatOffset); if (this.fsm.is('Casting')) this._renderCasting(floatOffset); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming')) this._renderAimBar(); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
