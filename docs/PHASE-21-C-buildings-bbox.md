@@ -52,15 +52,20 @@ canvas 1280×720 左上角 (0,0)
 
 ### 4.1 Y-sort baseY 推荐值
 
-每个建筑应该至少切出**屋顶/上半部**作为 occluder（上层精灵），玩家走到建筑物前方时被压在 occluder 下层制造遮挡感。
+每个建筑应该至少切出**屋顶/上半部**作为 occluder（上层精灵），玩家走到建筑物正下方/后方时被压在 occluder 下层制造遮挡感。
 
 | key | 推荐 occluder baseY | 含义 |
 |---|---|---|
-| chief_house  | y = 320 | 屋顶下方 1/3 处。玩家 sprite 中心 y > 320 时压在屋顶下面 |
+| chief_house  | y = 320 | 屋顶下方 1/3 处。玩家 sprite y < 320 时被屋顶压在下面 |
 | fishing_shop | y = 320 | 同上 |
-| aming_house  | y = 510 | 屋顶下方 1/3 处。玩家走到房屋下半部分时被屋顶压住 |
+| aming_house  | y = 510 | 屋顶下方 1/3 处。玩家走到房屋后方时被屋顶压住 |
 | seven_eleven | y = 510 | 同上 |
 
+> 判定方向（俯视 2D 经典 Y-sort）：
+> - 屏幕 y 越小 = 越靠"后"，y 越大 = 越靠"前"
+> - **`sprite.py < baseY` 时画 occluder**（玩家在建筑后方/上半身位置 → 被屋顶压住）
+> - `sprite.py >= baseY` 时不画（玩家在建筑前方/脚下 → 正常叠在 building 之上）
+> 
 > baseY 是切图工具/导出元数据里要标的，不是图本身的视觉切割线。
 > 视觉切割线建议比 baseY **再低 20-40 像素**（让屋檐有遮挡纵深感）。
 
@@ -86,7 +91,7 @@ canvas 1280×720 左上角 (0,0)
 
 - 玩家 sprite 显示尺寸：64×64（像素）
 - 当前坐标系：玩家 `x, y` = 中心点像素坐标
-- Y-sort 判定建议：`if (player.y > occluder.baseY) draw_occluder_above_player`
+- Y-sort 判定建议：`if (player.y < occluder.baseY) draw_occluder_above_player`
 
 ## 6. 数据来源
 

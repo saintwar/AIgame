@@ -226,7 +226,7 @@
   <!-- 建筑美术贴图统一元数据表（IIFE 挂 window.BuildingsArt）：
        由 village-scene.js Layer3 建筑绘制阶段调用，替换各 drawXxx 程序化版本。
        支持村长家、渔具店等建筑独立声明渲染尺寸/锚点（参见 ART_SPEC v1.2 §2）。 -->
-  <script src="js/render/buildings-art.js?v=20260528" defer></script>
+  <script src="js/render/buildings-art.js?v=20260530b" defer></script>
   <!-- PHASE 16-9：main.js 改用 <script type="module" defer src="...">
 
 
@@ -238,6 +238,6 @@
        浏览器二次访问直接命中 304/缓存，并且 module 默认就是 defer 行为，
        与上面所有 defer 脚本一并按 DOM 顺序在 DOMContentLoaded 前执行完。
        如需强刷，把 ?v=20260524 升一位（与字体一致的版本号语义）。 -->
-  <script type="module" src="js/main.js?v=20260530a" defer></script>
+  <script type="module" src="js/main.js?v=20260530b" defer></script>
 </body>
 </html>

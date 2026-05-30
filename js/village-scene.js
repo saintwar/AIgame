@@ -2201,6 +2201,53 @@ class VillageScene {
     // Layer 6: 玩家
     this._renderPlayer();
 
+    // ─────────────────────────────────────────────────────────────
+    // Layer 6.4: 建筑 Y-sort occluder（PHASE 21-C）
+    //   - 范围：仅 4 栋可交互建筑（chief_house / fishing_shop /
+    //     aming_house / seven_eleven），其他元素（树/装饰物）不在 21-C 范围
+    //   - 逻辑：俯视 2D 经典 Y-sort
+    //       屏幕坐标 y 越小 = 越靠"后"（远离镜头），y 越大 = 越靠"前"
+    //       baseY 是建筑的"脚下/腰线"（屋顶下沿）：
+    //         sprite.py < baseY → sprite 在建筑后方/上半身位置 → 画 occluder
+    //                              在 sprite 之上，形成"被屋顶/招牌挡住"
+    //         sprite.py >= baseY → sprite 在建筑前方/脚下 → 不画 occluder，
+    //                              sprite 正常叠在 building 之上
+    //   - bbox 水平范围对应 docs/PHASE-21-C-buildings-bbox.md，与
+    //     buildings-art.js REGISTRY 的 anchorX + render.w 推算一致
+    //   - 仅当任意 sprite（玩家 / NPC）落在该 building 水平 bbox 内 且
+    //     py < baseY 时，才画该建筑 occluder
+    //   - 性能：4 栋 × O(N_sprites)，每帧最多绘 4 次 drawImage
+    //   - 红线遵守：不修改 occluder PNG、不加 alpha 渐变、判定仅作用于 4 栋
+    // ─────────────────────────────────────────────────────────────
+    {
+      const BAOcc = window.BuildingsArt;
+      if (BAOcc && typeof BAOcc.drawOccluder === 'function') {
+        const occBuildings = [
+          // {key, tileX, tileY, leftPx, rightPx}（leftPx/rightPx 为屏幕水平 bbox）
+          { key: 'chief_house',  tileX: chiefX, tileY: chiefY, leftPx: 210, rightPx: 430 },
+          { key: 'fishing_shop', tileX: shopX,  tileY: shopY,  leftPx: 693, rightPx: 972 },
+          { key: 'aming_house',  tileX: amingX, tileY: amingY, leftPx: 16,  rightPx: 241 },
+          { key: 'seven_eleven', tileX: sevenX, tileY: sevenY, leftPx: 902, rightPx: 1147 },
+        ];
+        const allSprites = [this.player, ...this.npcs];
+        for (const b of occBuildings) {
+          const baseY = BAOcc.getBaseY(b.key);
+          if (baseY == null) continue;
+          let need = false;
+          for (const sp of allSprites) {
+            // 水平在该 building bbox 内 + py 在 baseY 之上 → 标记需画 occluder
+            if (sp.py < baseY && sp.px >= b.leftPx && sp.px <= b.rightPx) {
+              need = true;
+              break;
+            }
+          }
+          if (need) {
+            BAOcc.drawOccluder(b.key, ctx, b.tileX, b.tileY);
+          }
+        }
+      }
+    }
+
     // Layer 6.5: 钓点波纹 ⭐ Phase B 新增（玩家之后）
     // PHASE Step2：钓点波纹中心改为像素硬值（与旧 T=64 时 (9*64+32, 9*64+32)/(10*64+32, 9*64+32) 完全一致）
     //   2 个圆心: (608, 608) 与 (672, 608)
