@@ -14,6 +14,8 @@ import {
   checkFishStorageCapacity,
   addFishToStorage as addFishToStorageStack
 } from './fish-storage.js';
+// PHASE 21-1 v3.0 W1 D1：三鱼群数据结构 + 游动 AI（占位渲染）
+import { FishGroupSystem } from './systems/fish-group-system.js';
 
 // ============================================================
 // CONFIG
@@ -227,6 +229,10 @@ class FishingScene {
     this._bindEvents();
     // 设置Canvas默认字体为腾讯体W7
     this.ctx.font = '16px "TencentSansW7", "PingFang SC", "Noto Sans SC", "Heiti SC", sans-serif';
+    // PHASE 21-1 v3.0 W1 D1：FishGroupSystem 三鱼群刷新 + wander AI
+    //   挂载点对齐 Nina 指令书 §4：init 末尾 → new + init({canvas, ctx})
+    this.fishGroupSystem = new FishGroupSystem();
+    this.fishGroupSystem.init({ canvas: this.canvas, ctx: this.ctx });
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -267,6 +273,11 @@ class FishingScene {
     }
     if (this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
+    }
+    // PHASE 21-1 v3.0 W1 D1：dispose 三鱼群系统（清空 fishes 数组，置空引用）
+    if (this.fishGroupSystem) {
+      this.fishGroupSystem.dispose();
+      this.fishGroupSystem = null;
     }
     this.canvas = null;
     this.ctx = null;
@@ -509,6 +520,14 @@ class FishingScene {
     //   水下拉扯（Casting/Waiting/BiteWindow/Reeling/Playing）+ 鱼获结算（Caught/Failed）期间隐藏
     if (window.fishingHUD) {
       window.fishingHUD.setVisible(s === 'Idle' || s === 'Aiming');
+    }
+    // PHASE 21-1 v3.0 W1 D1：驱动三鱼群 wander AI
+    //   单位换算：本场景 dt 单位为「秒」（line 496 / 1000 已换算），
+    //   FishGroupSystem.update 内部按「毫秒」工作（与 Nina 指令书 §3.4 / §5
+    //   骨架一致：turnCooldown=800~2000ms / dt/1000 积分），
+    //   故此处 dt * 1000 转回毫秒传入。
+    if (this.fishGroupSystem) {
+      this.fishGroupSystem.update(dt * 1000);
     }
     this.input.clearPressed();
   }
@@ -1208,7 +1227,8 @@ class FishingScene {
       this.shakeCount++;
     }
     if (this.fsm.is('Playing')) this._renderPlaying();
-    else { this._renderBackground(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting')) this._renderRodAndBob(floatOffset); if (this.fsm.is('Casting')) this._renderCasting(floatOffset); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming')) this._renderAimBar(); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
+    // PHASE 21-1 v3.0 W1 D1：三鱼群占位渲染（背景之后、前景人物/钓竿之前；Playing 路径不画，避免搏斗时干扰焦点）
+    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting')) this._renderRodAndBob(floatOffset); if (this.fsm.is('Casting')) this._renderCasting(floatOffset); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming')) this._renderAimBar(); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
