@@ -99,8 +99,13 @@ export class CastAimSystem {
     this.castFromPoint = null;    // 抛物线起点 {x,y}（阿明手柄末端）
     this.castToPoint = null;      // 抛物线终点（= 锁定的 landingPoint）
 
-    // 水域 polygon（占位；§3.5 兜底用 waterY 分界线）
-    this.waterY = 0;              // canvas y 大于此值视为水面
+    // 水域矩形（合法钓点范围；鼠标超出会吸附到边缘最近点）
+    this.waterRect = { left: 0, top: 0, right: 1280, bottom: 720 };
+    // 兼容旧字段：waterY = 水域上界（与 _snapToWater 兜底逻辑共用）
+    this.waterY = 0;
+
+    // 调试可视化（true 时渲染水域红框；发版前关闭）
+    this.debugDrawWaterRect = false;
 
     // 监听器引用（dispose 时解绑）
     this._mouseMoveHandler = null;
@@ -112,12 +117,26 @@ export class CastAimSystem {
    * @param {Object} opts
    * @param {HTMLCanvasElement} opts.canvas
    * @param {CanvasRenderingContext2D} opts.ctx
-   * @param {number} [opts.waterY=400] 水面分界线（canvas y 大于此视为水面，§3.5 兜底）
+   * @param {number} [opts.waterY] 水面上界（兼容旧 API；waterRect 缺失时使用）
+   * @param {{left,top,right,bottom}} [opts.waterRect] 合法钓点矩形范围
+   * @param {boolean} [opts.debugDrawWaterRect=false] 是否绘制水域红框（调试用）
    */
-  init({ canvas, ctx, waterY = 400 }) {
+  init({ canvas, ctx, waterY = 400, waterRect = null, debugDrawWaterRect = false }) {
     this.canvas = canvas;
     this.ctx = ctx;
     this.waterY = waterY;
+    this.debugDrawWaterRect = debugDrawWaterRect;
+    if (waterRect) {
+      this.waterRect = { ...waterRect };
+    } else {
+      // 兜底：用 waterY 构造一个全宽水域矩形
+      this.waterRect = {
+        left: 0,
+        top: waterY,
+        right: canvas?.width || 1280,
+        bottom: canvas?.height || 720,
+      };
+    }
 
     this._mouseMoveHandler = (e) => {
       if (!this.canvas) return;
@@ -230,19 +249,23 @@ export class CastAimSystem {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 内部：水域吸附（§3.5 兜底版本——按 waterY 分界线判定）
+  // 内部：水域吸附（按 waterRect 矩形 clamp，鼠标超出范围吸附到最近边）
   // ────────────────────────────────────────────────────────────
   _snapToWater(mx, my) {
+    const r = this.waterRect;
     if (mx < 0 || my < 0 || !this.canvas) {
-      // 没鼠标 → 用 canvas 中下默认（阿明站位前方水域）
-      return { x: (this.canvas?.width || 1280) * 0.6, y: (this.canvas?.height || 720) * 0.6 };
+      // 没鼠标 → 默认在水域中央偏前
+      return {
+        x: (r.left + r.right) / 2,
+        y: r.top + (r.bottom - r.top) * 0.5,
+      };
     }
+    // 矩形内夹紧
     let x = mx, y = my;
-    // 水域 = y >= waterY 的下方区域；水平在 canvas 内即可
-    if (y < this.waterY) y = this.waterY;
-    if (x < 0) x = 0;
-    if (this.canvas && x > this.canvas.width) x = this.canvas.width;
-    if (this.canvas && y > this.canvas.height) y = this.canvas.height;
+    if (x < r.left) x = r.left;
+    if (x > r.right) x = r.right;
+    if (y < r.top) y = r.top;
+    if (y > r.bottom) y = r.bottom;
     return { x, y };
   }
 
@@ -259,11 +282,42 @@ export class CastAimSystem {
   // ────────────────────────────────────────────────────────────
   render() {
     if (!this.ctx) return;
+    // 调试可视化：水域矩形红框（仅 debugDrawWaterRect=true 时绘制）
+    if (this.debugDrawWaterRect) this._renderWaterRectDebug();
     if (this.state === 'aiming') {
       this._renderLandingCircle();
     } else if (this.state === 'casting') {
       this._renderCastingBob();
     }
+  }
+
+  /**
+   * 调试可视化：水域矩形红框（4px 红色实线 stroke + 半透明红色填充）。
+   * 仅在 init 时传 debugDrawWaterRect=true 才显示，发版前关闭。
+   */
+  _renderWaterRectDebug() {
+    const ctx = this.ctx;
+    const r = this.waterRect;
+    if (!r) return;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    // 半透明红色填充
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
+    // 4px 红色实线边框
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = '#FF0000';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(r.left + 2, r.top + 2, r.right - r.left - 4, r.bottom - r.top - 4);
+    // 角标文字
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#FF0000';
+    ctx.font = "bold 14px 'TencentSansW7','PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`钓点范围 ${r.right - r.left}×${r.bottom - r.top}  (${r.left},${r.top})~(${r.right},${r.bottom})`, r.left + 8, r.top + 8);
+    ctx.restore();
   }
 
   /**

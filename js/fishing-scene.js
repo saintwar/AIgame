@@ -259,13 +259,15 @@ class FishingScene {
       fishGroupSystem: this.fishGroupSystem,
     });
     // PHASE 21-1 v3.0 W1 D4：CastAimSystem 蓄力 + 落点圈 + 抛物线
-    //   waterY 兜底 = canvas y * 0.45（水面分界线，§3.5 兜底；阿明站位约在 0.84 高度）
+    //   waterRect = 用户拍板红框范围（避开背景山水/UI 安全边界，仅水域内可钓）
     //   监听器在 init 内绑定，destroy 时解绑
     this.castAimSystem = new CastAimSystem();
     this.castAimSystem.init({
       canvas: this.canvas,
       ctx: this.ctx,
-      waterY: this.ch * 0.45,
+      waterY: this.ch * 0.45,        // 兜底（waterRect 缺失时使用）
+      waterRect: { left: 0, top: 380, right: this.cw, bottom: 665 },
+      debugDrawWaterRect: false,     // 调试可视化已关闭（验收通过）
     });
     // PHASE 21-1 v3.0 W1 D4：WaterSplashFX 浮漂触水水花 + 涟漪
     this.waterSplashFX = new WaterSplashFX();
@@ -2733,28 +2735,18 @@ class FishingScene {
 
   _renderIdleHint() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
-    // 屏幕正中间的提示框
-    const hintW = 400; const hintH = 120; const hintX = (cw - hintW) / 2; const hintY = (ch - hintH) / 2 + 60;
+    // 屏幕正中间的提示框（PHASE 21-1 D4：向上移动 120px，避开钓鱼场景下半部分）
+    const hintW = 400; const hintH = 120; const hintX = (cw - hintW) / 2; const hintY = (ch - hintH) / 2 - 60;
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.beginPath(); ctx.roundRect(hintX, hintY, hintW, hintH, 16); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2; ctx.stroke();
-    // "按住 " + "[空格]" + " 键抛竿" 分段渲染，[空格] 键高亮
-    const line1 = '按住 ';
-    const key1 = '[空格]';
-    const line1r = ' 键抛竿';
+    // PHASE 21-1 D4：第一行改为「移动鼠标到钓点，长按蓄力抛投」（单段金色，无高亮键）
     const baseY = hintY + hintH / 2 - 15;
-    ctx.font = "bold 36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
-    const l1W = ctx.measureText(line1).width;
-    const k1W = ctx.measureText(key1).width;
-    const l1rW = ctx.measureText(line1r).width;
-    const startX1 = cw / 2 - (l1W + k1W + l1rW) / 2;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#FFD700'; ctx.fillText(line1, startX1, baseY);
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-    ctx.strokeText(key1, startX1 + l1W, baseY);
-    ctx.fillStyle = '#00FF88'; ctx.fillText(key1, startX1 + l1W, baseY);
-    ctx.fillStyle = '#FFD700'; ctx.fillText(line1r, startX1 + l1W + k1W, baseY);
+    ctx.font = "bold 28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('移动鼠标到钓点，长按蓄力抛投', cw / 2, baseY);
     ctx.fillStyle = '#AAA'; ctx.font = "22px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
-    ctx.textAlign = 'center'; ctx.fillText('长按蓄力，松手抛竿', cw / 2, hintY + hintH / 2 + 30);
+    ctx.fillText('长按蓄力，松手抛竿', cw / 2, hintY + hintH / 2 + 30);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
