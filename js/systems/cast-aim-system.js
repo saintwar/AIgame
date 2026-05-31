@@ -48,8 +48,8 @@ const CHARGE_BAR_W = 48;
 const CHARGE_BAR_H = 4;
 const CHARGE_BAR_OFFSET_Y = 8;        // 阿明脚下偏上
 
-// 抛物线 —— Nina §3.6
-const CAST_DURATION_MS  = 500;
+// 抛物线 —— Nina §3.6 + 用户 v1.2 缩短一倍
+const CAST_DURATION_MS  = 250;        // 原 500ms，用户拍板缩短一倍提速节奏
 const CAST_ARC_PEAK_PX  = 30;         // 中点上方拱起像素
 
 /**

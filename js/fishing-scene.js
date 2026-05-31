@@ -21,6 +21,13 @@ import { FishGroupHoverUI } from './systems/fish-group-hover-ui.js';
 // PHASE 21-1 v3.0 W1 D4：抛竿落水阶段 — 蓄力 + 落点圈 + 抛物线 + 水花涟漪
 import { CastAimSystem } from './systems/cast-aim-system.js';
 import { WaterSplashFX } from './systems/water-splash-fx.js';
+// PHASE 21-C：钓鱼场景阿明 sprite（替代 _renderCharacterBody 程序化几何）
+import {
+  preloadAmingFishSheet,
+  isAmingFishSheetReady,
+  drawAmingFishFrame,
+  getAmingFishPoleTip,
+} from './render/aming-fish-sprite.js';
 
 // ============================================================
 // CONFIG
@@ -201,6 +208,11 @@ class FishingScene {
 
     // 初始化全局音频系统
     AudioSystem.init();
+
+    // PHASE 21-C：钓鱼场景阿明 sprite 预加载（懒加载 + 单次幂等）
+    //   - sheet=amin-fish-back-6f.png（576×160 单行 6 帧）
+    //   - 加载完成前 _renderCharacterBody 走原程序绘制兜底
+    preloadAmingFishSheet();
 
     // ── 主角头顶名字标签配置 ──────────────────────────────
     this.playerNameConfig = {
@@ -720,8 +732,23 @@ class FishingScene {
       //   原 if (aimPower >= powerOverload) → Failed 分支整段移除
       this.fsm.transition('Casting', 'release');
       this.castProgress = 0;
-      // 抛物线起点 = 阿明手柄末端（与原代码同步：characterX-75, characterY-15）
-      this.castFrom = { x: this.characterX - 75, y: this.characterY - 15 };
+      // PHASE 21-C v1.4：抛物线起点 = 程序化钓竿帧 2（甩出）的实际竿尖位置
+      //   - sprite 启用时：用 _renderRodAndBob 帧 2 配置反推竿尖
+      //     handX=20, handY=-40, rodAngle=-π*0.35, ROD_LENGTH=180
+      //   - sprite 未就绪：回退原硬编码 (characterX-75, characterY-15)
+      //   castFrom 必须与可视竿尖一致，否则飞行浮漂从空中"凭空蹦出"
+      let castFromComputed;
+      if (isAmingFishSheetReady()) {
+        const rodAngle = -Math.PI * 0.35;
+        const ROD_LENGTH = 180;
+        castFromComputed = {
+          x: this.characterX + 20 + Math.cos(rodAngle) * ROD_LENGTH,
+          y: this.characterY - 40 + Math.sin(rodAngle) * ROD_LENGTH,
+        };
+      } else {
+        castFromComputed = { x: this.characterX - 75, y: this.characterY - 15 };
+      }
+      this.castFrom = castFromComputed;
       // 抛物线终点 = CastAimSystem 锁定的鼠标位置（替代原三档固定 dist）
       const landingPoint = this.castAimSystem
         ? this.castAimSystem.confirmCast(this.castFrom)
@@ -1385,7 +1412,7 @@ class FishingScene {
     //   - 旧 _renderAimBar / _renderCasting 不再调用（视觉由 CastAimSystem 接管）
     //   - 浮漂渲染条件加 _castingWaitingSplash：涟漪期画静止浮漂，飞行期不画（避免重叠）
     //   - waterSplashFX.render 在浮漂层之后调用，覆盖在浮漂上方
-    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting') || this._castingWaitingSplash) this._renderRodAndBob(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
+    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderRodAndBob(floatOffset); this._renderCharacterBody(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
@@ -1826,6 +1853,24 @@ class FishingScene {
   }
 
   _renderCharacterBody(floatOffset) {
+    // PHASE 21-C：sprite 优先（amin-fish-back-6f.png 6 帧），未就绪回退原程序绘制
+    //   - sprite 内部已含右手持竿，因此 _renderRightHand 在 sprite 启用时整个跳过
+    //   - sprite 不需做 ctx.scale(-1, 1) 翻转（spec.notes 注明"原生背面帧"）
+    //   - 锚点 (48, 158) = 脚底中央
+    //   - footY 计算：v2.0 的 this.characterY 实际是腰部锚点（程序化绘制中
+    //     鞋底在 characterY + 42），所以 sprite 脚底应对齐 characterY + 42
+    //     才能与浮台顶面 platformY 对齐（platformY = characterY + 42 = ch-75）
+    //   - floatOffset 由 sprite 模块内部叠加（与浮台漂浮兼容）
+    if (isAmingFishSheetReady()) {
+      const frameIdx = this._getAmingFishFrameIdx();
+      const footY = this.characterY + 42;
+      drawAmingFishFrame(this.ctx, this.characterX, footY, frameIdx, floatOffset);
+      return;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 兜底：原程序化几何绘制（v2.0 风格，sprite 加载失败时启用）
+    // ─────────────────────────────────────────────────────────────
     const ctx = this.ctx; const x = this.characterX; const y = this.characterY + floatOffset;
     ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1);
     const headRadius = 21; const bodyWidth = 39; const bodyHeight = 54; const legHeight = 36; const footSize = 15;
@@ -1848,7 +1893,36 @@ class FishingScene {
     ctx.restore();
   }
 
+  // ────────────────────────────────────────────────────────────
+  // PHASE 21-C：FSM 状态 → 阿明 sprite 帧索引映射（用户拍板 v1.3）
+  //   ──────────────────────────────────────────────────────────
+  //   Idle               → 帧 3（站立）← v1.3 调整
+  //   Aiming             → 帧 1（蓄力）
+  //   Casting            → 帧 2（甩出）
+  //   Waiting            → 帧 3(收手)
+  //   BiteWindow         → 帧 4（收手 - 继续等，鱼咬钩瞬间）
+  //   Reeling/Playing    → 帧 0（站立持竿，提竿/搏斗）
+  //   Caught             → 帧 0（站立持竿，捕获定格）
+  //   Failed             → 帧 0（回到站立）
+  //   ──────────────────────────────────────────────────────────
+  //   注：用户根据线上实际视觉效果调整，以游戏内表现为准
+  // ────────────────────────────────────────────────────────────
+  _getAmingFishFrameIdx() {
+    if (this.fsm.is('Idle')) return 3;
+    if (this.fsm.is('Aiming')) return 1;
+    if (this.fsm.is('Casting')) return 2;
+    if (this.fsm.is('Waiting')) return 3;
+    if (this.fsm.is('BiteWindow')) return 4;
+    if (this.fsm.is('Reeling') || this.fsm.is('Playing')) return 0;
+    if (this.fsm.is('Caught')) return 0;
+    if (this.fsm.is('Failed')) return 0;
+    return 0;
+  }
+
   _renderRightHand(floatOffset) {
+    // PHASE 21-C：sprite 已含右手持竿姿势 → sprite 启用时整个跳过本函数
+    //   sprite 加载失败时回退原绘制（兜底）
+    if (isAmingFishSheetReady()) return;
     const ctx = this.ctx; const x = this.characterX; const y = this.characterY + floatOffset;
     const bodyWidth = 39;
     ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1);
@@ -1889,27 +1963,57 @@ class FishingScene {
   }
 
   _renderRodAndBob(floatOffset = 0) {
-    const ctx = this.ctx; const ROD_LENGTH = 180; const ROD_ANGLE = -Math.PI / 4;
+    const ctx = this.ctx; const ROD_LENGTH = 180;
     const bodyWidth = 39;
-    // 使用与角色相同的翻转坐标系，确保鱼竿和右手位置完全一致
     const x = this.characterX; const y = this.characterY + floatOffset;
-    ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1);
-    // 右手骨骼节点位置（与 _renderRightHand 一致）
-    const handX = bodyWidth / 2 + 15; const handY = -42 + 36;
+    // PHASE 21-C：sprite 启用时不翻转坐标系（背面视角玩家右手在屏幕右侧）
+    const useSprite = isAmingFishSheetReady();
+    ctx.save(); ctx.translate(x, y);
+    if (!useSprite) ctx.scale(-1, 1);
+    // ──────────────────────────────────────────────────────────
+    // PHASE 21-C v1.4：按 sprite 帧动态调整钓竿握持点 + 竿身角度
+    //   每帧右手位置不同，钓竿握把必须跟随；同时角度按动作语义切换：
+    //     帧 1 蓄力：手举高在头部右上 → handY 上移；竿朝正上方
+    //     帧 2 甩出：手前伸朝右      → handX 右移；竿朝右上方
+    //     帧 0/3/4/5：默认站立持竿姿态 → handX=12, handY=-6, 竿斜 -π/4
+    //   v2.0 程序化模式（sprite 未就绪）保持原值
+    // ──────────────────────────────────────────────────────────
+    let handX, handY, rodAngle;
+    if (useSprite) {
+      const frameIdx = this._getAmingFishFrameIdx ? this._getAmingFishFrameIdx() : 3;
+      switch (frameIdx) {
+        case 1:  // 蓄力：手在头顶右上方，竿朝正上偏左（-π*0.75）
+          handX = 27; handY = -62; rodAngle = -Math.PI * 0.75;
+          break;
+        case 2:  // 甩出：手前伸右侧，竿朝右上方
+          handX = 20; handY = -40; rodAngle = -Math.PI * 0.35;
+          break;
+        default: // 站立持竿（帧 0/3/4/5）
+          handX = 12; handY = -6; rodAngle = -Math.PI / 4;
+      }
+    } else {
+      // v2.0 程序化：右手骨骼节点（与 _renderRightHand 一致）
+      handX = bodyWidth / 2 + 15;
+      handY = -42 + 36;
+      rodAngle = -Math.PI / 4;
+    }
     ctx.save(); ctx.translate(handX, handY); ctx.rotate(-0.5);
-    // 鱼竿从手部位置向上倾斜45°
-    ctx.rotate(ROD_ANGLE + 0.5);
+    // 鱼竿从手部位置斜伸出（角度按帧动态变化）
+    ctx.rotate(rodAngle + 0.5);
     const gradient = ctx.createLinearGradient(0, 0, ROD_LENGTH, 0); gradient.addColorStop(0, '#5D4037'); gradient.addColorStop(0.4, '#A1887F'); gradient.addColorStop(1, '#BCAAA4');
     ctx.fillStyle = gradient; ctx.fillRect(0, -4, 37, 8); ctx.fillRect(37, -3, 52, 6); ctx.fillRect(89, -2, 45, 4); ctx.fillRect(134, -1.5, 46, 3);
     ctx.fillStyle = '#78909C'; [45, 97, 142].forEach(pos => { ctx.beginPath(); ctx.arc(pos, 0, pos === 45 ? 4.5 : pos === 97 ? 3.75 : 3, 0, Math.PI * 2); ctx.fill(); });
     ctx.restore();
     // 鱼线：计算竿尖在世界坐标中的位置
-    const rodTipLocalX = handX + Math.cos(ROD_ANGLE) * ROD_LENGTH;
-    const rodTipLocalY = handY + Math.sin(ROD_ANGLE) * ROD_LENGTH;
-    // 翻转坐标系转换回屏幕坐标
-    const tipX = x - rodTipLocalX;
+    const rodTipLocalX = handX + Math.cos(rodAngle) * ROD_LENGTH;
+    const rodTipLocalY = handY + Math.sin(rodAngle) * ROD_LENGTH;
+    // sprite 模式不翻转 → 直接相加；v2.0 翻转模式 → 减
+    const tipX = useSprite ? (x + rodTipLocalX) : (x - rodTipLocalX);
     const tipY = y + rodTipLocalY;
-    ctx.restore(); // 结束翻转坐标系
+    ctx.restore(); // 结束坐标系
+    // PHASE 21-C v1.4：Casting 飞行期（_castingWaitingSplash=false）由 CastAimSystem
+    //   接管画飞行中的浮漂+鱼线，本函数仅画甩出帧的钓竿不画鱼线/浮漂
+    if (this.fsm.is('Casting') && !this._castingWaitingSplash) return;
     ctx.strokeStyle = 'rgba(100,100,100,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tipX, tipY); const midX = (tipX + this.bobX) / 2; ctx.quadraticCurveTo(midX, Math.min(tipY, this.bobY) - 45, this.bobX, this.bobY); ctx.stroke();
     this._drawPixelBob(this.bobX, this.bobY);
   }
