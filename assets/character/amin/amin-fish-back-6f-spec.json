@@ -1,0 +1,133 @@
+{
+  "source_image": "amin-fish-back-6f.png",
+  "source_size": [
+    576,
+    160
+  ],
+  "row_directions": [
+    "up_fishing"
+  ],
+  "frames_per_row": 6,
+  "canvas": {
+    "w": 96,
+    "h": 160,
+    "anchor_x": 48,
+    "anchor_y": 158
+  },
+  "frames": [
+    {
+      "index": 0,
+      "src": [
+        0,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": null,
+      "duration_ms": 120
+    },
+    {
+      "index": 1,
+      "src": [
+        96,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": null,
+      "duration_ms": 120
+    },
+    {
+      "index": 2,
+      "src": [
+        192,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": [
+        54,
+        12
+      ],
+      "duration_ms": 120
+    },
+    {
+      "index": 3,
+      "src": [
+        288,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": [
+        79,
+        11
+      ],
+      "duration_ms": 120
+    },
+    {
+      "index": 4,
+      "src": [
+        384,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": null,
+      "duration_ms": 120
+    },
+    {
+      "index": 5,
+      "src": [
+        480,
+        0,
+        96,
+        160
+      ],
+      "anchor": [
+        48,
+        158
+      ],
+      "pole_tip_estimate": null,
+      "duration_ms": 120
+    }
+  ],
+  "frame_interval_ms": 120,
+  "loop_mode": "once_then_hold",
+  "hold_frame_index": 5,
+  "palette_ref": "amin-palette.png",
+  "palette_size": 24,
+  "design_target_height": 150,
+  "scale_factor": 0.1553,
+  "scale_factor_note": "按主体 bbox 高度 966px → 150px（非原料 1344px 整高）",
+  "raw_source": "amin-fish-back-6f-raw.png (3168x1344)",
+  "notes": [
+    "甩竿动作序列：站立→举竿→蓄力→甩出→收手→站立持竿",
+    "对齐目标：钓鱼场景 _renderCharacterBody 整体高度 150px（含帽含鞋）",
+    "锚点 (48,158) = 脚底中央，对接 characterX/characterY",
+    "竿尖坐标 pole_tip_estimate 供 PHASE 21-1 战斗UI层渲染鱼线/鱼漂（近似值，需 PHASE 21-1 复核）",
+    "未保留原料图脚下阴影（与 walk 表风格统一）",
+    "原生背面帧，接入时不需做 scale(-1) 翻转",
+    "loop_mode=once_then_hold：完整播放后定格在第 5 帧（收手持竿），等待战斗UI接管"
+  ]
+}
