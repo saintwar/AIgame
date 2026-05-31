@@ -1,8 +1,15 @@
 // ============================================================
-// FishGroupHoverUI — PHASE 21-1 v3.0 W1 D2
+// FishGroupHoverUI — PHASE 21-1 v3.0 W1 D2 + D3
 // ------------------------------------------------------------
 // 在三鱼群上叠加鼠标 hover 检测 + 信息浮窗，让玩家"猎人式观察"
 // 密度差异和大鱼存在暗示。
+//
+// D2：hover 命中 + 0.5s 延迟 + 140×64 浮窗 + 边缘翻转 + 三行内容（密度图 + ⚠ 占位）
+// D3：第三行体型暗示从写死 ⚠ 升级为按"群内最大体型"动态显示：
+//        small  → ⚠   红 #FF6B6B
+//        medium → ⚠⚠  黄 #FFD93D
+//        large  → ★   绿 #6BCB77
+//     最大体型判定顺序：large > medium > small（任一 large 存在即返回 large）
 //
 // 行为规则（来自 Nina §4 §5）：
 //   - 鼠标进入鱼群 wanderArea bbox → 立即金色描边高亮（呼吸 0.6~1.0）
@@ -10,20 +17,33 @@
 //   - 鼠标移出 / 切换鱼群 → 立即重置（高亮消失，浮窗消失，计时归零）
 //   - 浮窗位置：鼠标右下 +12，溢出 canvas 时翻到左/上侧
 //
-// 浮窗内容三行：
-//   ① 「鱼群密度」label（#B0BEC5）
-//   ② 5 字符密度图（红/黄/绿，对应 fishCount 1/3/5 档）
-//   ③ 体型暗示 ⚠（D2 占位，#FFB347；D3 接体型分级后再细化）
-//
 // 单位约定：与 D1 一致
 //   - update(dt) 内部 dt 单位毫秒（fishing-scene._update 挂载点 *1000 转换）
 //
 // 红线（来自 Nina §0）：
-//   - 不修改 fish-group-system.js 任何字段（仅只读访问 fishGroups）
+//   - 不修改 fish-group-system.js 任何字段（仅只读访问 fishGroups 与 fishes[].size）
 //   - 不动 v2.0 锁定（HookTimingJudge / BattleStateSystem / rise / fall）
 //   - 不动 assets/ui/battle/ / obstacles / village
-//   - 不接 21-2 体型 3 档（D3 才做）
+//   - D2 浮窗金边/140×64/边缘翻转逻辑保持不变
 // ============================================================
+
+// PHASE 21-1 D3：体型暗示视觉表（与 fish-group-system.js 的 size 字段值对齐）
+const SIZE_HINT = {
+  small:  { text: '⚠',  color: '#FF6B6B' },
+  medium: { text: '⚠⚠', color: '#FFD93D' },
+  large:  { text: '★',  color: '#6BCB77' },
+};
+
+/**
+ * 取该鱼群内"最大体型"代表（large > medium > small）。
+ * 用于 hover 浮窗第三行体型暗示，呼应 D3 反向概率表的"密度低暗藏大鱼"叙事。
+ */
+function _getMaxSize(fishes) {
+  if (!fishes || fishes.length === 0) return 'small';
+  if (fishes.some(f => f.size === 'large'))  return 'large';
+  if (fishes.some(f => f.size === 'medium')) return 'medium';
+  return 'small';
+}
 
 export class FishGroupHoverUI {
   constructor() {
@@ -244,9 +264,10 @@ export class FishGroupHoverUI {
     ctx.fillStyle = color;
     ctx.fillText(dots, padX, lineY2);
 
-    // 第 3 行：体型暗示（D2 占位）
-    ctx.fillStyle = '#FFB347';
-    ctx.fillText('⚠', padX, lineY3);
+    // 第 3 行：体型暗示（D3 升级 — 按群内最大体型显示 ⚠/⚠⚠/★）
+    const hint = SIZE_HINT[_getMaxSize(g.fishes)] || SIZE_HINT.small;
+    ctx.fillStyle = hint.color;
+    ctx.fillText(hint.text, padX, lineY3);
   }
 
   /**
