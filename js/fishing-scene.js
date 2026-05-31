@@ -18,6 +18,9 @@ import {
 import { FishGroupSystem } from './systems/fish-group-system.js';
 // PHASE 21-1 v3.0 W1 D2：三鱼群鼠标 hover 检测 + 信息浮窗（密度图 / 体型暗示）
 import { FishGroupHoverUI } from './systems/fish-group-hover-ui.js';
+// PHASE 21-1 v3.0 W1 D4：抛竿落水阶段 — 蓄力 + 落点圈 + 抛物线 + 水花涟漪
+import { CastAimSystem } from './systems/cast-aim-system.js';
+import { WaterSplashFX } from './systems/water-splash-fx.js';
 
 // ============================================================
 // CONFIG
@@ -243,6 +246,40 @@ class FishingScene {
       ctx: this.ctx,
       fishGroupSystem: this.fishGroupSystem,
     });
+    // PHASE 21-1 v3.0 W1 D4：CastAimSystem 蓄力 + 落点圈 + 抛物线
+    //   waterY 兜底 = canvas y * 0.45（水面分界线，§3.5 兜底；阿明站位约在 0.84 高度）
+    //   监听器在 init 内绑定，destroy 时解绑
+    this.castAimSystem = new CastAimSystem();
+    this.castAimSystem.init({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      waterY: this.ch * 0.45,
+    });
+    // PHASE 21-1 v3.0 W1 D4：WaterSplashFX 浮漂触水水花 + 涟漪
+    this.waterSplashFX = new WaterSplashFX();
+    this.waterSplashFX.init({ canvas: this.canvas, ctx: this.ctx });
+    // D4 内部 flag：抛物线已完成、当前等待涟漪结束（由 _updateCasting 管理）
+    this._castingWaitingSplash = false;
+
+    // PHASE 21-1 D4 扩展：鼠标左键长按蓄力 + 松开抛竿（与空格键并行）
+    //   - mousedown(button=0) → _tryStartAimingByInput('mouse')
+    //   - mouseup(button=0)   → 标记 _aimingMouseHeld=false，由 _updateAiming 检测释放
+    //   - 监听器引用保存便于 destroy 解绑（避免重入残留）
+    this._mouseDownAimHandler = (e) => {
+      if (e.button !== 0) return;
+      // 必须在 Idle 才允许鼠标启动蓄力（避免 Aiming/Casting 期间鼠标点击意外重入）
+      if (!this.fsm.is('Idle')) return;
+      this._tryStartAimingByInput('mouse');
+    };
+    this._mouseUpAimHandler = (e) => {
+      if (e.button !== 0) return;
+      // 仅在确实是鼠标启动的蓄力期才响应（避免误清空格启动的 hold flag）
+      if (!this.fsm.is('Aiming')) return;
+      if (!this._aimingMouseStartedFlag) return;
+      this._aimingMouseHeld = false;
+    };
+    this.canvas.addEventListener('mousedown', this._mouseDownAimHandler);
+    this.canvas.addEventListener('mouseup', this._mouseUpAimHandler);
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -295,6 +332,27 @@ class FishingScene {
       this.fishGroupHoverUI.dispose();
       this.fishGroupHoverUI = null;
     }
+    // PHASE 21-1 v3.0 W1 D4：dispose CastAimSystem（解绑 mousemove/leave）+ WaterSplashFX
+    if (this.castAimSystem) {
+      this.castAimSystem.dispose();
+      this.castAimSystem = null;
+    }
+    if (this.waterSplashFX) {
+      this.waterSplashFX.dispose();
+      this.waterSplashFX = null;
+    }
+    // PHASE 21-1 D4 扩展：解绑 canvas mousedown/mouseup 蓄力监听器
+    if (this.canvas && this._mouseDownAimHandler) {
+      this.canvas.removeEventListener('mousedown', this._mouseDownAimHandler);
+    }
+    if (this.canvas && this._mouseUpAimHandler) {
+      this.canvas.removeEventListener('mouseup', this._mouseUpAimHandler);
+    }
+    this._mouseDownAimHandler = null;
+    this._mouseUpAimHandler = null;
+    this._castingWaitingSplash = false;
+    this._aimingMouseHeld = false;
+    this._aimingMouseStartedFlag = false;
     this.canvas = null;
     this.ctx = null;
   }
@@ -549,58 +607,86 @@ class FishingScene {
     if (this.fishGroupHoverUI) {
       this.fishGroupHoverUI.update(dt * 1000);
     }
+    // PHASE 21-1 v3.0 W1 D4：推进 CastAimSystem + WaterSplashFX（毫秒单位）
+    //   - CastAimSystem 内部计时基于 performance.now()，update 主要做未来扩展占位
+    //   - WaterSplashFX 同样基于 performance.now()，update 内做超时检查
+    if (this.castAimSystem) this.castAimSystem.update(dt * 1000);
+    if (this.waterSplashFX) this.waterSplashFX.update(dt * 1000);
     this.input.clearPressed();
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // PHASE 21-1 D4 扩展：进入蓄力的统一入口（空格键 / 鼠标左键 共享）
+  // ------------------------------------------------------------
+  // 来源：
+  //   - 'space'：来自 _updateIdle 的键盘事件
+  //   - 'mouse'：来自 canvas 'mousedown' 监听（左键 button=0）
+  // 共享的前置检查（任何来源都必须经过）：
+  //   1) 体力 ≥ 2（PHASE 17 仗1）
+  //   2) 鱼饵库存 > 0（PHASE 16-6 仗4，含自动切回 basic_bait + 缺饵双轨提示）
+  // 状态机转换：fsm.transition('Aiming') + castAimSystem.beginAim()
+  // hold flag 设置：
+  //   - source='space' → _aimingSpaceHeld=true / _aimingMouseHeld=false
+  //   - source='mouse' → _aimingMouseHeld=true / _aimingSpaceHeld=false
+  // 返回值：true=已进入 Aiming，false=被前置检查阻断
+  // ────────────────────────────────────────────────────────────
+  _tryStartAimingByInput(source) {
+    // 必须 Idle 状态才能开始蓄力（Aiming/Casting/Waiting 等都不允许重入）
+    if (!this.fsm.is('Idle')) return false;
+
+    // 体力校验
+    if (window.StaminaSystem && window.StaminaSystem.getCurrent() < 2) {
+      if (typeof window.showFloatText === 'function') {
+        window.showFloatText('💤 体力不足，去秀兰阿姨家休息吧', { color: '#FF6B6B' });
+      }
+      return false;
+    }
+
+    // 鱼饵校验（含自动切回 basic_bait + 缺饵双轨提示）
+    const equippedBaitId = window.Save?.get('player.equippedBait') || 'basic_bait';
+    const baitCount = window.inventory ? window.inventory.getCount(equippedBaitId) : 1;
+    if (baitCount <= 0) {
+      const basicCount = window.inventory ? window.inventory.getCount('basic_bait') : 0;
+      if (equippedBaitId !== 'basic_bait' && basicCount > 0) {
+        window.Save?.set('player.equippedBait', 'basic_bait');
+        window.Save?.commit();
+        this._showCodexToast('🪱 鱼饵不足，已切换为初级鱼饵');
+        if (window.fishingHUD) window.fishingHUD.render();
+      } else {
+        const linShifuOpen = questSystem.getStatus('q003') === 'completed';
+        const tip = linShifuOpen
+          ? '❌ 鱼饵不足！可去林师傅店购买，或到农田/花圃挖蚯蚓'
+          : '❌ 鱼饵不足！去农田或花圃挖蚯蚓吧';
+        this._showCodexToast(tip);
+        return false;
+      }
+    }
+
+    // 通过 → 进入 Aiming
+    console.log('🎣 进入蓄力状态（来源：' + source + '）');
+    this.fsm.transition('Aiming', 'press ' + source);
+    this.aimPower = 0;
+    if (this.castAimSystem) this.castAimSystem.beginAim();
+
+    // hold flag：记录是哪个键启动的，_updateAiming 据此检测释放
+    if (source === 'space') {
+      this._aimingSpaceHeld = this.input.isDown('space');
+      this._aimingMouseHeld = false;
+      this._aimingMouseStartedFlag = false;
+    } else {
+      this._aimingSpaceHeld = false;
+      this._aimingMouseHeld = true;
+      this._aimingMouseStartedFlag = true;
+    }
+    return true;
   }
 
   _updateIdle() {
     // 使用 wasPressed 检测按键按下的瞬间，进入蓄力状态
     const spacePressed = this.input.wasPressed('space');
-    console.log('[_updateIdle] Space键wasPressed:', spacePressed);
-    console.log('[_updateIdle] 当前keys状态:', JSON.stringify(this.input.keys));
-    
     if (spacePressed) {
-      // PHASE 17 仗1：抛竿前体力校验（最高优先级 — 比鱼饵校验更靠前）
-      //   规则：体力 < 2 时阻断抛竿（"成功入篓"会扣 2，连一次成功都顶不到的话直接禁出竿）
-      //   兜底：StaminaSystem 不存在时（理论不会，仗1 已挂全局）静默放行，避免阻断游戏
-      if (window.StaminaSystem && window.StaminaSystem.getCurrent() < 2) {
-        if (typeof window.showFloatText === 'function') {
-          window.showFloatText('💤 体力不足，去秀兰阿姨家休息吧', { color: '#FF6B6B' });
-        }
-        return;
-      }
-
-      // PHASE 16-6 仗4：抛竿前校验当前鱼饵库存（严格消耗策略）
-      //   当前鱼饵 = 0 时阻断抛竿（不允许"无饵钓鱼"）
-      //   若当前装备的不是 basic_bait 且 basic_bait>0 → 自动切回 basic_bait 再抛
-      const equippedBaitId = window.Save?.get('player.equippedBait') || 'basic_bait';
-      const baitCount = window.inventory ? window.inventory.getCount(equippedBaitId) : 1;
-      if (baitCount <= 0) {
-        const basicCount = window.inventory ? window.inventory.getCount('basic_bait') : 0;
-        if (equippedBaitId !== 'basic_bait' && basicCount > 0) {
-          // 当前稀有鱼饵用光 → 切回 basic_bait 再继续
-          window.Save?.set('player.equippedBait', 'basic_bait');
-          window.Save?.commit();
-          this._showCodexToast('🪱 鱼饵不足，已切换为初级鱼饵');
-          if (window.fishingHUD) window.fishingHUD.render();
-        } else {
-          // PHASE 18 仗7：鱼饵不足提示·双轨化
-          //   林师傅店要 q003 完成后才开放（村庄场景 lin_shop 对话同条件，line 1628）
-          //   q001/q002 阶段引导玩家去林师傅店会扑空 → 改为引导挖蚯蚓玩法（PHASE 18 仗3）
-          //   q003 完成后保留店铺路径，但同时提示挖蚯蚓作为免费替代
-          const linShifuOpen = questSystem.getStatus('q003') === 'completed';
-          const tip = linShifuOpen
-            ? '❌ 鱼饵不足！可去林师傅店购买，或到农田/花圃挖蚯蚓'
-            : '❌ 鱼饵不足！去农田或花圃挖蚯蚓吧';
-          this._showCodexToast(tip);
-          return;
-        }
-      }
-      console.log('🎣 进入蓄力状态');
-      this.fsm.transition('Aiming', 'press Space'); 
-      this.aimPower = 0;
-      // 记录进入蓄力状态时，Space键是否处于按下状态（用于检测释放）
-      this._aimingSpaceHeld = this.input.isDown('space');
-      console.log('[_updateIdle] 记录蓄力按键状态: _aimingSpaceHeld=', this._aimingSpaceHeld);
+      // PHASE 21-1 D4 扩展：抽到 helper 与鼠标左键共享体力/鱼饵检查 + transition 逻辑
+      this._tryStartAimingByInput('space');
     }
     if (this.input.wasPressed('b')) this._toggleAtlas();
 
@@ -613,44 +699,92 @@ class FishingScene {
   }
 
   _updateAiming(dt) {
-    const cfg = CONFIG.aiming; const period = cfg.chargeCycle * 2;
-    const cycleTime = (performance.now() / 1000) % period;
-    this.aimPower = cycleTime < cfg.chargeCycle ? (cycleTime / cfg.chargeCycle) * 100 : 100 - ((cycleTime - cfg.chargeCycle) / cfg.chargeCycle) * 100;
-    this.aimPower = Math.round(this.aimPower);
-    
-    const spaceDown = this.input.isDown('space');
-    console.log('[_updateAiming] aimPower:', this.aimPower, 'spaceDown:', spaceDown);
-    console.log('[_updateAiming] _aimingSpaceHeld:', this._aimingSpaceHeld);
-    
-    // 检测释放：进入时按了Space，现在松开了
+    // PHASE 21-1 D4：蓄力机制由 CastAimSystem 接管（按住时间累加 0.3~1.5s）
+    //   原 v2.0 三角振荡 aimPower 保留为 0~100 显示用映射，不再决定落点距离
+    //   落点 = CastAimSystem 内部锁定的鼠标位置（confirmCast 返回）
+    if (this.castAimSystem) {
+      this.aimPower = Math.round(this.castAimSystem.getChargeBarRatio() * 100);
+    }
+
+    // PHASE 21-1 D4 扩展：检测释放（空格 OR 鼠标，任一）
+    //   - 空格启动 → spaceReleased = _aimingSpaceHeld && !isDown('space')
+    //   - 鼠标启动 → mouseReleased = _aimingMouseHeld 之前为 true 现在 mouseup 设为 false
+    //   两者任一为 true → 释放抛竿；混用按键启动以最先释放的那个为准
     const spaceReleased = this._aimingSpaceHeld && !this.input.isDown('space');
-    console.log('[_updateAiming] spaceReleased:', spaceReleased);
-    
-    if (spaceReleased) {
-      console.log('🎯 释放抛竿！蓄力:', this.aimPower);
-      if (this.aimPower >= cfg.powerOverload) { this.fsm.transition('Failed', 'overload'); this.failedReason = 'overload'; }
-      else {
-        this.fsm.transition('Casting', 'release'); this.castProgress = 0;
-        this.castFrom = { x: this.characterX - 75, y: this.characterY - 15 };
-        let dist = this.aimPower <= cfg.powerWeakMax ? 225 : this.aimPower <= cfg.powerMidMax ? 420 : 630;
-        this.castTo = { x: Math.min(this.cw - 90, this.castFrom.x + dist), y: this.ch * 0.55 + 60 };
-        this.bobX = this.castTo.x; this.bobY = this.castTo.y;
-        AudioSystem.playCast();
-      }
+    const mouseReleased = this._aimingMouseStartedFlag && !this._aimingMouseHeld;
+    const released = spaceReleased || mouseReleased;
+
+    if (released) {
+      console.log('🎯 释放抛竿！蓄力:', this.aimPower, '来源:', spaceReleased ? 'space' : 'mouse');
+      // PHASE 21-1 D4：砍掉过蓄力惩罚（红线 §6-8「不实现过蓄力惩罚」）
+      //   原 if (aimPower >= powerOverload) → Failed 分支整段移除
+      this.fsm.transition('Casting', 'release');
+      this.castProgress = 0;
+      // 抛物线起点 = 阿明手柄末端（与原代码同步：characterX-75, characterY-15）
+      this.castFrom = { x: this.characterX - 75, y: this.characterY - 15 };
+      // 抛物线终点 = CastAimSystem 锁定的鼠标位置（替代原三档固定 dist）
+      const landingPoint = this.castAimSystem
+        ? this.castAimSystem.confirmCast(this.castFrom)
+        : { x: Math.min(this.cw - 90, this.castFrom.x + 420), y: this.ch * 0.55 + 60 };
+      this.castTo = { x: landingPoint.x, y: landingPoint.y };
+      // bobX/bobY 在抛物线动画完成时再 commit；动画期间由 CastAimSystem.getCurrentBobPos() 提供
+      AudioSystem.playCast();
       this._aimingEHeld = false;
       this._aimingSpaceHeld = false;
+      this._aimingMouseHeld = false;
+      this._aimingMouseStartedFlag = false;
     }
     if (this.input.wasPressed('q') || this.input.wasPressed('escape')) {
       this.fsm.transition('Idle', 'cancel');
+      // PHASE 21-1 D4：通知 CastAimSystem 取消蓄力（落点圈/进度条立即消失）
+      if (this.castAimSystem) this.castAimSystem.cancelAim();
       this._aimingEHeld = false;
       this._aimingSpaceHeld = false;
+      this._aimingMouseHeld = false;
+      this._aimingMouseStartedFlag = false;
     }
   }
 
   _updateCasting(dt) {
-    const cfg = CONFIG.casting; const totalDuration = cfg.windUpDuration + cfg.swingDuration + cfg.releaseDuration;
-    this.castProgress += dt / totalDuration;
-    if (this.castProgress >= 1) { this.fsm.transition('Waiting', 'cast complete'); this.waitTimer = 0; this.currentFish = null; this.fishShadow = null; }
+    // PHASE 21-1 D4：Casting 阶段两段式 —— 抛物线 0.5s → 触发水花涟漪 1.2s → Waiting
+    //   原 v2.0：castProgress 累加到 1（共 0.8s）→ 直接 Waiting
+    //   新 v3.0：castAimSystem.isCastComplete() 触发水花，等 waterSplashFX 1.2s 完成才 Waiting
+    if (!this._castingWaitingSplash) {
+      // 阶段 A：抛物线进行中（CastAimSystem 内部计时）
+      if (this.castAimSystem && this.castAimSystem.isCastComplete()) {
+        // 抛物线动画完成 → commit landingPoint 到 bobX/bobY → 触发水花涟漪
+        if (this.castTo) {
+          this.bobX = this.castTo.x;
+          this.bobY = this.castTo.y;
+        }
+        if (this.waterSplashFX && this.castTo) {
+          this.waterSplashFX.trigger(this.castTo.x, this.castTo.y);
+        }
+        if (this.castAimSystem) this.castAimSystem.finishCast();
+        this._castingWaitingSplash = true;
+      }
+    } else {
+      // 阶段 B：水花涟漪进行中（1.2s），动画结束才转 Waiting
+      if (!this.waterSplashFX || !this.waterSplashFX.isActive()) {
+        this.fsm.transition('Waiting', 'cast complete');
+        this.waitTimer = 0;
+        this.currentFish = null;
+        this.fishShadow = null;
+        this._castingWaitingSplash = false;
+      }
+    }
+    // 兼容兜底：castAimSystem 缺席时退回原 v2.0 castProgress 行为
+    if (!this.castAimSystem) {
+      const cfg = CONFIG.casting;
+      const totalDuration = cfg.windUpDuration + cfg.swingDuration + cfg.releaseDuration;
+      this.castProgress += dt / totalDuration;
+      if (this.castProgress >= 1) {
+        this.fsm.transition('Waiting', 'cast complete');
+        this.waitTimer = 0;
+        this.currentFish = null;
+        this.fishShadow = null;
+      }
+    }
   }
 
   _updateWaiting(dt) {
@@ -1247,8 +1381,11 @@ class FishingScene {
       this.shakeCount++;
     }
     if (this.fsm.is('Playing')) this._renderPlaying();
-    // PHASE 21-1 v3.0 W1 D1+D2：三鱼群占位渲染 + hover UI（背景之后、前景人物/钓竿之前；Playing 路径不画，避免搏斗时干扰焦点）
-    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting')) this._renderRodAndBob(floatOffset); if (this.fsm.is('Casting')) this._renderCasting(floatOffset); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming')) this._renderAimBar(); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
+    // PHASE 21-1 v3.0 W1 D1+D2+D4：三鱼群占位渲染 + hover UI + CastAimSystem + WaterSplashFX
+    //   - 旧 _renderAimBar / _renderCasting 不再调用（视觉由 CastAimSystem 接管）
+    //   - 浮漂渲染条件加 _castingWaitingSplash：涟漪期画静止浮漂，飞行期不画（避免重叠）
+    //   - waterSplashFX.render 在浮漂层之后调用，覆盖在浮漂上方
+    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderCharacterBody(floatOffset); if (!this.fsm.is('Casting') || this._castingWaitingSplash) this._renderRodAndBob(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
