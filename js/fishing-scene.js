@@ -9,6 +9,7 @@ import { FishBehavior } from './data/fish-behavior.js';
 import { BAIT_EFFECTS, getBaitEffect } from './data/bait-effects.js';
 import baitHUD from './ui/bait-hud.js';
 import { drawFishingBg } from './render/fishing-bg.js';
+import { drawFishingDownBg, preloadFishingDownBg } from './render/fishing-down-bg.js';
 // PHASE 16-6 仗1：鱼篓双轨同步工具
 import {
   checkFishStorageCapacity,
@@ -214,6 +215,10 @@ class FishingScene {
     //   - 加载完成前 _renderCharacterBody 走原程序绘制兜底
     preloadAmingFishSheet();
 
+    // PHASE 21-1：搏斗水下底图预加载（fishing-down-bg.jpg 1280×720）
+    //   - 加载完成前 _renderPlaying Layer 0 走原程序化深水渐变兜底
+    preloadFishingDownBg();
+
     // ── 主角头顶名字标签配置 ──────────────────────────────
     this.playerNameConfig = {
       enabled: true,
@@ -294,6 +299,41 @@ class FishingScene {
     };
     this.canvas.addEventListener('mousedown', this._mouseDownAimHandler);
     this.canvas.addEventListener('mouseup', this._mouseUpAimHandler);
+
+    // PHASE 21-1 hotfix（2026-06-01）：水下搏斗 Playing 阶段，鼠标左键也能"按住拉鱼"，与空格键完全等价。
+    //   - 仅 Playing 状态下置位 _playingMouseHeld（避免与 Aiming 蓄力的鼠标流冲突）
+    //   - mouseup / mouseleave / blur / 状态切走 都要清掉，防止"虚按"
+    this._playingMouseHeld = false;
+    this._playingMouseDownHandler = (e) => {
+      if (e.button !== 0) return;
+      if (!this.fsm.is('Playing')) return;
+      this._playingMouseHeld = true;
+    };
+    this._playingMouseUpHandler = (e) => {
+      if (e.button !== 0) return;
+      this._playingMouseHeld = false;
+    };
+    this._playingMouseLeaveHandler = () => { this._playingMouseHeld = false; };
+    this.canvas.addEventListener('mousedown', this._playingMouseDownHandler);
+    // mouseup / mouseleave 需挂到 window，否则用户在 canvas 外松开会卡住"按住"状态
+    window.addEventListener('mouseup', this._playingMouseUpHandler);
+    this.canvas.addEventListener('mouseleave', this._playingMouseLeaveHandler);
+
+    // PHASE 21-1 hotfix（2026-06-01b）：BiteWindow / Caught / Failed 三个"等待玩家点空格"状态，
+    //   鼠标左键单击与空格键等价。
+    //   - 仅在上述 3 个状态下，mousedown(button=0) 置 _confirmClick=true
+    //   - 由各状态 update 逻辑里"消费"该 flag（消费后立刻清零）
+    //   - 不与 Aiming(_mouseDownAimHandler) / Playing(_playingMouseDownHandler) 冲突
+    //     原因：那两个 handler 内部各自有 fsm.is(...) 守卫，置位的是不同字段
+    this._confirmClick = false;
+    this._confirmMouseDownHandler = (e) => {
+      if (e.button !== 0) return;
+      const s = this.fsm.state;
+      if (s === 'BiteWindow' || s === 'Caught' || s === 'Failed') {
+        this._confirmClick = true;
+      }
+    };
+    this.canvas.addEventListener('mousedown', this._confirmMouseDownHandler);
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -364,6 +404,26 @@ class FishingScene {
     }
     this._mouseDownAimHandler = null;
     this._mouseUpAimHandler = null;
+    // PHASE 21-1 hotfix：解绑 Playing 阶段鼠标拉鱼监听
+    if (this.canvas && this._playingMouseDownHandler) {
+      this.canvas.removeEventListener('mousedown', this._playingMouseDownHandler);
+    }
+    if (this._playingMouseUpHandler) {
+      window.removeEventListener('mouseup', this._playingMouseUpHandler);
+    }
+    if (this.canvas && this._playingMouseLeaveHandler) {
+      this.canvas.removeEventListener('mouseleave', this._playingMouseLeaveHandler);
+    }
+    this._playingMouseDownHandler = null;
+    this._playingMouseUpHandler = null;
+    this._playingMouseLeaveHandler = null;
+    this._playingMouseHeld = false;
+    // PHASE 21-1 hotfix（2026-06-01b）：解绑 BiteWindow/Caught/Failed 单击确认监听
+    if (this.canvas && this._confirmMouseDownHandler) {
+      this.canvas.removeEventListener('mousedown', this._confirmMouseDownHandler);
+    }
+    this._confirmMouseDownHandler = null;
+    this._confirmClick = false;
     this._castingWaitingSplash = false;
     this._aimingMouseHeld = false;
     this._aimingMouseStartedFlag = false;
@@ -971,7 +1031,12 @@ class FishingScene {
 
   _updateBiteWindow(dt) {
     this.biteWindowTimer -= dt;
-    if (this.input.wasPressed('space')) { this._startReeling(); return; }
+    // hotfix（2026-06-01b）：空格 OR 鼠标左键单击 都能提竿
+    if (this.input.wasPressed('space') || this._confirmClick) {
+      this._confirmClick = false;
+      this._startReeling();
+      return;
+    }
     if (this.biteWindowTimer <= 0) { this.fsm.transition('Failed', 'timeout'); this.failedReason = 'timeout'; }
   }
 
@@ -979,6 +1044,8 @@ class FishingScene {
 
   _initPlayingState() {
     const cfg = CONFIG.playing; const w = this.cw; const h = this.ch;
+    // hotfix（2026-06-01）：进入 Playing 强制清零鼠标按住标记，避免上一回合残留
+    this._playingMouseHeld = false;
     // 纯水下视角：鱼线从右上角（模拟从水面伸入）
     this.lineStartX = w - 60; this.lineStartY = 30;
     // 鱼初始位置在水下中央区域
@@ -1054,7 +1121,9 @@ class FishingScene {
   }
 
   _updatePlaying(dt) {
-    const cfg = CONFIG.playing; const holdingSpace = this.input.isDown(' ') || this.input.isDown('space'); const w = this.cw; const h = this.ch;
+    // PHASE 21-1 hotfix（2026-06-01）：鼠标左键与空格键并行，按住任意一个都视为"拉线"
+    //   变量名沿用 holdingSpace 是为了下方所有原有判断零改动；含义已扩展为"按住拉杆键（空格 OR 鼠标左键）"
+    const cfg = CONFIG.playing; const holdingSpace = this.input.isDown(' ') || this.input.isDown('space') || this._playingMouseHeld; const w = this.cw; const h = this.ch;
     // 收线音效控制：按住空格时启动音效，松手停止
     if (holdingSpace) AudioSystem.startReelSound();
     else AudioSystem.stopReelSound();
@@ -1360,7 +1429,9 @@ class FishingScene {
     if (this.currentFish && this.currentFish.legendary) this.glowTimer += dt;
     if (this.caughtTimer >= CONFIG.caught.animationDuration && !this.showingFishInfo) this.showingFishInfo = true;
     // 按空格键确认后收回浮标，回到 Idle 重新开始抛投流程
-    if (this.showingFishInfo && this.input.wasPressed('space')) {
+    // hotfix（2026-06-01b）：空格 OR 鼠标左键单击 都能再次抛竿
+    if (this.showingFishInfo && (this.input.wasPressed('space') || this._confirmClick)) {
+      this._confirmClick = false;
       this._resetToIdle();
     }
   }
@@ -1374,8 +1445,10 @@ class FishingScene {
       this.failedMessageIndex = (this.failedMessageIndex + 1) % this.failedMessages.length;
     }
     // 按空格键确认后再次抛竿
-    if (this.input.wasPressed('space')) {
-      console.log('跑鱼后按空格键确认，再次抛竿');
+    // hotfix（2026-06-01b）：空格 OR 鼠标左键单击 都能确认跑鱼
+    if (this.input.wasPressed('space') || this._confirmClick) {
+      this._confirmClick = false;
+      console.log('跑鱼后按空格键/鼠标左键确认，再次抛竿');
       this.shakeCount = 0; // 重置震动计数
       if (this.failedReason === 'escape') this._resetToWaiting(); else this._resetToIdle();
       return;
@@ -2016,8 +2089,38 @@ class FishingScene {
     // PHASE 21-C v1.4：Casting 飞行期（_castingWaitingSplash=false）由 CastAimSystem
     //   接管画飞行中的浮漂+鱼线，本函数仅画甩出帧的钓竿不画鱼线/浮漂
     if (this.fsm.is('Casting') && !this._castingWaitingSplash) return;
-    ctx.strokeStyle = 'rgba(100,100,100,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tipX, tipY); const midX = (tipX + this.bobX) / 2; ctx.quadraticCurveTo(midX, Math.min(tipY, this.bobY) - 45, this.bobX, this.bobY); ctx.stroke();
-    this._drawPixelBob(this.bobX, this.bobY);
+
+    // hotfix（2026-06-01g）：Idle / Aiming 状态下浮漂应"挂在鱼竿尖"自然下垂，
+    //   而不是出现在水里。仅改绘制位置，不动 this.bobX/bobY 状态字段。
+    // hotfix（2026-06-01i）：新浮漂高 48 屏幕像素（半高 24），更圆润 22 宽
+    //   - Idle/Aiming：完整浮漂挂在竿尖正下，鱼线短直线
+    //   - 落水状态：仅画上半 + 持续涟漪
+    let bobDrawX = this.bobX;
+    let bobDrawY = this.bobY;
+    const inIdleLikeState = this.fsm.is('Idle') || this.fsm.is('Aiming');
+    if (inIdleLikeState) {
+      bobDrawX = tipX;
+      bobDrawY = tipY + 22;  // 短鱼线 ~3px + 缩小后浮漂半高 ~19px（48*0.8/2≈19）
+    }
+
+    ctx.strokeStyle = 'rgba(100,100,100,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tipX, tipY);
+    if (inIdleLikeState) {
+      // 短鱼线：竿尖直接连到浮漂（不再用大弧线弯到水面）
+      ctx.lineTo(bobDrawX, bobDrawY);
+    } else {
+      const midX = (tipX + bobDrawX) / 2;
+      ctx.quadraticCurveTo(midX, Math.min(tipY, bobDrawY) - 45, bobDrawX, bobDrawY);
+    }
+    ctx.stroke();
+
+    if (inIdleLikeState) {
+      // 完整浮漂挂在竿尖
+      this._drawPixelBob(bobDrawX, bobDrawY, false);
+    } else {
+      // 落水状态：先画涟漪（在浮漂下方），再画浮漂上半（覆盖在涟漪上）
+      this._drawBobRipples(bobDrawX, bobDrawY);
+      this._drawPixelBob(bobDrawX, bobDrawY, true);
+    }
   }
 
   _renderFishShadow() {
@@ -2033,22 +2136,28 @@ class FishingScene {
   _renderParticles() { this.particles.draw(this.ctx); }
 
   _renderPlaying() {
-    const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const cfg = CONFIG.playing; const holdingSpace = this.input.isDown(' ') || this.input.isDown('space');
+    // hotfix（2026-06-01k）：渲染层 holdingSpace 与 _updatePlaying 保持一致
+    //   含义已扩展为"按住拉杆键（空格 OR 鼠标左键）"，鱼朝向/挣扎动画都依赖此 flag
+    const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const cfg = CONFIG.playing; const holdingSpace = this.input.isDown(' ') || this.input.isDown('space') || this._playingMouseHeld;
 
     // ═══════════════════════════════════════════════════════════
     //  100% 纯水下视角 — 日月潭深潜场景
     // ═══════════════════════════════════════════════════════════
 
-    // ── Layer 0: 深水渐变（从上方微光到深处暗蓝）────────────
+    // ── Layer 0: 水下底图（PHASE 21-1：fishing-down-bg.jpg 替代程序化深水渐变）────
+    //   优先用美术贴图；未就绪/失败时回退原程序化深水渐变
+    //   其他特效层（dither / 焦散 / 光柱 / 波纹 / 鱼影 / 拉力条等）保持叠加
     ctx.imageSmoothingEnabled = false; // PHASE 13-3：水下场景全程禁用反锯齿
-    const waterGrad = ctx.createLinearGradient(0, 0, 0, ch);
-    waterGrad.addColorStop(0, '#2A7A90');     // 顶部：水面透光区
-    waterGrad.addColorStop(0.08, '#1E6880');   // 浅层
-    waterGrad.addColorStop(0.25, '#155568');   // 中浅层
-    waterGrad.addColorStop(0.50, '#0E4252');   // 中层
-    waterGrad.addColorStop(0.75, '#0A3242');   // 深层
-    waterGrad.addColorStop(1, '#061E2E');       // 最深处
-    ctx.fillStyle = waterGrad; ctx.fillRect(0, 0, cw, ch);
+    if (!drawFishingDownBg(ctx, cw, ch)) {
+      const waterGrad = ctx.createLinearGradient(0, 0, 0, ch);
+      waterGrad.addColorStop(0, '#2A7A90');     // 顶部：水面透光区
+      waterGrad.addColorStop(0.08, '#1E6880');   // 浅层
+      waterGrad.addColorStop(0.25, '#155568');   // 中浅层
+      waterGrad.addColorStop(0.50, '#0E4252');   // 中层
+      waterGrad.addColorStop(0.75, '#0A3242');   // 深层
+      waterGrad.addColorStop(1, '#061E2E');       // 最深处
+      ctx.fillStyle = waterGrad; ctx.fillRect(0, 0, cw, ch);
+    }
 
     // ── Layer 0.5: Bayer 4x4 dither 颗粒（PHASE 13-3，缓存一次 / 不每帧重算）──
     ctx.drawImage(this._getUnderwaterDither(), 0, 0);
@@ -2174,8 +2283,17 @@ class FishingScene {
       ctx.fillRect(keyX + 2, keyY + keyH - 5, keyW - 4, 3);
       // 键帽文字
       this._drawPixelText('空格键', cw / 2, keyY + keyH / 2, 16, '#1A1A2E', null);
-      // "拉回鱼" 米白
-      this._drawPixelText('拉回鱼', cw / 2 + 130, textY, 22, '#FFF4D6', '#5C3A1E');
+
+      // hotfix（2026-06-01l）：空格键帽右侧增加"鼠标左键"像素图标
+      //   形状：16×20 像素鼠标外轮廓 + 左侧上半高亮（左键被点亮）
+      //   位置：紧邻空格键帽右侧 8px，与键帽垂直居中
+      const mouseW = 16, mouseH = 20;
+      const mouseX = keyX + keyW + 8;
+      const mouseY = textY - mouseH / 2;
+      this._drawMouseLeftIcon(mouseX, mouseY, mouseW, mouseH);
+
+      // "拉回鱼" 米白（hotfix：原 cw/2+130 → cw/2+150 给鼠标图标腾位）
+      this._drawPixelText('拉回鱼', cw / 2 + 150, textY, 22, '#FFF4D6', '#5C3A1E');
     }
     if (!holdingSpace) {
       this._drawPixelText('提示：不拉鱼线时鱼会恢复体力！', cw / 2, hintY + hintH / 2 + 22, 13, '#5DBB63', '#1A1A2E');
@@ -2297,7 +2415,8 @@ class FishingScene {
     // PHASE 13-4：屏幕底部操作提示（拉力 + QTE 双手协作）
     {
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      this._drawPixelText('按住 [空格] 控制拉力 · 方向键 QTE 攻击鱼', cw / 2, ch - 20, 14, '#FFF4D6', '#1A1A2E');
+      // hotfix（2026-06-01l）：扩展为"按住[空格]或[鼠标左键]控制拉力在绿色范围"
+      this._drawPixelText('按住 [空格] 或 [鼠标左键] 控制拉力在绿色范围', cw / 2, ch - 20, 14, '#FFF4D6', '#1A1A2E');
       ctx.textAlign = 'left';
     }
     this._renderHUD();
@@ -2441,28 +2560,179 @@ class FishingScene {
       px(10, 5, 2, 1, '#1A1A2E');
     }
   }
-  _drawPixelBob(cx, cy) {
-    // 8x8 像素浮漂：上 4 行白、下 4 行红，外圈 1px 深色描边
+  _drawPixelBob(cx, cy, clipBottom = false) {
+    // hotfix（2026-06-01h）：电子发光锥形浮漂
+    // hotfix（2026-06-01i）：宽度 +4px、整体更圆润
+    // hotfix（2026-06-01j）：整体体积 ×0.8（缩小 20%）—— 用 ctx.scale 外层缩放
+    //   栅格 11×24（cx,cy = 浮漂几何中心，水线 = cy）
+    //   像素栅格 s=2，外层 scale=0.8 → 浮漂屏幕尺寸 17.6×38.4（约 18×38）
+    //   row 0-11 = 上半部分（出水），row 12-23 = 下半部分（入水）
+    //   clipBottom=true 时仅绘制 row 0-11（落水后）
     const ctx = this.ctx;
-    const s = 2; // 单像素 = 2 屏幕像素
-    const x0 = Math.floor(cx - 4 * s);
-    const y0 = Math.floor(cy - 4 * s);
+    const s = 2;
+    const SCALE = 0.8;
+    const W = 11;
+    const H = 24;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(SCALE, SCALE);
+    // scale 之后内部坐标以浮漂中心为原点
+    const x0 = -(W / 2) * s;
+    const y0 = -(H / 2) * s;
     const px = (col, row, w, h, color) => {
+      if (clipBottom && row >= H / 2) return;  // 水线下不画
       ctx.fillStyle = color;
       ctx.fillRect(x0 + col * s, y0 + row * s, w * s, h * s);
     };
-    // 外圈描边（八边形近似圆）
-    px(2, 0, 4, 1, '#1A1A2E'); px(1, 1, 1, 1, '#1A1A2E'); px(6, 1, 1, 1, '#1A1A2E');
-    px(0, 2, 1, 4, '#1A1A2E'); px(7, 2, 1, 4, '#1A1A2E');
-    px(1, 6, 1, 1, '#1A1A2E'); px(6, 6, 1, 1, '#1A1A2E'); px(2, 7, 4, 1, '#1A1A2E');
-    // 上半白
-    px(2, 1, 4, 1, '#FFF4D6'); px(1, 2, 6, 2, '#FFF4D6');
-    // 下半红
-    px(1, 4, 6, 2, '#E76F51'); px(2, 6, 4, 1, '#E76F51');
-    // 中线分隔（深红）
-    px(1, 3, 6, 1, '#C75543');
-    // 高光
-    px(2, 1, 1, 1, '#FFFFFF'); px(3, 1, 1, 1, '#FFFFFF');
+
+    const OUT     = '#1A1A2E';
+    const GLOW    = '#FFF8C8';
+    const GLOW_HI = '#FFFFFF';
+    const RED     = '#E63946';
+    const RED_DK  = '#B11D2C';
+    const YEL     = '#FFD43B';
+    const YEL_DK  = '#D4A41A';
+    const WHT     = '#FFF4D6';
+    const WHT_DK  = '#C8B89A';
+
+    // ── 发光头（row 0-1，圆润顶端） ─────────────
+    px(5, 0, 1, 1, GLOW_HI);
+    px(4, 1, 3, 1, GLOW);
+
+    // ── 红锥头（row 2-5，圆润渐扩） ──────────────
+    // row 2: 5 宽（窄锥头）
+    px(3, 2, 1, 1, OUT); px(7, 2, 1, 1, OUT);
+    px(4, 2, 1, 1, RED_DK); px(5, 2, 1, 1, RED); px(6, 2, 1, 1, RED_DK);
+    // row 3: 7 宽
+    px(2, 3, 1, 1, OUT); px(8, 3, 1, 1, OUT);
+    px(3, 3, 1, 1, RED_DK); px(4, 3, 1, 1, RED); px(5, 3, 1, 1, RED); px(6, 3, 1, 1, RED); px(7, 3, 1, 1, RED_DK);
+    // row 4: 9 宽（红锥最宽）
+    px(1, 4, 1, 1, OUT); px(9, 4, 1, 1, OUT);
+    px(2, 4, 1, 1, RED_DK); px(3, 4, 1, 1, RED); px(4, 4, 1, 1, RED); px(5, 4, 1, 1, RED); px(6, 4, 1, 1, RED); px(7, 4, 1, 1, RED); px(8, 4, 1, 1, RED_DK);
+    // row 5: 9 宽（继续红）
+    px(1, 5, 1, 1, OUT); px(9, 5, 1, 1, OUT);
+    px(2, 5, 1, 1, RED); px(3, 5, 6, 1, RED); px(8, 5, 1, 1, RED_DK);
+
+    // ── 黑色细环（row 6） ──────────────────────
+    px(1, 6, 9, 1, OUT);
+
+    // ── 黄环宽段（row 7-8，最宽 11） ─────────────
+    px(0, 7, 1, 1, OUT); px(10, 7, 1, 1, OUT);
+    px(1, 7, 1, 1, YEL_DK); px(2, 7, 7, 1, YEL); px(9, 7, 1, 1, YEL_DK);
+    px(0, 8, 1, 1, OUT); px(10, 8, 1, 1, OUT);
+    px(1, 8, 1, 1, YEL_DK); px(2, 8, 1, 1, YEL); px(3, 8, 5, 1, YEL); px(8, 8, 1, 1, YEL); px(9, 8, 1, 1, YEL_DK);
+
+    // ── 黑色细环（row 9） ──────────────────────
+    px(0, 9, 11, 1, OUT);
+
+    // ── 白色身上半（row 10-11，露出水面） ────────
+    // row 10: 9 宽
+    px(1, 10, 1, 1, OUT); px(9, 10, 1, 1, OUT);
+    px(2, 10, 1, 1, '#FFFFFF'); px(3, 10, 5, 1, WHT); px(8, 10, 1, 1, WHT_DK);
+    // row 11: 9 宽（接水线）
+    px(1, 11, 1, 1, OUT); px(9, 11, 1, 1, OUT);
+    px(2, 11, 1, 1, WHT); px(3, 11, 5, 1, WHT); px(8, 11, 1, 1, WHT_DK);
+
+    // ── 以下为下半部分（落水时被裁掉） ───────────
+    // row 12-17: 9 宽继续白身
+    for (let r = 12; r <= 17; r++) {
+      px(1, r, 1, 1, OUT); px(9, r, 1, 1, OUT);
+      px(2, r, 1, 1, WHT); px(3, r, 5, 1, WHT_DK); px(8, r, 1, 1, WHT_DK);
+    }
+    // row 18-19: 7 宽（向尾收）
+    for (let r = 18; r <= 19; r++) {
+      px(2, r, 1, 1, OUT); px(8, r, 1, 1, OUT);
+      px(3, r, 5, 1, WHT_DK);
+    }
+    // row 20: 5 宽
+    px(3, 20, 1, 1, OUT); px(7, 20, 1, 1, OUT);
+    px(4, 20, 3, 1, WHT_DK);
+
+    // ── 黑色尾杆（row 21-23） ──────────────────
+    px(5, 21, 1, 1, OUT);
+    px(5, 22, 1, 1, OUT);
+    px(5, 23, 1, 1, OUT);
+
+    ctx.restore();
+  }
+
+  /**
+   * 浮漂落水后的持续涟漪（3 层错峰扩散）
+   * @param {number} cx 浮漂水线中心 X
+   * @param {number} cy 浮漂水线中心 Y（即水面 y）
+   */
+  _drawBobRipples(cx, cy) {
+    // hotfix（2026-06-01i）：参考 dusk-effects.drawFishingRipple，但去掉鱼影且调整半径以匹配新浮漂宽度
+    const ctx = this.ctx;
+    const time = (this.time || 0) * 1000;
+    const animPhase = (time % 1400) / 1400;  // 1.4s 一周期
+    ctx.save();
+    for (let layer = 0; layer < 3; layer++) {
+      const offset = (animPhase + layer / 3) % 1;
+      // hotfix（2026-06-01j）：浮漂缩 0.8，涟漪范围同步缩 → 11 → 37
+      const r = 11 + offset * 26;
+      const a = (1 - offset) * 0.5;          // 透明度从 0.5 → 0
+      ctx.strokeStyle = `rgba(192, 229, 240, ${a})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // 椭圆涟漪（俯视近圆，接近水面方向稍扁）
+      ctx.ellipse(cx, cy, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 像素风"鼠标左键被点击"小图标
+   * - 鼠标外轮廓：圆角矩形（深色描边 + 浅色内填）
+   * - 中线分隔左右键
+   * - 左键上半高亮（被点击）+ 黄色"咔哒"小光斑
+   * @param {number} x 左上角 X
+   * @param {number} y 左上角 Y
+   * @param {number} w 宽（推荐 16）
+   * @param {number} h 高（推荐 20）
+   */
+  _drawMouseLeftIcon(x, y, w, h) {
+    const ctx = this.ctx;
+    ctx.save();
+
+    // 主体外轮廓（圆角矩形 — 用 roundRect 兼容性已 OK）
+    ctx.fillStyle = '#1A1A2E';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 4);
+    ctx.fill();
+
+    // 内层（米白）
+    ctx.fillStyle = '#FFE9B0';
+    ctx.beginPath();
+    ctx.roundRect(x + 1.5, y + 1.5, w - 3, h - 3, 3);
+    ctx.fill();
+
+    // 中线（左右键分隔）
+    ctx.fillStyle = '#1A1A2E';
+    ctx.fillRect(x + w / 2 - 0.5, y + 2, 1, h * 0.4);
+
+    // 左键被点击高亮（左半上部，霓虹绿）
+    ctx.fillStyle = '#5DBB63';
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + 2);
+    ctx.lineTo(x + w / 2 - 1, y + 2);
+    ctx.lineTo(x + w / 2 - 1, y + h * 0.42);
+    ctx.lineTo(x + 2, y + h * 0.42);
+    ctx.closePath();
+    ctx.fill();
+
+    // 顶部连接线（从鼠标顶端伸出 2px 小杆）
+    ctx.fillStyle = '#1A1A2E';
+    ctx.fillRect(x + w / 2 - 0.5, y - 2, 1, 2);
+
+    // 点击波纹（顶部小光斑，提示"按下"）
+    ctx.fillStyle = '#FFE066';
+    ctx.fillRect(x + w / 2 - 4, y - 5, 1, 1);
+    ctx.fillRect(x + w / 2 + 3, y - 5, 1, 1);
+    ctx.fillRect(x + w / 2 - 1, y - 7, 2, 1);
+
+    ctx.restore();
   }
 
   _renderHUD() {
@@ -2620,11 +2890,12 @@ class FishingScene {
     ctx.fillStyle = 'rgba(255,0,0,0.2)'; ctx.fillRect(0, 0, cw, ch);
     if (Math.sin(Date.now() / 100) > 0) {
       ctx.fillStyle = '#FF0000'; ctx.font = "bold 180px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', cw / 2, ch / 2);
-      // "快按" 和 "提竿!" 分段渲染，[空格] 键使用高对比度霓虹绿
+      // hotfix（2026-06-01b）：扩展为 [空格]或[鼠标左键]，整段键名绿色高亮
+      // "快按" 和 "提竿!" 分段渲染
       const baseY = ch / 2 + 120;
       ctx.font = "42px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
       const leftText = '快按 ';
-      const keyText = '[空格]';
+      const keyText = '[空格]或[鼠标左键]';
       const rightText = ' 提竿!';
       const leftW = ctx.measureText(leftText).width;
       const keyW = ctx.measureText(keyText).width;
@@ -2682,8 +2953,8 @@ class FishingScene {
     ctx.fillStyle = '#FFF'; ctx.font = "36px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(fish.name, cw / 2, boxY + 90);
     ctx.fillStyle = '#4FC3F7'; ctx.font = "28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText('★'.repeat(fish.rarity), cw / 2, boxY + 125);
     ctx.fillStyle = '#AAA'; ctx.font = "24px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(`尺寸: ${this.caughtFishSize}cm  价格: $${fish.price}`, cw / 2, boxY + 165);
-    // 按空格键再次抛竿提示
-    ctx.fillStyle = '#FFD700'; ctx.font = "bold 26px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText('按 [空格] 再次抛竿', cw / 2, boxY + 195); ctx.textAlign = 'left';
+    // 按空格键 / 鼠标左键 再次抛竿提示（hotfix 2026-06-01b）
+    ctx.fillStyle = '#FFD700'; ctx.font = "bold 26px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText('按 [空格] 或 [鼠标左键] 再次抛竿', cw / 2, boxY + 195); ctx.textAlign = 'left';
   }
 
   _renderFailed() {
@@ -2714,9 +2985,9 @@ class FishingScene {
     ctx.fillStyle = '#FFF'; ctx.font = "32px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     ctx.fillText(msg, cw / 2, panelY + 130);
     
-    // 确认提示：[空格] 键高亮
+    // 确认提示：[空格]或[鼠标左键] 整段高亮（hotfix 2026-06-01b）
     ctx.font = "bold 28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
-    const confirmLeft = '请按 '; const confirmKey = '[空格]'; const confirmRight = ' 确认';
+    const confirmLeft = '请按 '; const confirmKey = '[空格]或[鼠标左键]'; const confirmRight = ' 确认';
     const clW = ctx.measureText(confirmLeft).width;
     const ckW = ctx.measureText(confirmKey).width;
     const crW = ctx.measureText(confirmRight).width;

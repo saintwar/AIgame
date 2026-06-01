@@ -79,8 +79,12 @@ class ArrowGuide {
     const angle = Math.atan2(dy, dx);
     const bobY = Math.sin(this.bobPhase) * 4;
 
+    // hotfix（2026-06-01c）：阿明 sprite 改为脚底对齐 player 逻辑中心后，
+    //   sprite 视觉中心 X = player.px（旧偏右 16 已修），头顶 ≈ player.py - 24 → 头顶上方 21px = py - 45
+    // hotfix（2026-06-01d）：sprite 再上移 15 → 头顶 ≈ py-39，箭头 = py-39-21 = py-60
+    // hotfix（2026-06-01f）：sprite 再下移 7 → 头顶 ≈ py-32，箭头 = py-32-21 = py-53
     const arrowX = player.px;
-    const arrowY = player.py - 45 + bobY;
+    const arrowY = player.py - 53 + bobY;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
@@ -2845,7 +2849,11 @@ class VillageScene {
     if (dialogueSystem.isActive()) return;
     const cfg = this.playerNameConfig;
     if (!cfg || !cfg.enabled) return;
-    drawNameTag(this.ctx, this.player.px + 16, this.player.py - 18, cfg.text);
+    // hotfix（2026-06-01c）：阿明 sprite 改为"逻辑中心对齐脚底"（drawAming 调用减 16/24），
+    //   名字标签同步：X 从 px+16 → px（sprite 新中心）；Y 从 py-18 → py-42（py-24 sprite 顶 + 上方 18px）
+    // hotfix（2026-06-01d）：再上移 15px → py - 57
+    // hotfix（2026-06-01f）：再下移 7px → py - 50
+    drawNameTag(this.ctx, this.player.px, this.player.py - 50, cfg.text);
   }
 
   _renderPlayer() {
@@ -2859,7 +2867,13 @@ class VillageScene {
       && typeof window.ClickToMove.isWalking === 'function'
       && window.ClickToMove.isWalking());
     const isMoving = wasdMoving || clickMoving;
-    drawAming(ctx, this.player.px, this.player.py, this.player.direction, time, isMoving);
+    // hotfix（2026-06-01c）：让 sprite "脚底" 踩在玩家逻辑中心 (player.px, player.py + T*3/8) 上
+    //   - drawAming 内部脚底锚点 = (传入X + 16, 传入Y + 48)（aming-sprite.js LEGACY_FOOT_OFFSET）
+    //   - 想要脚底 = (player.px, player.py + 24) → 传入 (player.px - 16, player.py - 24)
+    //   - 仅改阿明，不动任何 NPC
+    // hotfix（2026-06-01d）：再上移 15px → 传入 Y = player.py - 39（脚底落到 player.py + 9）
+    // hotfix（2026-06-01f）：再下移 7px → 传入 Y = player.py - 32（脚底落到 player.py + 16）
+    drawAming(ctx, this.player.px - 16, this.player.py - 32, this.player.direction, time, isMoving);
     // Layer 6.2: 主角头顶名字标签（Billboard，最高层）
     this._renderPlayerNameTag();
   }
@@ -3526,21 +3540,11 @@ class VillageScene {
   // 昼夜时段飘字
   // ========================================================
   _getPhaseText(phase) {
-    // 四阶段流转：黎明 → 白天 → 黄昏 → 夜晚
-    if (phase < 0.05)  return '黎明破晓';
-    if (phase < 0.10)  return '晨曦微露';
-    if (phase < 0.15)  return '朝霞满天';
-    if (phase < 0.25)  return '旭日东升';
-    if (phase < 0.40)  return '晴空万里';
-    if (phase < 0.50)  return '日正当中';
-    if (phase < 0.55)  return '午后斜阳';
-    if (phase < 0.60)  return '黄昏降临';
-    if (phase < 0.65)  return '夕阳西下';
-    if (phase < 0.70)  return '暮色渐浓';
-    if (phase < 0.78)  return '华灯初上';
-    if (phase < 0.85)  return '夜幕低垂';
-    if (phase < 0.93)  return '星光满天';
-    return '黎明将至';
+    // 2026-06-01e：四阶段平均切分（每段 3 分钟，phase 占 0.25）
+    if (phase < 0.25) return '黎明破晓';
+    if (phase < 0.50) return '日正当中';
+    if (phase < 0.75) return '黄昏降临';
+    return '漫天星光';
   }
 
   _checkDayNightPhase() {
