@@ -1083,7 +1083,7 @@ class FishingScene {
     panel.innerHTML = `
       <h2 style="margin:0 0 16px;color:#FFD700;font-size:26px;">🎣 钓鱼技巧</h2>
       <p style="margin:0 0 12px;font-size:16px;line-height:1.6;color:#ddd;">
-        鱼上钩后进入<strong style="color:#4FC3F7">水下视角</strong>，需要控制<strong style="color:#4FC3F7">鱼线拉力</strong>来收服鱼儿！
+        按住<strong style="color:#4FC3F7">[空格键]</strong>或<strong style="color:#4FC3F7">[鼠标左键]</strong>和鱼搏斗，需要控制<strong style="color:#4FC3F7">鱼线拉力</strong>，别断线哦！
       </p>
       <div style="background:rgba(255,255,255,0.08);border-radius:10px;padding:16px;margin:16px 0;text-align:left;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
@@ -1099,15 +1099,11 @@ class FishingScene {
           <span style="font-size:15px;color:#ff4444;">红色区域 — 危险！鱼会逃跑</span>
         </div>
       </div>
-      <p style="margin:0 0 20px;font-size:15px;color:#aaa;">
-        💡 按住 <strong style="color:#fff">空格键</strong> 收线降低拉力，松开让拉力回升<br>
-        保持拉力在 <strong style="color:#44ff44">绿色区域</strong> 最容易成功！
-      </p>
       <p style="margin:0 0 12px;font-size:14px;color:#ff6b6b;font-weight:bold;">
         ⚠️ 如果放任鱼儿不管，也会脱钩哦！
       </p>
-      <div style="display:inline-block;padding:8px 20px;border:2px solid #FFD700;border-radius:8px;background:rgba(255,215,0,0.1);">
-        <p style="margin:0;font-size:18px;color:#FFD700;font-weight:bold;">按 <strong style="color:#FFD700;">空格键</strong> 继续</p>
+      <div id="fishing-tutorial-confirm" style="display:inline-block;padding:8px 20px;border:2px solid #FFD700;border-radius:8px;background:rgba(255,215,0,0.1);cursor:pointer;">
+        <p style="margin:0;font-size:18px;color:#FFD700;font-weight:bold;">按 <strong style="color:#FFD700;">[空格键]</strong> 或 <strong style="color:#FFD700;">[鼠标左键]</strong> 继续</p>
       </div>
     `;
     document.body.appendChild(panel);
@@ -1118,6 +1114,21 @@ class FishingScene {
       this.resume();
     };
     this._tutorialCloseHandler = closeTutorial;
+
+    // hotfix（2026-06-01n）：教程面板按钮支持鼠标左键单击关闭（与空格键等价）
+    //   - 仅按钮区域响应（避免误点 panel 其他位置触发）
+    //   - 关闭后清空 _tutorialCloseHandler，防止 keydown 再次触发
+    const confirmBtn = panel.querySelector('#fishing-tutorial-confirm');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        if (this._tutorialCloseHandler) {
+          this._tutorialCloseHandler();
+          this._tutorialCloseHandler = null;
+        }
+      });
+    }
   }
 
   _updatePlaying(dt) {
