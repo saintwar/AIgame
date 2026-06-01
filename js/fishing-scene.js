@@ -29,6 +29,8 @@ import {
   drawAmingFishFrame,
   getAmingFishPoleTip,
 } from './render/aming-fish-sprite.js';
+// PHASE 21-1 D5：鱼咬钩反馈系统（三档抖动 + PERFECT 字 + 放大镜染色 + 漏提演出 + 四叶草 + 猛档水花 + 镜头微震）
+import { D5BiteFeedback, BiteLevelDispatcher } from './render/d5/d5-bite-feedback.js';
 
 // ============================================================
 // CONFIG
@@ -36,8 +38,24 @@ import {
 const CONFIG = {
   aiming: { chargeCycle: 1.5, powerWeakMax: 33, powerMidMax: 66, powerStrongMax: 95, powerOverload: 96 },
   casting: { windUpDuration: 0.25, swingDuration: 0.35, releaseDuration: 0.20, idleAngle: -Math.PI / 4, windUpAngle: -Math.PI / 12, releaseAngle: -Math.PI * 0.42, arcHeightBase: 180, overshootAmount: 0.06 },
-  waiting: { fishSpawnDelay: 2.0, biteSinkCount: 3, biteSinkDepth: 9, biteSinkDuration: 0.2 },
-  biteWindow: { duration: 2.0 },
+  waiting: { fishSpawnDelay: 2.0 }, // PHASE 21-1 D5：biteSink 三件套已删除，前奏由 D5 系统接管
+  // PHASE 21-1 D5：三档窗口（impl-spec §3.1）
+  //   v2.1 重构：BiteWindow 分两段（shake 抖动 + sink 沉水），shake 段提竿 = bad/早提
+  //     shakeEnd = shake 段结束秒；sinkEnd = sink 段（也是窗口）结束秒
+  //     sink 段内部 perfect/good/late 区间均以"窗口起点 0"为时间轴
+  //     total = sinkEnd（用于 timer）
+  //   v2.1.1 (2026-06-02)：sink 段时长全部 ×2（shake 不变），给玩家更充裕的提竿反应时间
+  biteWindow: {
+    duration: 2.0,
+    windows: {
+      // light: 0.5s 抖动 + 1.4s 沉水（perfect 0.8s / good 0.4s / late 0.2s）
+      light:  { total: 1.900, shakeEnd: 0.500, perfect: [0.500, 1.300], good: [1.300, 1.700], late: [1.700, 1.900] },
+      // medium: 0.4s 抖动 + 1.2s 沉水（perfect 0.6s / good 0.4s / late 0.2s）
+      medium: { total: 1.600, shakeEnd: 0.400, perfect: [0.400, 1.000], good: [1.000, 1.400], late: [1.400, 1.600] },
+      // heavy: 0.3s 抖动 + 1.0s 沉水（perfect 0.5s / good 0.3s / late 0.2s，急但仍有反应空间）
+      heavy:  { total: 1.300, shakeEnd: 0.300, perfect: [0.300, 0.800], good: [0.800, 1.100], late: [1.100, 1.300] },
+    },
+  },
   reeling: { qteCountByRarity: [3, 5, 7, 9, 11], tickDurationByRarity: [1.6, 1.4, 1.2, 1.0, 0.8], hpDamageByRarity: [35, 20, 15, 12, 10], tensionPenaltyByRarity: [15, 18, 20, 22, 25], tensionSuccessBonus: 10, tensionFailPenalty: 20, tensionTimeoutPenalty: 20 },
   playing: { maxTension: 100, tensionPerSecond: 20, tensionDecayPerSecond: 6, fishEscapeSpeed: 225, fishEscapeSpeedIncrease: 12, catchZoneX: 0.9, catchZoneY: 0.2, tensionLowThreshold: 40, tensionHighThreshold: 70, escapeBaseChanceAtZero: 0.08, escapeChanceAtHalf: 0.015, escapeChanceAtFull: 0.001, lowTensionPenaltyMultiplier: 3.0, highTensionBonusMultiplier: 0.3, escapeCheckInterval: 0.5, fishHPRecoverPerSecond: 8, fishHPMaxRecoverRatio: 0.3,
     // PHASE 13-4：空格控压维度（叠加在 QTE 系统上）
@@ -53,7 +71,7 @@ const CONFIG = {
   fish: { travelSpeed: 120, biteProbBase: 0.6 },
 };
 
-const FAILED_MESSAGES = { overload: ['干! 用力过头炸线啦!', '拍谢，钓线炸掉了'], timeout: ['啊~ 跑了啦...', '呜呜不小心发呆了'], tension: ['这尾靠北大! 线撑不住~', '它太拼了啦'], escape: ['它挣脱了耶...', '差一点点啊!'], slack: ['鱼线松了！鱼跑了～', '哎呀！要保持张力啊！'] };
+const FAILED_MESSAGES = { overload: ['干! 用力过头炸线啦!', '拍谢，钓线炸掉了'], timeout: ['啊~ 跑了啦...', '呜呜不小心发呆了'], tension: ['这尾靠北大! 线撑不住~', '它太拼了啦'], escape: ['它挣脱了耶...', '差一点点啊!'], slack: ['鱼线松了！鱼跑了～', '哎呀！要保持张力啊！'], early: ['太早啦！等浮漂沉下去再提~', '咬都还没咬牢呢，急啥~'] };
 
 // ════════════════════════════════════════════════════════
 // PHASE 13-3c：拉力色板（鱼线 / 拉力条共享同一组 hex）
@@ -188,7 +206,8 @@ class FishingScene {
     this.questParams = null; this.rafId = null; this.paused = false; this.lastTime = 0; this.timeScale = 1; this.time = 0;
     this.money = 0; this.fishCount = 0; this.aimPower = 0; this.castProgress = 0; this.castFrom = { x: 0, y: 0 }; this.castTo = { x: 0, y: 0 };
     this.waitTimer = 0; this.currentFish = null; this.fishShadow = null; this.fishShadowPos = { x: 0, y: 0 };
-    this.biteCount = 0; this.biteSinking = false; this.biteSinkingProgress = 0; this.biteResumeTimer = 0;
+    // PHASE 21-1 D5：本次咬钩窗口的档位 + 已用秒数（每帧累加）
+    this.biteLevel = null; this.biteWindowElapsed = 0;
     this.biteWindowTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.qteDirection = ''; this.qteTimer = 0; this.qteMaxTime = 0;
     this.fishHP = 0; this.fishMaxHP = 0; this.tension = 0; this.qteResult = ''; this.qteResultColor = '#FFF';
     this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.playingFishX = 0; this.playingFishY = 0; this.playingFishColor = '';
@@ -198,6 +217,24 @@ class FishingScene {
     this.characterX = 0; this.platformY = 0; this.characterY = 0; this.bobX = 0; this.bobY = 0;
     this.shakeCount = 0; this.failedMessageTimer = 0; this.failedMessageIndex = 0;
     this.fsm = new StateMachine(); this.particles = new ParticleSystem(); this.input = new InputSystem();
+    // PHASE 21-1 D5：鱼咬钩反馈系统（决策 A3 / B3+越档 / C 降级）
+    //   _biteWindowCfg：把 CONFIG.biteWindow.windows 注入 D5 用，避免 D5 反向引用 CONFIG 字符串
+    this._biteWindowCfg = CONFIG.biteWindow.windows;
+    this.d5 = new D5BiteFeedback(this);
+    // 调试钩子：把场景实例挂到 window，并提供 window.__D5_TEST 一键测试各 fx
+    //   用法（控制台）：__D5_TEST('heavyBite' | 'perfect' | 'miss' | 'late' | 'clover')
+    if (typeof window !== 'undefined') {
+      window.fishingScene = this;
+      window.__D5_TEST = (mode = 'heavyBite') => {
+        const d5 = this.d5; if (!d5) return console.warn('d5 未挂载');
+        if (mode === 'heavyBite') d5.onBiteStart('heavy');
+        else if (mode === 'perfect') d5.onPerfectHit('heavy');
+        else if (mode === 'miss') d5.onLateMiss();
+        else if (mode === 'late') d5.onLateZoneEnter();
+        else if (mode === 'clover') d5.fx.cloverGlow = { startMs: d5._frameTime, x: this.bobX, y: this.bobY - 14 };
+        else console.log('用法: __D5_TEST("heavyBite"|"perfect"|"miss"|"late"|"clover")');
+      };
+    }
     this.atlas = new Set(); this.newFishHintShown = false; this.showingFishInfo = false; this.taskComplete = false;
     this._aimingEHeld = false; this._aimingSpaceHeld = false;
     // 小鱼群
@@ -661,6 +698,8 @@ class FishingScene {
     else if (s === 'Caught') this._updateCaught(dt);
     else if (s === 'Failed') this._updateFailed(dt);
     this.particles.update(dt);
+    // PHASE 21-1 D5：推进鱼咬钩反馈系统（zone 判定 / 演出层计时）
+    if (this.d5) this.d5.update(dt);
     // 日月潭环境动画更新
     this._updateEnvBirds(dt); this._updateEnvLeaves(dt); this._updateEnvClouds(dt);
     this._updateSmallFish(dt);
@@ -1005,39 +1044,69 @@ class FishingScene {
     }
   }
 
-  _startBite() { this.biteCount = 0; this.biteSinking = true; this.biteSinkingProgress = 0; this.biteResumeTimer = 0; }
-
-  _updateWaitingBite(dt) {
+  // PHASE 21-1 D5：鱼咬钩瞬间 —— 直接进入 BiteWindow，由 D5 系统接管全部前奏/反馈
+  // v2.0 旧逻辑（biteSink 三次下沉 + playBite 程序音效）已彻底移除
+  _startBite() {
     if (!this.fsm.is('Waiting')) return;
-    if (!this.biteSinking && this.biteCount > 0 && this.biteCount < CONFIG.waiting.biteSinkCount) {
-      this.biteResumeTimer -= dt;
-      if (this.biteResumeTimer <= 0) { this.biteSinking = true; this.biteSinkingProgress = 0; }
-    }
-    if (this.biteSinking) {
-      this.biteSinkingProgress += dt / CONFIG.waiting.biteSinkDuration;
-      if (this.biteSinkingProgress >= 1) {
-        this.biteSinking = false; this.biteSinkingProgress = 0; this.bobY = this.ch * 0.65 + 60;
-        this.biteCount++; AudioSystem.playBite();
-        if (this.biteCount >= CONFIG.waiting.biteSinkCount) {
-          this.fsm.transition('BiteWindow', 'fish bite complete');
-          const rod = window.equipment ? window.equipment.getEquippedRod() : null;
-          const windowMul = rod ? rod.qteWindowMul : 1.0;
-          this.biteWindowTimer = CONFIG.biteWindow.duration * windowMul;
-        }
-        else this.biteResumeTimer = 0.3;
-      } else this.bobY = this.ch * 0.65 + 60 + CONFIG.waiting.biteSinkDepth * this.biteSinkingProgress;
-    }
+    this.fsm.transition('BiteWindow', 'fish bite (D5)');
+    const rod = window.equipment ? window.equipment.getEquippedRod() : null;
+    const windowMul = rod ? rod.qteWindowMul : 1.0;
+    // 根据"这条鱼"的 rarity 抽抖动档（含越档扰动）
+    const rarity = (this.currentFish && this.currentFish.rarity) || 1;
+    this.biteLevel = BiteLevelDispatcher.resolve(rarity);
+    this.biteWindowElapsed = 0;
+    const winCfg = CONFIG.biteWindow.windows[this.biteLevel] || { total: CONFIG.biteWindow.duration };
+    this.biteWindowTimer = winCfg.total * windowMul;
+    if (this.d5) this.d5.onBiteStart(this.biteLevel, { isLuckyBail: false });
   }
+
+  _updateWaitingBite(_dt) { /* D5 接管，无需 Waiting 阶段前奏逻辑 */ }
 
   _updateBiteWindow(dt) {
     this.biteWindowTimer -= dt;
+    // PHASE 21-1 D5：累计本窗口经过秒数，用于 zone 判定 + 抖动帧索引
+    this.biteWindowElapsed = (this.biteWindowElapsed || 0) + dt;
+
     // hotfix（2026-06-01b）：空格 OR 鼠标左键单击 都能提竿
     if (this.input.wasPressed('space') || this._confirmClick) {
       this._confirmClick = false;
+      // PHASE 21-1 D5 v2.1：四段判定 —— shake(早提=fail) / perfect / good / late
+      const level = this.biteLevel || 'light';
+      const w = (CONFIG.biteWindow.windows[level]) || null;
+      const t = this.biteWindowElapsed;
+      let zone = 'perfect';
+      if (w) {
+        if (t < w.shakeEnd)       zone = 'shake';    // 早提！
+        else if (t < w.perfect[1]) zone = 'perfect';
+        else if (t < w.good[1])    zone = 'good';
+        else                        zone = 'late';
+      }
+
+      if (zone === 'shake') {
+        // 早提 → 直接 Failed，原因 'early'
+        if (this.d5) this.d5.onBiteWindowExit();
+        this.failedReason = 'early';
+        this.fsm.transition('Failed', 'early');
+        return;
+      }
+
+      if (this.d5) {
+        if (zone === 'perfect') this.d5.onPerfectHit(level);
+        else                    this.d5.onLineUp();
+        this.d5.onBiteWindowExit();
+      }
       this._startReeling();
       return;
     }
-    if (this.biteWindowTimer <= 0) { this.fsm.transition('Failed', 'timeout'); this.failedReason = 'timeout'; }
+    if (this.biteWindowTimer <= 0) {
+      // PHASE 21-1 D5：漏提演出（800ms 内独立计时，不阻塞状态机）
+      if (this.d5) {
+        this.d5.onLateMiss();
+        this.d5.onBiteWindowExit();
+      }
+      this.failedReason = 'timeout';
+      this.fsm.transition('Failed', 'timeout');
+    }
   }
 
   _startReeling() { this.fsm.transition('Playing', 'success bite'); this._initPlayingState(); }
@@ -1467,12 +1536,12 @@ class FishingScene {
   }
 
   _resetToWaiting() {
-    this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.fishShadow = null; this.biteSinking = false; this.biteCount = 0; this.biteSinkingProgress = 0; this.biteResumeTimer = 0; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
+    this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.fishShadow = null; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
     // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
     this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
   }
 
-  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.biteSinking = false; this.showingFishInfo = false; }
+  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.showingFishInfo = false; }
 
   _toggleAtlas() {
     const isOpen = document.getElementById('atlas-panel'); if (isOpen) { isOpen.remove(); return; }
@@ -1493,12 +1562,20 @@ class FishingScene {
       this._applyShake(ctx, 12, 0.3);
       this.shakeCount++;
     }
+    // PHASE 21-1 D5：heavy 档咬钩瞬间镜头微震（60ms / ±2px / 10Hz）
+    //   translate 会被末尾 setTransform(1,0,0,1,0,0) 自然清零，沿用 _applyShake 风格不 save
+    if (this.d5) this.d5.applyCameraShake(ctx);
     if (this.fsm.is('Playing')) this._renderPlaying();
     // PHASE 21-1 v3.0 W1 D1+D2+D4：三鱼群占位渲染 + hover UI + CastAimSystem + WaterSplashFX
     //   - 旧 _renderAimBar / _renderCasting 不再调用（视觉由 CastAimSystem 接管）
     //   - 浮漂渲染条件加 _castingWaitingSplash：涟漪期画静止浮漂，飞行期不画（避免重叠）
     //   - waterSplashFX.render 在浮漂层之后调用，覆盖在浮漂上方
-    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderRodAndBob(floatOffset); this._renderCharacterBody(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles(); if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('BiteWindow')) this._renderBiteAlert(); if (this.fsm.is('Reeling')) this._renderQTE(); }
+    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderRodAndBob(floatOffset); this._renderCharacterBody(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles();
+      if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('Reeling')) this._renderQTE();
+      // PHASE 21-1 D5：BiteWindow 反馈层**置顶**渲染（v2.0 _renderBiteAlert 已彻底移除）
+      //   内部按 fx 各自时间窗自动决定是否画；BiteWindow 退出后 PERFECT/可惜/四叶草仍可续演
+      if (this.d5) this.d5.render(ctx);
+    }
     if (this.fsm.is('Failed')) this._renderFailed();
     // 初始状态提示：屏幕正中间显示[空格]键抛竿
     if (this.fsm.is('Idle')) this._renderIdleHint();
@@ -2045,7 +2122,9 @@ class FishingScene {
     const tipY = y + rodTipLocalY;
     ctx.restore(); // 结束翻转坐标系
     if (progress >= 0.4) { ctx.strokeStyle = 'rgba(100,100,100,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(bobX, bobY); ctx.stroke(); }
-    this._drawPixelBob(bobX, bobY);
+    // PHASE 21-1 D5：抖动偏移（非 BiteWindow 时 d5 返回 {0,0,hidden:false}）
+    const _d5b = this.d5 ? this.d5.getBobOffset() : { dx: 0, dy: 0, hidden: false };
+    if (!_d5b.hidden) this._drawPixelBob(bobX + _d5b.dx, bobY + _d5b.dy);
   }
 
   _renderRodAndBob(floatOffset = 0) {
@@ -2114,23 +2193,30 @@ class FishingScene {
       bobDrawY = tipY + 22;  // 短鱼线 ~3px + 缩小后浮漂半高 ~19px（48*0.8/2≈19）
     }
 
+    // PHASE 21-1 D5 v2.1：先取抖动+sink 偏移，鱼线终点也要跟着浮漂走（拟真）
+    const _d5b = this.d5 ? this.d5.getBobOffset() : { dx: 0, dy: 0, hidden: false };
+    // 鱼线终点：落水状态叠加 d5 偏移；idle/aiming 不叠（浮漂挂竿尖，无抖动）
+    const lineEndX = inIdleLikeState ? bobDrawX : (bobDrawX + _d5b.dx);
+    const lineEndY = inIdleLikeState ? bobDrawY : (bobDrawY + _d5b.dy);
+
     ctx.strokeStyle = 'rgba(100,100,100,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tipX, tipY);
     if (inIdleLikeState) {
       // 短鱼线：竿尖直接连到浮漂（不再用大弧线弯到水面）
-      ctx.lineTo(bobDrawX, bobDrawY);
+      ctx.lineTo(lineEndX, lineEndY);
     } else {
-      const midX = (tipX + bobDrawX) / 2;
-      ctx.quadraticCurveTo(midX, Math.min(tipY, bobDrawY) - 45, bobDrawX, bobDrawY);
+      const midX = (tipX + lineEndX) / 2;
+      ctx.quadraticCurveTo(midX, Math.min(tipY, lineEndY) - 45, lineEndX, lineEndY);
     }
     ctx.stroke();
 
     if (inIdleLikeState) {
       // 完整浮漂挂在竿尖
-      this._drawPixelBob(bobDrawX, bobDrawY, false);
+      this._drawPixelBob(bobDrawX + _d5b.dx, bobDrawY + _d5b.dy, false);
     } else {
       // 落水状态：先画涟漪（在浮漂下方），再画浮漂上半（覆盖在涟漪上）
       this._drawBobRipples(bobDrawX, bobDrawY);
-      this._drawPixelBob(bobDrawX, bobDrawY, true);
+      // sink 阶段已沉入水下：跳过本体绘制，由 D5 render 接管水下剪影
+      if (!_d5b.hidden) this._drawPixelBob(bobDrawX + _d5b.dx, bobDrawY + _d5b.dy, true);
     }
   }
 
@@ -2896,37 +2982,8 @@ class FishingScene {
     ctx.textAlign = 'left';
   }
 
-  _renderBiteAlert() {
-    const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
-    ctx.fillStyle = 'rgba(255,0,0,0.2)'; ctx.fillRect(0, 0, cw, ch);
-    if (Math.sin(Date.now() / 100) > 0) {
-      ctx.fillStyle = '#FF0000'; ctx.font = "bold 180px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', cw / 2, ch / 2);
-      // hotfix（2026-06-01b）：扩展为 [空格]或[鼠标左键]，整段键名绿色高亮
-      // "快按" 和 "提竿!" 分段渲染
-      const baseY = ch / 2 + 120;
-      ctx.font = "42px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
-      const leftText = '快按 ';
-      const keyText = '[空格]或[鼠标左键]';
-      const rightText = ' 提竿!';
-      const leftW = ctx.measureText(leftText).width;
-      const keyW = ctx.measureText(keyText).width;
-      const totalW = leftW + keyW + ctx.measureText(rightText).width;
-      const startX = cw / 2 - totalW / 2;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#FFF';
-      ctx.fillText(leftText, startX, baseY);
-      // [空格] 键：霓虹绿 + 黑色描边高亮
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-      ctx.strokeText(keyText, startX + leftW, baseY);
-      ctx.fillStyle = '#00FF88';
-      ctx.fillText(keyText, startX + leftW, baseY);
-      ctx.fillStyle = '#FFF';
-      ctx.fillText(rightText, startX + leftW + keyW, baseY);
-      ctx.textAlign = 'center';
-      ctx.font = "30px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif"; ctx.fillText(`剩余 ${(this.biteWindowTimer).toFixed(1)}s`, cw / 2, ch / 2 + 180);
-      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    }
-  }
+  // PHASE 21-1 D5：v2.0 _renderBiteAlert（全屏红闪 + 180px 大叹号 + 提示语）已彻底移除
+  //   BiteWindow 期间的视觉反馈完全交给 D5 系统（抖动 + PERFECT/可惜 字）
 
   _renderQTE() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const cx = cw / 2; const cy = ch / 2;

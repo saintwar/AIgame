@@ -9,7 +9,9 @@
 //   1:1 渲染下阿明高度约 170px，远大于其它 NPC（~60px），视觉失衡；
 //     PHASE-20.4 把 SCALE 调为 0.40，让阿明 ~68px，略高于成年 NPC 但同档。
 
-const SHEET_URL = 'assets/character/amin/amin-walk-sheet-v2.png';
+// 2026-06-02：用户替换了 v2 sheet 的图像内容（尺寸仍是 1290×720），
+//   挂 ?v= 强制刷新浏览器 PNG 缓存。版式不变 → spec 仍复用。
+const SHEET_URL = 'assets/character/amin/amin-walk-sheet-v2.png?v=20260602h';
 const SPEC_URL  = 'assets/character/amin/amin-frame-spec-v2.json';
 
 const FRAME_INTERVAL_MS = 100;

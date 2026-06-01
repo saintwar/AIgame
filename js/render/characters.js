@@ -13,6 +13,25 @@ function px(ctx, x, y, w, h, color) {
   ctx.fillRect(x | 0, y | 0, w, h);
 }
 
+/**
+ * 角色脚下椭圆阴影（地面之上、角色之下渲染）
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cx     角色脚底中心 x（瓦片中心 = npc.px + 16；阿明 = player.px）
+ * @param {number} footY  角色脚底中心 y（地面基线 = npc.py + 48；阿明 = player.py + 16）
+ * @param {object} [opts] { rx, ry, alpha } 可选阴影几何/透明度（默认 12×4 + 0.30）
+ */
+export function drawCharacterShadow(ctx, cx, footY, opts = {}) {
+  const rx = opts.rx != null ? opts.rx : 12;
+  const ry = opts.ry != null ? opts.ry : 4;
+  const alpha = opts.alpha != null ? opts.alpha : 0.30;
+  ctx.save();
+  ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, footY, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // 走路呼吸偏移：每 250ms 切换一帧，3 帧循环（用于 fallback 像素绘制）
 function getWalkOffset(time, isMoving) {
   if (!isMoving) return { legY: 0, armX: 0 };

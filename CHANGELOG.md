@@ -4,6 +4,28 @@
 
 ---
 
+## [2026-06-02] · D5「鱼咬钩反馈系统」v2.1 重构 + NPC 阴影 + 阿明 sprite 替换
+
+> **背景**：项目负责人凌晨亲自接手 D5 调优。原 v2.0 设计（三次下沉前奏 + 全屏红屏 + 大叹号 + multiply 染色放大镜）经实战后判定与目标手感不符，整套替换为「**抖动 → 沉水 → 提竿**」三拍。所有手感参数由负责人定稿。详见 [`docs/PHASE-21-1-D5-handoff.md`](docs/PHASE-21-1-D5-handoff.md)。
+
+### D5 v2.1 主要改动
+- **删除 v2.0 残留**：浮漂三次下沉前奏 (`biteSink*`)、程序合成咬钩音 `playBite()`、`_renderBiteAlert()` 全屏红+大叹号、放大镜 `magnifier-tint-renderer.js` 整个模块
+- **BiteWindow 分两段**：
+  - `shake` 段（0.3-0.5s）：浮漂在水面三档抖动，提竿 = 早提 Failed（新 `early` 失败原因）
+  - `sink` 段（1.0-1.4s）：浮漂渐沉入水下（0→32px），过水线后切换墨蓝椭圆剪影，鱼线终点跟随下沉
+- **三档总窗口**：light 1.9s / medium 1.6s / heavy 1.3s（sink 段比初始设计 ×2，反应时间更充裕）
+- **新模块**：`js/render/d5/underwater-bob-renderer.js` 画水下浮漂剪影
+- **新音效**（`js/audio-system.js`）：
+  - `playBobShakeTick(level, intensity)`：按 BiteShakeFrame 12fps 边沿打点，三角波低频 tok（110/160/220Hz）
+  - `playBobSink(duration)`：「咕咚……」大→小，主层正弦 360→120Hz 扫频 + 水下气泡尾巴
+
+### 同期附带
+- **阿明 walk sheet 替换**：`assets/character/amin/amin-walk-sheet-v2.png` 用户重画；`aming-sprite.js` SHEET_URL 挂 `?v=20260602h` 强刷浏览器 PNG 缓存
+- **NPC 脚下椭圆阴影**：`js/render/characters.js` 导出 `drawCharacterShadow`，`village-scene.js` `_renderNPCs` 接入；仅 4 个 NPC（秀兰/阿土伯/林师傅/小芳），固定贴地不随 bob 浮动；阿明本人不画
+- `index.html` `main.js?v=20260602k`
+
+---
+
 ## [Unreleased] · 部署脚本固化 + ES module / 美术资源缓存粘滞修复
 
 > **背景**：今日上午完成村庄美术升级（手绘 BG + 4 建筑 + 5 NPC + 程序化喷泉/树移除）后，部署到腾讯云 CloudBase Hosting，浏览器仍看到旧版（像素方块 BG、emoji 树、蓝圆喷泉）。逐层排查后定位为 **ES module 子模块 + 美术资源的浏览器缓存粘滞**：`index.html` 的 no-cache meta 只对 HTML 本身生效，对 `<script type="module">` 间接 `import` 的子模块、以及 JS 字符串字面量里的 PNG/JPG 路径均无效——浏览器复用 disk cache 的旧版本。本次工作把"一键部署 + 全量 cache busting"固化成脚本，根治此问题。

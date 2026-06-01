@@ -208,6 +208,78 @@ class AudioSystem {
   playFootstep() { this._beep(120 + Math.random() * 40, 0.04, 'triangle', 0.08); }
   playCast() { this._beep(200, 0.3, 'sawtooth', 0.15); }    // 抛竿嗖
   playBite() { this._beep(880, 0.06, 'square', 0.3); setTimeout(() => this._beep(1100, 0.08, 'square', 0.3), 80); }
+
+  // ─────────────────────────────────────────────────────────────────
+  // D5 v2.1：浮漂抖动 + 沉水音效
+  // ─────────────────────────────────────────────────────────────────
+
+  /**
+   * 浮漂抖动一击 —— 浮漂被鱼拽动撞水面的低频 "tok" 声
+   * 由 D5 BiteFeedback 在 shake 段每帧整数 idx 变化时调用
+   * @param {'light'|'medium'|'heavy'} level
+   * @param {number} [intensity=1] 0~1，跟随 |dy| 缩放音量
+   */
+  playBobShakeTick(level = 'light', intensity = 1) {
+    if (!this.ctx || this.muted) return;
+    // 三档基频：越重越低（更"沉"）
+    const baseFreq = level === 'heavy' ? 110 : level === 'medium' ? 160 : 220;
+    const dur = 0.05;
+    const vol = 0.18 * Math.max(0.3, Math.min(1, intensity));
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle'; // 三角波 → 比方波柔和，比正弦有质感
+    // 短暂下扫：模拟撞击后的下沉感
+    osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.6, this.ctx.currentTime + dur);
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start();
+    osc.stop(this.ctx.currentTime + dur);
+  }
+
+  /**
+   * 浮漂沉水一声 —— "咕咚……" 大→小渐隐
+   * 由 D5 BiteFeedback 在 sink 段开始（onSinkStart）调用一次
+   * @param {number} [duration=1.2] 总时长（秒），匹配 sink 段长度
+   */
+  playBobSink(duration = 1.2) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime;
+
+    // 主层：中频 "咕咚" —— 频率从 360Hz 下扫到 120Hz，音量大→小（v2.1.2 提亮）
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(360, t0);
+    osc.frequency.exponentialRampToValueAtTime(120, t0 + duration * 0.6);
+    oscGain.gain.setValueAtTime(0, t0);
+    oscGain.gain.linearRampToValueAtTime(0.35, t0 + 0.05); // 起音 50ms 拉满
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(oscGain).connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.05);
+
+    // 尾层：水下气泡 —— 白噪声经带通，明亮一点的"咕嘟"质感（v2.1.2 提亮）
+    const bufLen = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buf = this.ctx.createBuffer(1, bufLen, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * 0.6;
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buf;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1800, t0);
+    filter.frequency.exponentialRampToValueAtTime(500, t0 + duration); // 越往后越闷但不到泥水
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, t0);
+    noiseGain.gain.linearRampToValueAtTime(0.12, t0 + 0.08);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    noise.connect(filter).connect(noiseGain).connect(this.sfxGain);
+    noise.start(t0);
+    noise.stop(t0 + duration + 0.05);
+  }
   playReelTick() { this._beep(400, 0.02, 'square', 0.2); }      // 收线咔
   playFishCaught() {
     // 上扬 4 音音阶

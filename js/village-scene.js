@@ -21,7 +21,7 @@ import {
 import { PALETTE } from './render/palette.js';
 import { drawChiefHouse, drawFishingShop, drawAmingHome, drawAmingHomeSmoke, draw711Store } from './render/buildings.js';
 import {
-  drawAming, drawXiulan, drawVillageChief, drawLin, drawXiaofang
+  drawAming, drawXiulan, drawVillageChief, drawLin, drawXiaofang, drawCharacterShadow
 } from './render/characters.js';
 import { preloadAmingSheet } from './render/aming-sprite.js';
 import { drawLakeReflections } from './render/reflections.js';
@@ -2776,6 +2776,8 @@ class VillageScene {
     this.npcs.forEach(npc => {
       const drawFn = drawMap[npc.id];
       if (drawFn) {
+        // 脚下椭圆阴影（地面之上、角色之下）；阴影固定贴地，不随 bobOffset 上下浮动
+        drawCharacterShadow(ctx, npc.px + 16, npc.py + 48);
         drawFn(ctx, npc.px, npc.py, npc.facing || 'down', time);
       }
       // NPC 头顶名字标签（2026-05-28：底部 y 由 py-8 累计上移 10px → py-18，避免压头）
