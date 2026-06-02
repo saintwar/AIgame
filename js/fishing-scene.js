@@ -29,6 +29,8 @@ import {
   drawAmingFishFrame,
   getAmingFishPoleTip,
 } from './render/aming-fish-sprite.js';
+// 2026-06-02：浮台 → 船图替换（_renderPlatform 优先用图，未就绪兜底原绘制）
+import { preloadShipSprite, isShipSpriteReady, drawShipSprite, SHIP_SPRITE_SIZE } from './render/ship-sprite.js';
 // PHASE 21-1 D5：鱼咬钩反馈系统（三档抖动 + PERFECT 字 + 放大镜染色 + 漏提演出 + 四叶草 + 猛档水花 + 镜头微震）
 import { D5BiteFeedback, BiteLevelDispatcher } from './render/d5/d5-bite-feedback.js';
 
@@ -258,6 +260,8 @@ class FishingScene {
     //   - sheet=amin-fish-back-6f.png（576×160 单行 6 帧）
     //   - 加载完成前 _renderCharacterBody 走原程序绘制兜底
     preloadAmingFishSheet();
+    // 2026-06-02：浮台船图预加载（加载完成前 _renderPlatform 走原木板浮筒程序绘制兜底）
+    preloadShipSprite();
 
     // PHASE 21-1：搏斗水下底图预加载（fishing-down-bg.jpg 1280×720）
     //   - 加载完成前 _renderPlaying Layer 0 走原程序化深水渐变兜底
@@ -289,6 +293,13 @@ class FishingScene {
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false; this.ctx.webkitImageSmoothingEnabled = false;
+    // 2026-06-02 D5 放大镜真背景：背景层离屏 cache
+    //   _renderBackground 后 copy 一份到此 canvas，放大镜从这里读"纯背景像素"
+    //   不含鱼影/水草动效/鱼线/浮漂等任何角色层
+    this._bgCacheCanvas = document.createElement('canvas');
+    this._bgCacheCanvas.width = 1280; this._bgCacheCanvas.height = 720;
+    this._bgCacheCtx = this._bgCacheCanvas.getContext('2d');
+    this._bgCacheCtx.imageSmoothingEnabled = false;
     this.characterX = this.cw * 0.3; this.platformY = this.ch - 75; this.characterY = this.platformY - 42; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90;
     // 初始化输入系统（不监听事件，由 _bindEvents 统一处理）
     this.input.setupListeners(null, null);
@@ -323,6 +334,8 @@ class FishingScene {
     this.waterSplashFX.init({ canvas: this.canvas, ctx: this.ctx });
     // D4 内部 flag：抛物线已完成、当前等待涟漪结束（由 _updateCasting 管理）
     this._castingWaitingSplash = false;
+    // 2026-06-02 D7：提竿后延迟进 Reeling 的 setTimeout 句柄（防重入用）
+    this._pendingReelTimer = null;
 
     // PHASE 21-1 D4 扩展：鼠标左键长按蓄力 + 松开抛竿（与空格键并行）
     //   - mousedown(button=0) → _tryStartAimingByInput('mouse')
@@ -1070,6 +1083,10 @@ class FishingScene {
   _updateWaitingBite(_dt) { /* D5 接管，无需 Waiting 阶段前奏逻辑 */ }
 
   _updateBiteWindow(dt) {
+    // 2026-06-02：已 schedule 进 Reeling（300ms 过渡期内），冻结本帧所有判定
+    //   - 防止 timer 走到 0 误判 timeout Failed
+    //   - 防止玩家在过渡期内再次按空格重复触发
+    if (this._pendingReelTimer) return;
     this.biteWindowTimer -= dt;
     // PHASE 21-1 D5：累计本窗口经过秒数，用于 zone 判定 + 抖动帧索引
     this.biteWindowElapsed = (this.biteWindowElapsed || 0) + dt;
@@ -1102,7 +1119,10 @@ class FishingScene {
         else                    this.d5.onLineUp();
         this.d5.onBiteWindowExit();
       }
-      this._startReeling();
+      // 2026-06-02：提竿成功后延迟 800ms 进入水下视角，
+      //   过渡期足够让 PERFECT 字主体浮起 + 浮漂自然沉完（sink 段最长 1.4s 截到 ~57%~80%）
+      //   + 放大镜下滑消失（180ms）。早提 / 漏提 Failed 不走此延迟。
+      this._scheduleReelingTransition(800);
       return;
     }
     if (this.biteWindowTimer <= 0) {
@@ -1117,6 +1137,32 @@ class FishingScene {
   }
 
   _startReeling() { this.fsm.transition('Playing', 'success bite'); this._initPlayingState(); }
+
+  /**
+   * 提竿成功后的延迟过渡（2026-06-02）
+   *   delayMs 内仍停留在 BiteWindow 状态（FSM 不变），仅让 D5 演出层继续跑：
+   *     - PERFECT 字浮起
+   *     - 浮漂沉到剪影底
+   *     - 放大镜往下滑出
+   *   到时再切 Playing。
+   *   防重入：若已有 pending 计时器，直接复用，不叠加
+   *   中断保护：reset / Failed 路径会清掉计时器，防止延迟内场景被切换后还误入 Reeling
+   */
+  _scheduleReelingTransition(delayMs) {
+    if (this._pendingReelTimer) return; // 已在排队
+    this._pendingReelTimer = setTimeout(() => {
+      this._pendingReelTimer = null;
+      // 只有仍在 BiteWindow（没被异常路径打断）才真的进 Playing
+      if (this.fsm.is('BiteWindow')) this._startReeling();
+    }, delayMs);
+  }
+
+  _cancelPendingReel() {
+    if (this._pendingReelTimer) {
+      clearTimeout(this._pendingReelTimer);
+      this._pendingReelTimer = null;
+    }
+  }
 
   _initPlayingState() {
     const cfg = CONFIG.playing; const w = this.cw; const h = this.ch;
@@ -1552,11 +1598,15 @@ class FishingScene {
     this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
     // P0 放大镜：reset 兜底强制 hide（边沿检测下一帧会重新计时 150ms 出现）
     if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
+    // 取消提竿延迟（防 300ms 内被 reset 后误入 Reeling）
+    this._cancelPendingReel();
   }
 
   _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.showingFishInfo = false;
     // P0 放大镜：回 Idle 强制 hide（虽然边沿检测也会自然 hide，保险）
     if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
+    // 取消提竿延迟
+    this._cancelPendingReel();
   }
 
   _toggleAtlas() {
@@ -1586,7 +1636,10 @@ class FishingScene {
     //   - 旧 _renderAimBar / _renderCasting 不再调用（视觉由 CastAimSystem 接管）
     //   - 浮漂渲染条件加 _castingWaitingSplash：涟漪期画静止浮漂，飞行期不画（避免重叠）
     //   - waterSplashFX.render 在浮漂层之后调用，覆盖在浮漂上方
-    else { this._renderBackground(); if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderRodAndBob(floatOffset); this._renderCharacterBody(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles();
+    else { this._renderBackground();
+      // D5 放大镜真背景：背景画完立刻 copy 到离屏 cache（不含鱼影/鱼线/浮漂/水草动效）
+      if (this._bgCacheCtx) this._bgCacheCtx.drawImage(this.canvas, 0, 0);
+      if (this.fishGroupSystem) this.fishGroupSystem.render(); if (this.fishGroupHoverUI) this.fishGroupHoverUI.render(); const floatOffset = this._renderPlatform(); this._renderRodAndBob(floatOffset); this._renderCharacterBody(floatOffset); if (this.castAimSystem) this.castAimSystem.render(); if (this.waterSplashFX) this.waterSplashFX.render(); this._renderRightHand(floatOffset); if (this.fishShadow && this.fishShadow.moving) this._renderFishShadow(); this._renderParticles();
       if (this.fsm.is('Caught') && this.showingFishInfo) this._renderCaught(); this._renderHUD(); if (this.fsm.is('Aiming') && this.castAimSystem) this.castAimSystem.renderChargeBar(this.characterX, this.characterY); if (this.fsm.is('Reeling')) this._renderQTE();
       // PHASE 21-1 D5：BiteWindow 反馈层**置顶**渲染（v2.0 _renderBiteAlert 已彻底移除）
       //   内部按 fx 各自时间窗自动决定是否画；BiteWindow 退出后 PERFECT/可惜/四叶草仍可续演
@@ -1977,19 +2030,48 @@ class FishingScene {
 
   _renderPlatform() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const x = this.characterX; const y = this.platformY;
-    const platformWidth = 210; const platformHeight = 21; const floatTubeRadius = 18;
-    const floatOffset = Math.sin(this.time * 1.8) * 3.75; const drawY = y + floatOffset;
-    ctx.fillStyle = '#5D4037'; ctx.fillRect(x - platformWidth / 2, drawY + platformHeight - 6, platformWidth, 9);
-    ctx.fillStyle = '#A1887F'; ctx.fillRect(x - platformWidth / 2, drawY, platformWidth, platformHeight);
-    ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 1.5; for (let i = -platformWidth / 2 + 33; i < platformWidth / 2; i += 36) { ctx.beginPath(); ctx.moveTo(x + i, drawY + 3); ctx.lineTo(x + i, drawY + platformHeight - 4); ctx.stroke(); }
-    ctx.strokeStyle = '#8D6E63'; ctx.beginPath(); ctx.moveTo(x - platformWidth / 2 + 3, drawY + platformHeight / 2); ctx.lineTo(x + platformWidth / 2 - 3, drawY + platformHeight / 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x - platformWidth / 2 + 7, drawY + 3, platformWidth - 14, 4);
-    ctx.fillStyle = '#D32F2F';
-    ctx.beginPath(); ctx.ellipse(x - platformWidth / 2 + floatTubeRadius + 6, drawY + platformHeight + floatTubeRadius, floatTubeRadius, floatTubeRadius + 3, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x + platformWidth / 2 - floatTubeRadius - 6, drawY + platformHeight + floatTubeRadius, floatTubeRadius, floatTubeRadius + 3, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 3;
-    for (let r = 120; r <= 180; r += 30) { ctx.beginPath(); ctx.ellipse(x, drawY + platformHeight + floatTubeRadius + 7, r, r * 0.3, 0, 0, Math.PI * 2); ctx.stroke(); }
-    return floatOffset;
+    // 2026-06-02：浮台不动，阿明独立下移 50（通过返回 floatOffset + 50），涟漪独立上移 50
+    const RIPPLE_LIFT = 50;  // 涟漪相对浮台底沿向上偏移
+    const AMING_DROP  = 40;  // 阿明相对原位向下偏移（仅影响返回值）—— 50-10 上移微调
+    const floatOffset = Math.sin(this.time * 1.8) * 3.75;
+    const drawY = y + floatOffset;               // 浮台 y（不动，原波浪节奏）
+
+    // 涟漪锚点：浮台底沿水面位置 - RIPPLE_LIFT（向上）
+    const sprite = isShipSpriteReady();
+    const platformBottomY = drawY + (sprite ? SHIP_SPRITE_SIZE.h : 60);
+
+    // —— 1) 涟漪先画（层级在浮台之后/下方，会被浮台遮挡上半部分）—— //
+    const rippleY = platformBottomY + 4 - RIPPLE_LIFT;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const phase = (this.time * 0.35 + i / 3) % 1; // 0→1 循环
+      const r = 90 + phase * 70;                    // 半径 90→160
+      const a = (1 - phase) * 0.22;                 // 透明度 0.22→0
+      if (a <= 0.01) continue;
+      ctx.strokeStyle = `rgba(255,255,255,${a})`;
+      ctx.beginPath();
+      ctx.ellipse(x, rippleY, r, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // —— 2) 浮台外观渲染（盖在涟漪之上）—— //
+    if (sprite) {
+      drawShipSprite(ctx, x, drawY);
+    } else {
+      // 兜底：原木板 + 红色浮筒程序绘制
+      const platformWidth = 210; const platformHeight = 21; const floatTubeRadius = 18;
+      ctx.fillStyle = '#5D4037'; ctx.fillRect(x - platformWidth / 2, drawY + platformHeight - 6, platformWidth, 9);
+      ctx.fillStyle = '#A1887F'; ctx.fillRect(x - platformWidth / 2, drawY, platformWidth, platformHeight);
+      ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 1.5; for (let i = -platformWidth / 2 + 33; i < platformWidth / 2; i += 36) { ctx.beginPath(); ctx.moveTo(x + i, drawY + 3); ctx.lineTo(x + i, drawY + platformHeight - 4); ctx.stroke(); }
+      ctx.strokeStyle = '#8D6E63'; ctx.beginPath(); ctx.moveTo(x - platformWidth / 2 + 3, drawY + platformHeight / 2); ctx.lineTo(x + platformWidth / 2 - 3, drawY + platformHeight / 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x - platformWidth / 2 + 7, drawY + 3, platformWidth - 14, 4);
+      ctx.fillStyle = '#D32F2F';
+      ctx.beginPath(); ctx.ellipse(x - platformWidth / 2 + floatTubeRadius + 6, drawY + platformHeight + floatTubeRadius, floatTubeRadius, floatTubeRadius + 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + platformWidth / 2 - floatTubeRadius - 6, drawY + platformHeight + floatTubeRadius, floatTubeRadius, floatTubeRadius + 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 阿明 / 鱼竿 / 浮漂位置：原 floatOffset + AMING_DROP（向下 50）
+    return floatOffset + AMING_DROP;
   }
 
   _renderCharacter(floatOffset) {

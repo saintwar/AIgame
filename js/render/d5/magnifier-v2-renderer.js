@@ -179,8 +179,9 @@ export class D5Magnifier {
     ctx.arc(cx, cy, MAGNIFIER_R, 0, Math.PI * 2);
     ctx.clip();
 
-    // 1a. 镜底背景：取主画面同位置水色的近似（简化为单色 + 微渐变，避免重采样开销）
-    this._drawMagnifierBg(ctx, cx, cy);
+    // 1a. 镜底背景：v2.0.4 从场景的 _bgCacheCanvas（纯背景层，不含鱼影/鱼线/浮漂）
+    //   1:1 copy 浮漂周围一块矩形作为底图 —— 真实水面色调和波纹
+    this._drawMagnifierBg(ctx, cx, cy, bobScreenX, bobScreenY);
 
     // 1b. 放大浮漂（shake → 主浮漂 ×4 / sink → 水下剪影 ×4）
     //   叠加咬钩瞬间的镜内浮漂自抖（不抖镜框）
@@ -247,13 +248,55 @@ export class D5Magnifier {
     return { cx, cy };
   }
 
-  /** 镜底：简化水色渐变（不做 getImageData 重采样，性能优先） */
-  _drawMagnifierBg(ctx, cx, cy) {
-    const grad = ctx.createRadialGradient(cx, cy - 20, 8, cx, cy, MAGNIFIER_R);
-    grad.addColorStop(0, '#5BA9C8');
-    grad.addColorStop(1, '#2F6680');
+  /**
+   * 镜底背景（v2.0.5）：从 scene._bgCacheCanvas 取浮漂周围一小块，4× 放大画到镜内
+   *   - cache 仅包含纯背景层（水面/水下/远山/水草/岸边植被），无鱼影/鱼线/浮漂
+   *   - 源区域 50×50（MAGNIFIER_SIZE / ZOOM），目标 200×200，与镜内浮漂同倍率
+   *   - imageSmoothingEnabled=false → 最近邻整数放大，像素感与浮漂栅格一致
+   *   - 兜底：cache 不可用（首帧/异常）→ 退化到色调渐变 + 波纹
+   */
+  _drawMagnifierBg(ctx, cx, cy, bobScreenX, bobScreenY) {
+    const cache = this.scene && this.scene._bgCacheCanvas;
+    if (cache) {
+      // 源区域：以浮漂屏幕坐标为中心，截 (MAGNIFIER_SIZE / ZOOM) 见方一小块
+      const sw = MAGNIFIER_SIZE / MAGNIFIER_ZOOM;
+      const sh = MAGNIFIER_SIZE / MAGNIFIER_ZOOM;
+      let sx = Math.round(bobScreenX - sw / 2);
+      let sy = Math.round(bobScreenY - sh / 2);
+      // clamp 到 canvas 内（防止 sx/sy 为负或越界，drawImage 越界部分会留空白）
+      sx = Math.max(0, Math.min(cache.width - sw, sx));
+      sy = Math.max(0, Math.min(cache.height - sh, sy));
+      // 目标：镜中心 200×200（圆形 clip 限定可视范围）
+      const dw = MAGNIFIER_SIZE, dh = MAGNIFIER_SIZE;
+      const dx = Math.round(cx - dw / 2);
+      const dy = Math.round(cy - dh / 2);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(cache, sx, sy, sw, sh, dx, dy, dw, dh);
+      ctx.restore();
+      return;
+    }
+    // 兜底：cache 不可用时用色调渐变 + 波纹
+    const grad = ctx.createLinearGradient(cx, cy - MAGNIFIER_R, cx, cy + MAGNIFIER_R);
+    grad.addColorStop(0, '#7AC0CC');
+    grad.addColorStop(0.5, '#4A95A8');
+    grad.addColorStop(1, '#2F6F82');
     ctx.fillStyle = grad;
     ctx.fillRect(cx - MAGNIFIER_R, cy - MAGNIFIER_R, MAGNIFIER_SIZE, MAGNIFIER_SIZE);
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    const t = (this.scene && typeof this.scene.time === 'number') ? this.scene.time : (this._frameTime / 1000);
+    for (let i = 0; i < 4; i++) {
+      const yOff = -MAGNIFIER_R + 30 + i * 38;
+      ctx.beginPath();
+      for (let dx2 = -MAGNIFIER_R; dx2 <= MAGNIFIER_R; dx2 += 4) {
+        const wave = Math.sin((dx2 + t * 25 + i * 23) / 22) * 2;
+        const py = cy + yOff + wave;
+        if (dx2 === -MAGNIFIER_R) ctx.moveTo(cx + dx2, py);
+        else ctx.lineTo(cx + dx2, py);
+      }
+      ctx.stroke();
+    }
   }
 
   /**
