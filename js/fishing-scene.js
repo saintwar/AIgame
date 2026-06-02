@@ -1539,9 +1539,14 @@ class FishingScene {
     this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.fishShadow = null; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
     // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
     this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
+    // P0 放大镜：reset 兜底强制 hide（边沿检测下一帧会重新计时 150ms 出现）
+    if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
   }
 
-  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.showingFishInfo = false; }
+  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.fishShadow = null; this.currentFish = null; this.showingFishInfo = false;
+    // P0 放大镜：回 Idle 强制 hide（虽然边沿检测也会自然 hide，保险）
+    if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
+  }
 
   _toggleAtlas() {
     const isOpen = document.getElementById('atlas-panel'); if (isOpen) { isOpen.remove(); return; }
@@ -2998,14 +3003,15 @@ class FishingScene {
 
   _renderCaught() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch; const fish = this.caughtFish || this.currentFish;
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, ch * 0.4); skyGrad.addColorStop(0, '#FF8C00'); skyGrad.addColorStop(0.5, '#FFB347'); skyGrad.addColorStop(1, '#FFE4B5');
-    ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, cw, ch * 0.4);
-    ctx.fillStyle = '#4A90A4'; ctx.fillRect(0, ch * 0.4, cw, ch * 0.6);
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 3;
-    for (let y = ch * 0.45; y < ch; y += 38) { ctx.beginPath(); for (let x = 0; x < cw; x += 5) { const waveY = y + Math.sin((x + this.time * 90) / 75) * 9; x === 0 ? ctx.moveTo(x, waveY) : ctx.lineTo(x, waveY); } ctx.stroke(); }
+    // 2026-06-02：删除自画的橙色天空 + 蓝色假水面 + 假白色波纹背景，
+    //   让真实钓鱼场景（水下/水面/玩家/竿/HUD）作为结算界面的底图，与游戏场景一致
+    // 半透明深色蒙版：略压暗背景，突出中央提示框 + 鱼，不再切换"另一个场景"
+    ctx.fillStyle = 'rgba(0, 18, 32, 0.45)'; ctx.fillRect(0, 0, cw, ch);
+
     const t = Math.min(1, (this.caughtTimer - CONFIG.caught.animationDuration) / 1.0);
-    // 提示框在鱼下方：鱼中心 y 从 ch*0.5 改为 ch*0.75
-    const fishY = ch * 0.35 - t * ch * 0.15; const fishScale = 0.5 + t * 0.5;
+    // 程序化鱼：从屏幕下方游入中央，缩放 0.5 → 0.85（比原 1.0 略小，避免抢提示框）
+    //   原："鱼在屏幕上半 ch*0.35 → ch*0.20" → 改成"鱼在提示框上方 ch*0.30"
+    const fishY = ch * 0.30 - t * ch * 0.05; const fishScale = (0.5 + t * 0.35) * 0.85;
     ctx.save(); ctx.translate(cw / 2, fishY); ctx.scale(fishScale, fishScale);
     ctx.fillStyle = fish.color; ctx.beginPath(); ctx.ellipse(0, 0, 120, 60, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-105, 0); ctx.lineTo(-165, -45); ctx.lineTo(-165, 45); ctx.closePath(); ctx.fill();

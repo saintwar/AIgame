@@ -4,6 +4,35 @@
 
 ---
 
+## [2026-06-02 下午] · D5 v2.2 P0 放大镜实施 + 结算界面去自画背景
+
+> **背景**：v2.1 重构后剩下的 P0 待办「放大镜重做」由 Nina 整理 `docs/PHASE-21-1-D5-magnifier-impl-spec.md` v1.0 出口，CodeBuddy 跑完 §1 五条 grep 自检（全过 5/5）后实施，老板 4 项微调收口。详见 [`docs/PHASE-21-1-D5-handoff.md`](docs/PHASE-21-1-D5-handoff.md) §6.1。
+
+### P0 放大镜（新增 D5 v2.2）
+- 新建 `js/render/d5/magnifier-v2-renderer.js`（独立模块 export `D5Magnifier` class，~400 行）
+- **出现**：落水进 Waiting + 150ms 淡入；**消失**：离开 Waiting/BiteWindow 任意路径 → easeInQuad 往正下方滑出 ~一个直径（180ms）
+- **形态**：圆形 200×200，4× 最近邻整数放大；动态取反侧 + 边缘 clamp；圆形玻璃边框 + 弧形高光 + 内暗角
+- **内容**：shake 段 ×4 像素浮漂（栅格与 `_drawPixelBob` 同源 9 色）；sink 段复用 `underwater-bob-renderer` 画水下剪影
+- **S2 等待期**：±1px / 2s 微浮 + 4~8s 偶发涟漪
+- **中鱼瞬间**：240ms 内镜内浮漂随机 ±4px 自抖（**镜框稳定不动**——用户明确要求）
+- **接入**：`D5BiteFeedback` 持有实例，update/render 串调；Z-order 在涟漪上、PERFECT/可惜字下；`_resetToIdle/_resetToWaiting` 兜底 `magnifier.hide()`
+- **不实施**：S3 PUNCH（spec §3 红线，与 D5 主咬钩反馈不重叠）
+
+### 老板 4 项微调
+1. 尺寸 180→**200px**
+2. 镜内浮漂 dy 视觉幅度 **×0.5**（`MAGNIFIER_DY_SCALE`）+ 等待期微浮幅度 2→1px
+3. 中鱼瞬间镜内浮漂自抖 240ms ±4px（**镜框保持稳定**）
+4. 消失从"即焚淡出"改为**"往正下方滑出"**（FADE_OUT_MS 40→180）
+
+### 附带：结算界面
+- `_renderCaught` 删除自画橙色天空 + 蓝色假水 + 假波纹，改 `rgba(0,18,32,0.45)` 半透明蒙版，复用真钓鱼场景作为底图（玩家、竿、水面、HUD 自然延续）
+- 中央椭圆鱼浮起位置/缩放微调，不抢黑底金边提示框
+
+### 缓存
+- `index.html` `main.js?v=20260602o`
+
+---
+
 ## [2026-06-02] · D5「鱼咬钩反馈系统」v2.1 重构 + NPC 阴影 + 阿明 sprite 替换
 
 > **背景**：项目负责人凌晨亲自接手 D5 调优。原 v2.0 设计（三次下沉前奏 + 全屏红屏 + 大叹号 + multiply 染色放大镜）经实战后判定与目标手感不符，整套替换为「**抖动 → 沉水 → 提竿**」三拍。所有手感参数由负责人定稿。详见 [`docs/PHASE-21-1-D5-handoff.md`](docs/PHASE-21-1-D5-handoff.md)。

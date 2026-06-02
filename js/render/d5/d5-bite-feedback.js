@@ -18,6 +18,7 @@ import { drawMissText } from './miss-text-renderer.js';
 import { drawCloverGlow } from './clover-glow-renderer.js';
 import { emitHeavySplash } from './splash-particle-fx.js';
 import { drawUnderwaterBob } from './underwater-bob-renderer.js';
+import { D5Magnifier } from './magnifier-v2-renderer.js';
 import AudioSystem from '../../audio-system.js';
 
 // ────────────────────────────────────────────────────────────────────
@@ -92,6 +93,10 @@ export class D5BiteFeedback {
       rippleBurst:   null,  // { startMs, x, y } 漏提加速涟漪（仅 500ms）
     };
     this._frameTime = 0; // 累计 ms（与 scene 的 dt 同步）
+
+    // PHASE 21-1 D5 P0：放大镜 v2（落水进 Waiting+150ms 出现，提竿即焚）
+    // 详见 docs/PHASE-21-1-D5-magnifier-impl-spec.md
+    this.magnifier = new D5Magnifier(scene);
   }
 
   // ─────────────────────────────────────────────
@@ -198,6 +203,8 @@ export class D5BiteFeedback {
       this._updateShakeAudio();
     }
     this._reapExpired();
+    // P0 放大镜：自驱动（边沿检测 Waiting/BiteWindow 进出，含 150ms 延迟出现 + 提竿即焚）
+    if (this.magnifier) this.magnifier.update(dt);
   }
 
   /** shake 段：按 BiteShakeFrame 12fps 节奏，每帧 idx 推进时打一声 tick，dy 越大音量越大 */
@@ -216,7 +223,7 @@ export class D5BiteFeedback {
 
   render(ctx) {
     // Z-order：浮漂下方涟漪/水花 → 浮漂本体（场景画或被 hidden 跳过） → 水下剪影 →
-    //          四叶草 → 漏提加速涟漪 → PERFECT/可惜（最上层）
+    //          四叶草 → 漏提加速涟漪 → 放大镜浮层 → PERFECT/可惜（最上层）
 
     // 0) 水下剪影（sink 段开始就画，dy>0 时浮漂中心落在水线下方）
     const sinkP = this.getSinkProgress();
@@ -239,6 +246,9 @@ export class D5BiteFeedback {
     if (this.fx.rippleBurst) {
       this._drawRippleBurst(ctx);
     }
+
+    // 2.5) P0 放大镜浮层（在涟漪之上、文字之下）
+    if (this.magnifier) this.magnifier.render(ctx);
 
     // 3) PERFECT 字
     if (this.fx.perfectText) {
