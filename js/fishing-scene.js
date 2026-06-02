@@ -64,7 +64,14 @@ const CONFIG = {
     tensionRiseRate: 15,    // 按住空格每秒 +15（涨慢，0→100 约 6.7s）
     tensionFallRate: 40,    // 松开每秒 -40（掉快，100→0 约 2.5s）
     slackFailGrace: 0.5,    // tension≤0 缓冲秒数（避免松手瞬间触发）
-    goldZoneMin: 30, goldZoneMax: 70 // tension 黄金区（拉力条上高亮提示）
+    goldZoneMin: 30, goldZoneMax: 70, // tension 黄金区（拉力条上高亮提示）
+    // PHASE 21-1 D7：biteLevel → 博弈初始张力"第一印象"（老板拍板 B，保留越档悬念）
+    //   见 docs/PHASE-21-1-D7-impl-spec.md §3.2 红线：
+    //   - 偏移幅度 ±8~10，heavy 不得逼近红区 85
+    //   - 仅"起手张力"反差，真实难度仍由 behavior + HP 决定
+    //   - 严禁"力度=难度"确定映射
+    //   - null 兜底 60（异常路径/GM 跳转）
+    biteInitialTension: { light: 52, medium: 60, heavy: 70 }
   },
   caught: { animationDuration: 2.0, slowmoThreshold: 4, slowmoScale: 0.3, particleCount: 18, legendaryGlowDuration: 0.5 },
   failed: { resetDuration: 1.5 },
@@ -1120,7 +1127,11 @@ class FishingScene {
     // 鱼初始位置在水下中央区域
     const centerX = w * 0.45; const centerY = h * 0.55; const rangeX = w * 0.15; const rangeY = h * 0.12;
     this.playingFishX = centerX + (Math.random() - 0.5) * rangeX * 2; this.playingFishY = centerY + (Math.random() - 0.5) * rangeY * 2;
-    this.escapeSpeed = cfg.fishEscapeSpeed; this.tension = 60; this.escapeBurstTimer = 0; this.fishMaxHP = this.currentFish.maxHP;
+    // PHASE 21-1 D7：biteLevel 透传 → 初始张力"第一印象"（老板拍板 B，保留越档悬念）
+    //   见 docs/PHASE-21-1-D7-impl-spec.md §3。真实难度仍由 behavior + HP 决定，本字段仅调起手张力反差。
+    //   null 兜底 60：异常路径 / GM 跳转（_initPlayingState 也被 L1473 GM 调用）
+    const _bt = (cfg.biteInitialTension && cfg.biteInitialTension[this.biteLevel]) || 60;
+    this.escapeSpeed = cfg.fishEscapeSpeed; this.tension = _bt; this.escapeBurstTimer = 0; this.fishMaxHP = this.currentFish.maxHP;
     this.fishYCenter = this.playingFishY; this.fishYTime = Math.random() * Math.PI * 2; this.escapeCheckTimer = 0; this.warningShown = false;
     this.slackTimer = 0; // PHASE 13-4：tension≤0 累计秒数，超过 slackFailGrace 则 slack 失败
     // ───────────── PHASE 15：鱼行为状态机 + 视觉预警状态位 ─────────────
