@@ -1197,11 +1197,19 @@ class FishingScene {
     //   现在 fishHP / maxHP 直接对接 PHASE 15 数据（fishData.hp / fishData.hpDrain），
     //   mythic 三阶段所需 hpPercent 直接用 fishHP/maxHP 计算。
     // 首次进入水下场景时显示拉力教程
-    this._showTensionTutorialIfNeeded();
+    //   hotfix（2026-06-02-2）：用 setTimeout(80ms) 推迟，让 _loop 至少跑 4-5 帧
+    //   把水下视角（_renderPlaying）真正绘到 canvas 后再 paused=true 弹教程
+    //   ⚠️ 不能用 requestAnimationFrame —— RAF callback 与主 _loop RAF 同队列，
+    //      可能在 _loop 之前就连续触发完，paused=true 反而把画面冻在 BiteWindow 残帧
+    if (!window.Save?.get('flags.fishing_tutorial_shown')) {
+      setTimeout(() => this._showTensionTutorialIfNeeded(), 80);
+    }
   }
 
   _showTensionTutorialIfNeeded() {
     if (window.Save?.get('flags.fishing_tutorial_shown')) return;
+    // 二次守护：弹教程时若已不在 Playing（异常路径打断），直接放弃
+    if (!this.fsm.is('Playing')) return;
     this.paused = true;
     const panel = document.createElement('div');
     panel.id = 'fishing-tutorial-panel';
