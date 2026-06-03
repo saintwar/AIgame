@@ -54,6 +54,14 @@ const FRAME_DARK      = '#8B6914';  // 内描边
 const HILIGHT_COLOR   = 'rgba(255,255,255,0.55)';
 const VIGNETTE_COLOR  = 'rgba(0,0,0,0.35)';
 
+// PHASE 21-1 D14 hotfix-l：放大镜正下方"重新抛竿"按钮（hotfix-m 文案 收竿→重新抛竿）
+const RECALL_BTN_W       = 110;
+const RECALL_BTN_H       = 28;
+const RECALL_BTN_GAP     = 14;   // 按钮与镜底间距
+const RECALL_BTN_BG      = '#1A2438';
+const RECALL_BTN_BG_HOV  = '#2A3A5A';
+const RECALL_BTN_TEXT    = '#FFE4B5';
+
 // ─────────────────────────────────────────────────────────────
 // D5Magnifier
 // ─────────────────────────────────────────────────────────────
@@ -75,7 +83,29 @@ export class D5Magnifier {
     // S2 涟漪调度
     this._nextRippleAt = -1;       // 下一圈涟漪触发时间（ms）
     this._activeRipple = null;     // { startMs }，仅 1 圈活跃
+
+    // PHASE 21-1 D14 hotfix-l：收竿按钮
+    this._lastRenderedCx = -9999;  // 上一帧镜中心 X（按钮定位用，含 hide 下滑位移）
+    this._lastRenderedCy = -9999;  // 上一帧镜中心 Y
+    this._lastAlpha      = 0;      // 上一帧 alpha（hit-test 只在 alpha>=1 时有效）
+    this._recallBtnHovered = false;
   }
+
+  // PHASE 21-1 D14 hotfix-l：暴露收竿按钮 AABB 给 fishing-scene 做 click hit-test
+  //   返回 null 表示按钮不可点（淡入/淡出期、未显示）
+  getRecallBtnRect() {
+    if (this._lastAlpha < 0.95) return null; // 完全显示才允许点
+    const cx = this._lastRenderedCx;
+    const cy = this._lastRenderedCy;
+    return {
+      x: Math.round(cx - RECALL_BTN_W / 2),
+      y: Math.round(cy + MAGNIFIER_R + RECALL_BTN_GAP),
+      w: RECALL_BTN_W,
+      h: RECALL_BTN_H,
+    };
+  }
+
+  setRecallBtnHovered(v) { this._recallBtnHovered = !!v; }
 
   /** 离开 Waiting/BiteWindow 时显式调用，立即开始淡出（reset 也调） */
   hide() {
@@ -211,7 +241,16 @@ export class D5Magnifier {
     // ─── 2. 镜片装饰（边框/高光/暗角） ───
     this._drawFrame(ctx, cx, cy);
 
+    // ─── 3. 收竿按钮（PHASE 21-1 D14 hotfix-l）───
+    //   位置 = 镜中心 cx，y = 镜底 + GAP；alpha 跟随镜框一起淡入淡出 / 下滑消失
+    this._drawRecallBtn(ctx, cx, cy);
+
     ctx.restore();
+
+    // 记录给 fishing-scene click hit-test 用（含 hide 下滑位移）
+    this._lastRenderedCx = cx;
+    this._lastRenderedCy = cy;
+    this._lastAlpha = alpha;
   }
 
   // ─────────────────────────────────────────────
@@ -485,5 +524,47 @@ export class D5Magnifier {
     ctx.arc(cx, cy, MAGNIFIER_R - 8, Math.PI * 1.15, Math.PI * 1.55);
     ctx.stroke();
     ctx.lineCap = 'butt';
+  }
+
+  /**
+   * PHASE 21-1 D14 hotfix-l：放大镜正下方"收竿"按钮
+   *   位置：cx 居中，y = 镜底 + GAP；尺寸 RECALL_BTN_W × H 圆角
+   *   样式：深色底 + 金边 + 金字"收竿"；hover 时底色变亮
+   *   alpha：跟随外层 ctx.globalAlpha（render 顶层已 set）
+   */
+  _drawRecallBtn(ctx, cx, cy) {
+    const x = Math.round(cx - RECALL_BTN_W / 2);
+    const y = Math.round(cy + MAGNIFIER_R + RECALL_BTN_GAP);
+    const w = RECALL_BTN_W;
+    const h = RECALL_BTN_H;
+    const r = 6;
+    // 圆角矩形 path
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    // 底色
+    ctx.fillStyle = this._recallBtnHovered ? RECALL_BTN_BG_HOV : RECALL_BTN_BG;
+    ctx.fill();
+    // 金边
+    ctx.strokeStyle = FRAME_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 文字"收竿"
+    ctx.fillStyle = RECALL_BTN_TEXT;
+    ctx.font = '14px "TencentSansW7","TencentSans","Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('重新抛竿', x + w / 2, y + h / 2 + 1);
+    // 复位
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 }

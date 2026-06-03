@@ -5,6 +5,8 @@ export const ITEMS = {
   legendary_bait:{ id:'legendary_bait',name:'传说鱼饵',  category:'bait', icon:'✨', desc:'传说中能引来鱼王的神秘饵料', stack:99, price:100 },
 
   // 钓竿类（3 段进阶）
+  // PHASE 21-1 D14 hotfix-n：rarityUnlock @deprecated（钓竿不再过滤鱼池）
+  //   新增 damageMul：每次安全区 tick 扣血量 = fishData.hpPerTick × damageMul
   basic_rod: {
     id:'basic_rod', name:'入门钓竿', category:'rod', icon:'🎣',
     desc:'阿明从家里翻出的旧竿子，凑合用',
@@ -13,7 +15,8 @@ export const ITEMS = {
     qteSpeedMul: 1.0,
     bigFishBonus: 0,
     maxSizeMul: 1.0,
-    rarityUnlock: 2
+    damageMul: 1.0,        // hotfix-n 新增
+    rarityUnlock: 2        // @deprecated hotfix-n
   },
   bamboo_rod: {
     id:'bamboo_rod', name:'竹制钓竿', category:'rod', icon:'🎍',
@@ -23,7 +26,8 @@ export const ITEMS = {
     qteSpeedMul: 0.85,
     bigFishBonus: 0.10,
     maxSizeMul: 1.15,
-    rarityUnlock: 3
+    damageMul: 1.5,        // hotfix-n 新增
+    rarityUnlock: 3        // @deprecated hotfix-n
   },
   carbon_rod: {
     id:'carbon_rod', name:'碳素钓竿', category:'rod', icon:'⚜️',
@@ -33,7 +37,8 @@ export const ITEMS = {
     qteSpeedMul: 0.7,
     bigFishBonus: 0.25,
     maxSizeMul: 1.35,
-    rarityUnlock: 5
+    damageMul: 2.5,        // hotfix-n 新增
+    rarityUnlock: 5        // @deprecated hotfix-n
   },
 
   // 材料/杂项（占位）

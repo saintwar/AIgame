@@ -281,6 +281,14 @@ class AudioSystem {
     noise.stop(t0 + duration + 0.05);
   }
   playReelTick() { this._beep(400, 0.02, 'square', 0.2); }      // 收线咔
+  // PHASE 21-1 D14 hotfix-o：拉鱼安全区扣血"打击音"（短促重击 + 余韵下滑）
+  playFishHit() {
+    if (!this.ctx || this.muted) return;
+    // 第一击：低频厚实的"咚"
+    this._beep(180, 0.05, 'square', 0.32);
+    // 余韵：65ms 后高频短促"啪"，模拟肉体被击中的清脆尾音
+    setTimeout(() => this._beep(520, 0.04, 'triangle', 0.22), 65);
+  }
   playFishCaught() {
     // 上扬 4 音音阶
     const notes = [523, 659, 784, 1047];

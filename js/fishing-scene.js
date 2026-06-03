@@ -59,7 +59,7 @@ const CONFIG = {
     },
   },
   reeling: { qteCountByRarity: [3, 5, 7, 9, 11], tickDurationByRarity: [1.6, 1.4, 1.2, 1.0, 0.8], hpDamageByRarity: [35, 20, 15, 12, 10], tensionPenaltyByRarity: [15, 18, 20, 22, 25], tensionSuccessBonus: 10, tensionFailPenalty: 20, tensionTimeoutPenalty: 20 },
-  playing: { maxTension: 100, tensionPerSecond: 20, tensionDecayPerSecond: 6, fishEscapeSpeed: 225, fishEscapeSpeedIncrease: 12, catchZoneX: 0.9, catchZoneY: 0.2, tensionLowThreshold: 40, tensionHighThreshold: 70, escapeBaseChanceAtZero: 0.08, escapeChanceAtHalf: 0.015, escapeChanceAtFull: 0.001, lowTensionPenaltyMultiplier: 3.0, highTensionBonusMultiplier: 0.3, escapeCheckInterval: 0.5, fishHPRecoverPerSecond: 8, fishHPMaxRecoverRatio: 0.3,
+  playing: { maxTension: 100, tensionPerSecond: 20, tensionDecayPerSecond: 6, fishEscapeSpeed: 225, fishEscapeSpeedIncrease: 12, catchZoneX: 0.9, catchZoneY: 0.2, tensionLowThreshold: 40, tensionHighThreshold: 70, escapeBaseChanceAtZero: 0.08, escapeChanceAtHalf: 0.015, escapeChanceAtFull: 0.001, lowTensionPenaltyMultiplier: 3.0, highTensionBonusMultiplier: 0.3, escapeCheckInterval: 0.5, fishHPRecoverPerSecond: 8, fishHPMaxRecoverRatio: 1.0, /* hotfix-p：30%→100% 回血可满血 */
     // PHASE 13-4：空格控压维度（叠加在 QTE 系统上）
     //   按住空格 → tension 上升；松开 → tension 下降
     //   tension≤0 持续 slackFailGrace 秒 → slack 失败（鱼脱钩，与 ≥100 鱼线断对称）
@@ -137,7 +137,8 @@ class StateMachine {
 // AudioSystem（由 audio-system.js 提供）
 // ============================================================
 import AudioSystem from './audio-system.js';
-import { FISH_POOL } from './FISH_POOL.js';
+// PHASE 21-1 D14 hotfix-n：删除 FISH_POOL.js 依赖，统一使用 SHUISHE_FISH_POOL（已在顶部 import）
+//   color 字段已搬入 SHUISHE 池每条鱼，不再需要 legacy 映射
 window._fishingAudioSystem = AudioSystem;
 
 // ============================================================
@@ -402,6 +403,42 @@ class FishingScene {
       }
     };
     this.canvas.addEventListener('mousedown', this._confirmMouseDownHandler);
+
+    // PHASE 21-1 D14 hotfix-l：放大镜正下方"收竿"按钮 click + hover
+    //   命中 → 等价 _resetToIdle()（与 Q/ESC 一致，回 Idle 抛新竿）
+    //   按钮 AABB 由 D5Magnifier.getRecallBtnRect() 提供，返回 null 表示未显示/淡入淡出期
+    const toCanvasXYLocal = (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const sx = this.canvas.width / rect.width;
+      const sy = this.canvas.height / rect.height;
+      return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
+    };
+    this._magnifierRecallClickHandler = (e) => {
+      if (e.button !== 0) return;
+      const mag = this.d5 && this.d5.magnifier;
+      if (!mag || typeof mag.getRecallBtnRect !== 'function') return;
+      const r = mag.getRecallBtnRect();
+      if (!r) return;
+      const { x, y } = toCanvasXYLocal(e);
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        e.stopPropagation(); // 防止同帧触发 _confirmMouseDownHandler 等其他逻辑
+        this._resetToIdle();
+      }
+    };
+    this._magnifierRecallMoveHandler = (e) => {
+      const mag = this.d5 && this.d5.magnifier;
+      if (!mag || typeof mag.getRecallBtnRect !== 'function') return;
+      const r = mag.getRecallBtnRect();
+      if (!r) { if (mag.setRecallBtnHovered) mag.setRecallBtnHovered(false); return; }
+      const { x, y } = toCanvasXYLocal(e);
+      const inBtn = x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      if (mag.setRecallBtnHovered) mag.setRecallBtnHovered(inBtn);
+      // cursor 跟随
+      if (this.canvas) this.canvas.style.cursor = inBtn ? 'pointer' : '';
+    };
+    // 用 capture 让本 handler 先于 _confirmMouseDownHandler 跑（避免顺序歧义）
+    this.canvas.addEventListener('mousedown', this._magnifierRecallClickHandler, true);
+    this.canvas.addEventListener('mousemove', this._magnifierRecallMoveHandler);
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -494,6 +531,16 @@ class FishingScene {
     this._confirmClick = false;
     this._castingWaitingSplash = false;
     this._aimingMouseHeld = false;
+
+    // PHASE 21-1 D14 hotfix-l：解绑放大镜收竿按钮监听
+    if (this.canvas && this._magnifierRecallClickHandler) {
+      this.canvas.removeEventListener('mousedown', this._magnifierRecallClickHandler, true);
+    }
+    if (this.canvas && this._magnifierRecallMoveHandler) {
+      this.canvas.removeEventListener('mousemove', this._magnifierRecallMoveHandler);
+    }
+    this._magnifierRecallClickHandler = null;
+    this._magnifierRecallMoveHandler = null;
     this._aimingMouseStartedFlag = false;
     this.canvas = null;
     this.ctx = null;
@@ -985,104 +1032,92 @@ class FishingScene {
   }
 
   _selectFish() {
-    // 根据装备的钓竿决定鱼种
-    const rod = window.equipment ? window.equipment.getEquippedRod() : { rarityUnlock: 5, bigFishBonus: 0, maxSizeMul: 1.0 };
+    // PHASE 21-1 D14 hotfix-n：鱼池统一 + q003 门禁 + 删 FISH_POOL.js legacy 映射
+    const rod = window.equipment ? window.equipment.getEquippedRod() : { bigFishBonus: 0, maxSizeMul: 1.0, damageMul: 1.0 };
     const fishData = rollFishWithRod(rod);
     if (!fishData) {
-      // fallback：旧逻辑
-      const totalProb = FISH_POOL.reduce((sum, f) => sum + f.baseProb, 0);
-      let rand = Math.random() * totalProb;
-      for (const fish of FISH_POOL) { rand -= fish.baseProb; if (rand <= 0) { this.currentFish = { ...fish }; this.currentFish.maxHP = fish.rarity * 120; this.fishHP = this.currentFish.maxHP; break; } }
+      // 防御性兜底：理论上 SHUISHE 池非空 + q003 未完成时也有 ★1-3 鱼，不会进这里
+      console.warn('[FishPool] rollFishWithRod returned null, fallback to first fish');
+      const f0 = SHUISHE_FISH_POOL[0];
+      this.currentFish = this._buildCurrentFish(f0, f0.sizeRange[0]);
       return;
     }
-    // 将 fish-pool.js 数据映射为 FishingScene 内部格式
-    const legacy = FISH_POOL.find(f => f.name === fishData.species);
-    this.currentFish = legacy ? { ...legacy } : {
-      id: fishData.species, name: fishData.species,
-      rarity: fishData.rarity, color: '#4682B4',
-      size: [fishData.size, fishData.size * 0.5],
-      price: fishData.basePrice, baseProb: fishData.weight / 100
-    };
-    this.currentFish.size = [fishData.size, fishData.size * 0.5];
-    this.currentFish.price = fishData.basePrice;
-    // PHASE 15 修复：legacy FISH_POOL 仅提供 color 等视觉字段，rarity/HP 必须以 PHASE 15 数据为权威
-    //   原 bug：legacy.rarity 覆盖 fishData.rarity（曲腰鱼 2→3）+ maxHP=rarity*120（→240）
-    //   修复：rarity 强制用 fishData.rarity；maxHP 直接用 fishData.hp（PHASE 15 战斗参数）
-    this.currentFish.rarity = fishData.rarity;
-    this.currentFish.maxHP = fishData.hp;
+    // hotfix-n：直接用 SHUISHE 数据，color/hpPerTick 字段已在池中
+    this.currentFish = this._buildCurrentFish(fishData, fishData.size);
     this.fishHP = this.currentFish.maxHP;
-    // PHASE 15：把鱼种行为/拉力字段同步到 currentFish（_initPlayingState 会用）
-    this.currentFish.fishPull = fishData.fishPull || 0;
-    this.currentFish.behavior = fishData.behavior || 'none';
-    this.currentFish.hpDrain = fishData.hpDrain || 0;
 
     // ─────────────────────────────────────────────────────────
-    // PHASE 16-6 仗4：鱼饵效果末端注入
-    //   仅在末端基于 baitEffect 调整 currentFish，不重构上游 rollFishWithRod
-    //   - rarityShift +1：必把档位升一级（普通→稀有/稀有→史诗，最高档保持）
-    //   - rarityBonus 0.3：30% 概率提档 1 级（与 rarityShift 互斥，已通过配置）
-    //   - sizeMul：作用于 size[0]（caughtFishSize 的基准）
-    //   - 提档时从 SHUISHE_FISH_POOL 按"rarity == 目标档"重抽一条
+    // PHASE 16-6 仗4 + hotfix-n：鱼饵效果末端注入
+    //   - rarityShift +1：必把档位升一级
+    //   - rarityBonus 0.3：30% 概率提档 1 级
+    //   - sizeMul：作用于 size[0]
+    //   - 提档时从 SHUISHE 池按 rarity 重抽一条（受 q003 门禁限制）
     // ─────────────────────────────────────────────────────────
     this._lastBaitTrigger = null;  // 'shift' | 'bonus' | null
     const equippedBaitId = window.Save?.get('player.equippedBait') || 'basic_bait';
     const baitEffect = getBaitEffect(equippedBaitId);
     if (baitEffect && (baitEffect.rarityShift > 0 || baitEffect.rarityBonus > 0 || baitEffect.sizeMul !== 1.0)) {
-      const maxRarity = Math.max(...SHUISHE_FISH_POOL.map(f => f.rarity));
-      const rodMaxRarity = rod.rarityUnlock || maxRarity;
-      const ceiling = Math.min(maxRarity, rodMaxRarity);  // 不能超过钓竿/鱼池上限
+      // hotfix-n：天花板 = q003 门禁后的池子最高 rarity（未完成 q003 时 = 3）
+      const q003Done = window.questSystem && window.questSystem.getStatus('q003') === 'completed';
+      const ceiling = q003Done ? 5 : 3;
 
       let targetRarity = this.currentFish.rarity;
       if (baitEffect.rarityShift > 0) {
-        // 极品香饵：必升档
         targetRarity = Math.min(ceiling, this.currentFish.rarity + baitEffect.rarityShift);
         if (targetRarity > this.currentFish.rarity) this._lastBaitTrigger = 'shift';
       } else if (baitEffect.rarityBonus > 0 && Math.random() < baitEffect.rarityBonus) {
-        // 香饵：rarityBonus 概率升档
         targetRarity = Math.min(ceiling, this.currentFish.rarity + 1);
         if (targetRarity > this.currentFish.rarity) this._lastBaitTrigger = 'bonus';
       }
 
-      // 若需要重抽：从同档/更高档鱼里随机一条
       if (targetRarity > this.currentFish.rarity) {
         const candidates = SHUISHE_FISH_POOL.filter(f => f.rarity === targetRarity);
         if (candidates.length > 0) {
           const newFish = candidates[Math.floor(Math.random() * candidates.length)];
-          const newLegacy = FISH_POOL.find(f => f.name === newFish.species);
           const [minS, maxS] = newFish.sizeRange;
-          const newSize = (minS + Math.random() * (maxS - minS)) * (rod.maxSizeMul || 1.0);
-          this.currentFish = newLegacy ? { ...newLegacy } : {
-            id: newFish.species, name: newFish.species,
-            rarity: newFish.rarity, color: '#4682B4',
-            size: [newSize, newSize * 0.5],
-            price: newFish.basePrice, baseProb: newFish.weight / 100
-          };
-          this.currentFish.size = [newSize, newSize * 0.5];
-          this.currentFish.price = newFish.basePrice;
-          this.currentFish.rarity = newFish.rarity;
-          // PHASE 15 修复：maxHP 用 PHASE 15 数据，与 _setupCurrentFish 保持一致
-          this.currentFish.maxHP = newFish.hp;
+          const newSize = Math.round((minS + Math.random() * (maxS - minS)) * (rod.maxSizeMul || 1.0) * 10) / 10;
+          this.currentFish = this._buildCurrentFish(newFish, newSize);
           this.fishHP = this.currentFish.maxHP;
-          // PHASE 15：提档后同步行为/拉力字段
-          this.currentFish.fishPull = newFish.fishPull || 0;
-          this.currentFish.behavior = newFish.behavior || 'none';
-          this.currentFish.hpDrain = newFish.hpDrain || 0;
         }
       }
 
-      // 应用 sizeMul（作用于 size[0]，影响后续 caughtFishSize 的基准）
       if (baitEffect.sizeMul !== 1.0) {
         this.currentFish.size[0] = Math.round(this.currentFish.size[0] * baitEffect.sizeMul * 10) / 10;
         this.currentFish.size[1] = this.currentFish.size[0] * 0.5;
       }
 
-      // 飘字反馈（仅在确实触发时显示）
-      if (this._lastBaitTrigger === 'shift') {
-        this._showCodexToast('✨ 极品香饵威力！');
-      } else if (this._lastBaitTrigger === 'bonus') {
-        this._showCodexToast('🌸 香饵生效！');
-      }
+      if (this._lastBaitTrigger === 'shift') this._showCodexToast('✨ 极品香饵威力！');
+      else if (this._lastBaitTrigger === 'bonus') this._showCodexToast('🌸 香饵生效！');
     }
+  }
+
+  /**
+   * PHASE 21-1 D14 hotfix-n：用 SHUISHE 鱼数据 + 体长构造 currentFish。
+   * 取代旧 FISH_POOL legacy 映射；color/hpPerTick/hpDrain 全从 SHUISHE 数据直读。
+   * @param {object} f    SHUISHE_FISH_POOL 中的鱼对象（含 color / hpPerTick / hpDrain 等）
+   * @param {number} size 体长 cm（已乘 rod.maxSizeMul）
+   */
+  _buildCurrentFish(f, size) {
+    return {
+      id: f.id,
+      name: f.species,
+      rarity: f.rarity,
+      color: f.color || '#4682B4',
+      size: [size, size * 0.5],
+      price: f.basePrice,
+      baseProb: f.baseProb,
+      maxHP: f.hp,
+      // hotfix-n 新字段：每 3 秒安全区扣血量（基础值，未乘 rod.damageMul）
+      hpPerTick: f.hpPerTick || 5,
+      // hotfix-o 新字段：放松时每秒回血量（按个体差异化，覆盖旧全局 fishHPRecoverPerSecond）
+      hpRecoverPerSecond: f.hpRecoverPerSecond != null ? f.hpRecoverPerSecond : 8,
+      hpDrain: f.hpDrain || 0,  // @deprecated 保留
+      fishPull: f.fishPull || 0,
+      behavior: f.behavior || 'none',
+      legendary: !!f.legendary,
+      icon: f.icon,
+    };
+    // 注：调用方负责 this.fishHP = this.currentFish.maxHP（_initPlayingState 会做）
   }
 
   // PHASE 21-1 D5：鱼咬钩瞬间 —— 直接进入 BiteWindow，由 D5 系统接管全部前奏/反馈
@@ -1210,6 +1245,14 @@ class FishingScene {
     this.escapeSpeed = cfg.fishEscapeSpeed; this.tension = _bt; this.escapeBurstTimer = 0; this.fishMaxHP = this.currentFish.maxHP;
     this.fishYCenter = this.playingFishY; this.fishYTime = Math.random() * Math.PI * 2; this.escapeCheckTimer = 0; this.warningShown = false;
     this.slackTimer = 0; // PHASE 13-4：tension≤0 累计秒数，超过 slackFailGrace 则 slack 失败
+    // PHASE 21-1 D14 hotfix-n：HP 扣血改 3 秒安全区 tick
+    //   每帧累加 dt 到 safeTickTimer；满 3.0s 且 tension ∈ [low, high] 时扣 hpPerTick × damageMul
+    this.safeTickTimer = 0;
+    // PHASE 21-1 D14 hotfix-o：扣血反馈状态字段
+    //   _fishHitShakeUntil：鱼图标抖动结束时间戳（performance.now()）
+    //   _damageTexts：飘字队列（{x, y, text, color, life, vy}）
+    this._fishHitShakeUntil = 0;
+    this._damageTexts = [];
     // ───────────── PHASE 15：鱼行为状态机 + 视觉预警状态位 ─────────────
     // 用 currentFish 自带 fishPull / behavior 字段创建状态机；
     // FishBehavior 通过 onEvent 回调把"surge_incoming/mythic_dive"事件转交给场景层（用于"!"气泡 / 屏幕震动等）。
@@ -1295,6 +1338,36 @@ class FishingScene {
     }
   }
 
+  /**
+   * PHASE 21-1 D14 hotfix-o：安全区扣血触发的统一反馈
+   * A 鱼震动：_fishHitShakeUntil 推到 now+200ms，渲染层每帧加 ±4px 偏移
+   * B 飘字：push 红色 "-N" 飘字，0.8s 上浮淡出
+   * D 音效：playFishHit（短促打击音）
+   * E 粒子：6 个金色火星向四周散开
+   */
+  _onFishHit(damage) {
+    const fx = this.playingFishX || this.bobX || 0;
+    const fy = this.playingFishY || this.bobY || 0;
+    // A：抖动 200ms
+    this._fishHitShakeUntil = performance.now() + 200;
+    // B：飘字（红色"-N"，从鱼头部正上方升起 0.8s 后淡出）
+    this._damageTexts.push({
+      x: fx,
+      y: fy - 24,
+      text: `-${damage}`,
+      color: '#FF3B30',
+      life: 0.8, // 秒
+      maxLife: 0.8,
+      vy: -45,   // 上浮速度 px/s
+    });
+    // 容量保护：超过 12 条删除最早的
+    if (this._damageTexts.length > 12) this._damageTexts.shift();
+    // D：音效
+    AudioSystem.playFishHit();
+    // E：粒子（6 个金色火星向四周散开 + 轻微上抛 + 重力下落）
+    this.particles.emit(fx, fy, 6, '#FFD700', { speed: 80, gravity: 180, size: 5, decay: 0.045 });
+  }
+
   _updatePlaying(dt) {
     // PHASE 21-1 hotfix（2026-06-01）：鼠标左键与空格键并行，按住任意一个都视为"拉线"
     //   变量名沿用 holdingSpace 是为了下方所有原有判断零改动；含义已扩展为"按住拉杆键（空格 OR 鼠标左键）"
@@ -1303,12 +1376,39 @@ class FishingScene {
     if (holdingSpace) AudioSystem.startReelSound();
     else AudioSystem.stopReelSound();
     if (this._checkEscape(dt)) return;
-    // PHASE 15 修复：扣血率改用鱼种自带 hpDrain（替代老公式 5+rarity*4.5）
-    //   这样 hp ÷ hpDrain 即理论最快收杆时间，符合 PHASE 15 数值表设计。
-    //   回血率不动（cfg.fishHPRecoverPerSecond），与 escape/exhausted 判定耦合的逻辑全部保留。
-    const hpDecayRate = this.currentFish.hpDrain || (5 + this.currentFish.rarity * 4.5);
-    const hpRecoverRate = cfg.fishHPRecoverPerSecond; const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
-    if (this.fishHP > 0) { if (holdingSpace) this.fishHP = Math.max(0, this.fishHP - hpDecayRate * dt); else if (this.fishHP < maxRecoverHP) this.fishHP = Math.min(maxRecoverHP, this.fishHP + hpRecoverRate * dt); }
+    // PHASE 21-1 D14 hotfix-n：HP 扣血新规则 —— 3 秒安全区 tick
+    //   旧规则：holdingSpace 每帧 ×dt 扣 hpDrain → 删除
+    //   新规则：
+    //     - 每 3 秒触发 1 次 tick；触发瞬间若 tension ∈ [tensionLowThreshold, tensionHighThreshold]
+    //       扣 hpPerTick × rod.damageMul（鱼竿越高级伤害越大）
+    //     - 不在安全区时本 tick 不扣血
+    //     - 回血规则保留：放松（!holdingSpace）且 fishHP < maxRecoverHP 时按 recoverRate 回血
+    const SAFE_TICK_INTERVAL = 3.0;
+    const tensionInSafeZone = this.tension >= cfg.tensionLowThreshold && this.tension <= cfg.tensionHighThreshold;
+    if (this.fishHP > 0) {
+      // 累加 tick 计时器；满 3s 触发一次扣血判定
+      this.safeTickTimer = (this.safeTickTimer || 0) + dt;
+      if (this.safeTickTimer >= SAFE_TICK_INTERVAL) {
+        this.safeTickTimer -= SAFE_TICK_INTERVAL;
+        if (tensionInSafeZone) {
+          const rod = window.equipment ? window.equipment.getEquippedRod() : null;
+          const damageMul = (rod && rod.damageMul) || 1.0;
+          const hpPerTick = this.currentFish.hpPerTick || 5;
+          const damage = Math.round(hpPerTick * damageMul);
+          this.fishHP = Math.max(0, this.fishHP - damage);
+          this._onFishHit(damage);
+        }
+      }
+      // 回血保留：放松状态（未按空格）且未到回血上限时按个体 hpRecoverPerSecond 回血
+      //   hotfix-o：从鱼数据直读（按星级 + 个体差异化），旧 cfg.fishHPRecoverPerSecond 已废弃
+      const hpRecoverRate = (this.currentFish.hpRecoverPerSecond != null)
+        ? this.currentFish.hpRecoverPerSecond
+        : cfg.fishHPRecoverPerSecond;
+      const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
+      if (!holdingSpace && this.fishHP < maxRecoverHP) {
+        this.fishHP = Math.min(maxRecoverHP, this.fishHP + hpRecoverRate * dt);
+      }
+    }
     const fishExhausted = this.fishHP <= 0;
     if (this.tension > 70 && !this.highTensionSound) { this.highTensionSound = true; AudioSystem.playReelTick(); } else if (this.tension <= 70) this.highTensionSound = false;
     if (this.tension > cfg.maxTension * 0.85 && !this.warningShown) { this.warningShown = true; } else if (this.tension <= cfg.maxTension * 0.85 && this.warningShown) this.warningShown = false;
@@ -1374,6 +1474,16 @@ class FishingScene {
     } else {
       this.slackTimer = 0;
     }
+
+    // PHASE 21-1 D14 hotfix-o：扣血飘字更新（每帧推进 life + 上浮）
+    if (this._damageTexts && this._damageTexts.length > 0) {
+      for (let i = this._damageTexts.length - 1; i >= 0; i--) {
+        const t = this._damageTexts[i];
+        t.life -= dt;
+        t.y += t.vy * dt;
+        if (t.life <= 0) this._damageTexts.splice(i, 1);
+      }
+    }
   }
 
   _calculateEscapeChance(tension, maxTension) {
@@ -1389,6 +1499,10 @@ class FishingScene {
     if (this.escapeCheckTimer < cfg.escapeCheckInterval) return false;
     this.escapeCheckTimer = 0;
     if (this.fishHP <= 0) return false;
+    // PHASE 21-1 D14 hotfix-q：安全区 [low, high] 内完全免疫"鱼自然挣脱"概率判定
+    //   旧规则下安全区 multiplier=1.0，1 分钟仍约 80% 跑鱼，与新 hpPerTick 长拉锯节奏冲突
+    //   新规则：精准控压 = 免疫随机跑鱼；失败只来自 tension 爆条 / slack 松脱
+    if (this.tension >= cfg.tensionLowThreshold && this.tension <= cfg.tensionHighThreshold) return false;
     if (Math.random() < this._calculateEscapeChance(this.tension, cfg.maxTension)) { this.fsm.transition('Failed', 'escape'); this.failedReason = 'escape'; return true; }
     return false;
   }
@@ -1660,8 +1774,9 @@ class FishingScene {
     const panel = document.createElement('div'); panel.id = 'atlas-panel';
     panel.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:600px;max-height:80%;background:rgba(0,0,0,0.9);border:2px solid #4FC3F7;border-radius:16px;padding:24px;color:#fff;font-family:"TencentSans","PingFang SC","Noto Sans SC","Heiti SC",sans-serif;overflow-y:auto;z-index:100;';
     let html = '<h2 style="text-align:center;color:#FFD700;font-size:28px;margin:0 0 20px">📖 鱼获图鉴</h2><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">';
-    FISH_POOL.forEach(f => { const owned = this.atlas.has(f.id); html += `<div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:16px;text-align:center;${owned ? '' : 'opacity:0.4'}">
-      <div style="font-size:48px">${owned ? '🐟' : '🔒'}</div><div style="font-size:18px;font-weight:bold;color:${f.color}">${f.name}</div><div style="font-size:14px;color:#aaa">${'★'.repeat(f.rarity)} | $${f.price}</div></div>`; });
+    // PHASE 21-1 D14 hotfix-n：图鉴改用 SHUISHE_FISH_POOL（字段名 species/basePrice/icon）
+    SHUISHE_FISH_POOL.forEach(f => { const owned = this.atlas.has(f.id); html += `<div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:16px;text-align:center;${owned ? '' : 'opacity:0.4'}">
+      <div style="font-size:48px">${owned ? (f.icon || '🐟') : '🔒'}</div><div style="font-size:18px;font-weight:bold;color:${f.color || '#4682B4'}">${f.species}</div><div style="font-size:14px;color:#aaa">${'★'.repeat(f.rarity)} | $${f.basePrice}</div></div>`; });
     html += '</div><p style="text-align:center;color:#888;margin-top:16px">按 B 或点击关闭</p>';
     panel.innerHTML = html; panel.onclick = () => panel.remove(); document.getElementById('fishing-scene').appendChild(panel);
   }
@@ -2460,15 +2575,43 @@ class FishingScene {
     // 约束：起点/终点坐标完全不动；其他场景元素仍保持像素风（save/restore 局部隔离）
     const lineWidth = 4; // 老版本测量值 ~4-5px，取 4
     const fishingLineColor = this._getFishingLineColor(this.tension);
-    this._drawSmoothFishingLine(this.lineStartX, this.lineStartY, this.playingFishX, this.playingFishY, fishingLineColor, lineWidth);
+    // PHASE 21-1 D14 hotfix-o：鱼抖动反馈 —— 扣血后 200ms 内 ±4px 随机偏移
+    //   仅作用于渲染层（鱼线终点 + 鱼贴图），不动 this.playingFishX/Y 逻辑坐标
+    let hitDx = 0, hitDy = 0;
+    if (performance.now() < this._fishHitShakeUntil) {
+      hitDx = Math.round((Math.random() * 2 - 1) * 4);
+      hitDy = Math.round((Math.random() * 2 - 1) * 4);
+    }
+    const renderFishX = this.playingFishX + hitDx;
+    const renderFishY = this.playingFishY + hitDy;
+    this._drawSmoothFishingLine(this.lineStartX, this.lineStartY, renderFishX, renderFishY, fishingLineColor, lineWidth);
     // 钩点（小像素方块，替代矢量灰圆）
     ctx.fillStyle = '#2A2A2E';
-    ctx.fillRect(Math.floor(this.playingFishX) - 4, Math.floor(this.playingFishY) - 4, 8, 8);
+    ctx.fillRect(Math.floor(renderFishX) - 4, Math.floor(renderFishY) - 4, 8, 8);
     ctx.fillStyle = '#888';
-    ctx.fillRect(Math.floor(this.playingFishX) - 2, Math.floor(this.playingFishY) - 2, 4, 4);
+    ctx.fillRect(Math.floor(renderFishX) - 2, Math.floor(renderFishY) - 2, 4, 4);
 
-    // 渲染鱼（约束 6：鱼形状不动）
-    this._renderFish(this.playingFishX, this.playingFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace);
+    // 渲染鱼（约束 6：鱼形状不动；hotfix-o 加扣血抖动偏移）
+    this._renderFish(renderFishX, renderFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace);
+
+    // PHASE 21-1 D14 hotfix-o：扣血飘字（红色 "-N" 从鱼头部上方升起，0.8s 淡出）
+    if (this._damageTexts && this._damageTexts.length > 0) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 22px "TencentSansW7","TencentSans","Microsoft YaHei",sans-serif';
+      for (const t of this._damageTexts) {
+        const alpha = Math.max(0, t.life / t.maxLife);
+        ctx.globalAlpha = alpha;
+        // 黑色描边 + 红字
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeText(t.text, t.x, t.y);
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, t.x, t.y);
+      }
+      ctx.restore();
+    }
 
     // ─────────── PHASE 15 仗5：鱼行为视觉预警 ───────────
     // surge 冲刺预告：鱼上方画"!"气泡（红圆 + 黄感叹号），surgeWarnTimer 衰减期间显示
@@ -2589,7 +2732,9 @@ class FishingScene {
     //    但 _drawPixelTensionBar 内部包含底色绘制，因此在 _drawPixelTensionBar 之后再画黄金区也能"压在填充之下"——
     //    解法：先调用 _drawPixelTensionBar 画底色+填充，再画黄金区半透明叠加（不会盖住填充因为透明度仅 0.25），最后画指针+文字
     //    （半透明绿带与填充色叠加视觉柔和，符合"提示性高亮"语义）
-    this._drawPixelTensionBar(tensionBarX, tensionBarY, tensionBarW, 16, tensionRatio, tensionPalette, 6);
+    // hotfix-r：传 ratio=0 → 只画底色框，不画随 tension 涨/落的彩色填充格
+    //   玩家只看 ▲ 指针 vs 黄金区即可，无需关注填充长度数字
+    this._drawPixelTensionBar(tensionBarX, tensionBarY, tensionBarW, 16, 0, tensionPalette, 6);
     // 2. 黄金区高亮带（半透明绿叠加，提示玩家"维持在 40~85 区间最理想"）
     {
       const goldL = 0.40, goldR = 0.85;
@@ -2629,8 +2774,14 @@ class FishingScene {
       ctx.closePath();
       ctx.fill();
     }
-    // 5. 数字文字（保持原格式）
-    this._drawPixelText(`鱼线拉力 ${Math.round(this.tension)}/${cfg.maxTension}`, tensionBarX + tensionBarW / 2, tensionBarY + 28, 12, '#FFF4D6', '#5C3A1E');
+    // hotfix-r：「鱼线拉力 41/100」数字已隐藏，玩家只看 ▲ 指针 vs 黄金区
+    // hotfix-s（2026-06-03）：在拉力条下方加文字提示"请控制在安全区内"
+    //   位置：指针 ▲ 底端（tensionBarY + 24）再下 14px，与拉力条水平居中
+    //   颜色：米白+深棕描边（_drawPixelText 标准木牌字），字号 12
+    {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      this._drawPixelText('请控制在安全区内', tensionBarX + tensionBarW / 2, tensionBarY + 38, 12, '#FFF4D6', '#5C3A1E');
+    }
     ctx.textAlign = 'left';
 
     // PHASE 13-5：极限警告牌（tension ≥ 85，鱼线快断）—— 与条外闪烁外框配合，全屏红闪+木牌
