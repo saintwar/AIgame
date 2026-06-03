@@ -37,7 +37,7 @@
   │
   ├─ Step B：仅当无留存时，roll 新大鱼
   │     ├─ roll P_bigfish（12%）未命中 → 本局无大鱼，常规三鱼群照旧
-  │     └─ 命中 → 选群(按鱼数加权) → 群内指定1条标 BIG + roll 体型档 → 写入留存(state=活跃)
+│     └─ 命中 → 选群(等概率auto) → 群内指定1条标 BIG + roll 体型档 → 写入留存(state=活跃)
   │
   ├─ 常规层：三鱼群数量/位置/个体照旧 roll（大鱼只占其中1条槽位）
   │
@@ -97,8 +97,8 @@ init(ctx):
 
 ### 3.2 `_rollNewBigFish(spotId)`（Step1/2/3）
 - **Step1** roll `P_bigfish = 0.12`（初值，约每 8 局 1 次；不命中直接 return，本局无大鱼）
-- **Step2** 三群选 1：**按鱼数量加权**随机（鱼多的群更可能藏大鱼）
-  - ⚠ 例外：D12 R5 之外的常规 roll 走加权；但**留存复活**时锁死 `groupSlot=center`（见 D12 决策，复活大鱼固定中群，与新 roll 选群不同路径）
+- **Step2** 三群选 1：**等概率随机**（`groupSlot='auto'`，D14 老板 2026-06-03 拍板，因 D14 随机化后已无固定中央群）
+  - ⚠ 例外：常规新 roll 走 'auto' 等概率；**留存复活**时按 entry 中持久化的 `groupSlot` 字段定位（复活路径不重新 roll 选群）
 - **Step3** 群内指定 1 条标 `isBig=true` + roll 体型档：
   | 体型档 | 概率 | rarity 拔高 |
   |---|---|---|
@@ -209,7 +209,7 @@ init(ctx):
 | TD-2 | `bait-effects.js` 加成口径与代码模型不一致 | 真实模型是 `rarityBonus/rarityShift/sizeMul`，**无"咬钩率+%"字段**；本 spec 的 +12%/+22%/42% 是**设计层口径**，需主程新增 `bigBiteBonus` 字段桥接或在 roll 层做映射 | 本期随 §5 落地时一并桥接 |
 | TD-3 | `special_bait` 三处全无 | items.js/shop-ui.js/bait-effects.js 均无该饵；本期"不上架"= 本来就没有，仅在加成表预留口径 | 后续每日任务版本补 |
 | TD-4 | `_sessionConsumed` 为运行时态 | 不进存档，若进场后异常崩溃未走回村出口，该场不递减（容忍：偏向玩家） | 可接受，无需偿还 |
-| TD-5 | 留存复活 `groupSlot` 锁 center，与新 roll 按鱼数加权选群路径不一致 | 两条选群路径并存（复活锁 center / 新 roll 加权），属设计取舍非 bug | 记录备查 |
+| TD-5 | ~~留存复活 `groupSlot` 锁 center，与新 roll 选群路径不一致~~ | **已消除（D14 老板 2026-06-03 拍板）**：常规新 roll 改为 `groupSlot='auto'` 等概率随机；留存复活仍按 entry 持久化的 groupSlot 复活，两路径不冲突 | 已闭合，无需偿还 |
 
 ---
 
