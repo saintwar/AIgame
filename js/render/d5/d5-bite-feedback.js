@@ -122,6 +122,12 @@ export class D5BiteFeedback {
     }
 
     if (opts.isLuckyBail) {
+      // PHASE 21-1 D14：黑漂短路 —— 跳过 shake 段直入 sink
+      //   实现：把 biteWindowElapsed 推到 w.shakeEnd，下一帧 _updateZone
+      //   会切到 perfect，shake→perfect 边沿条件触发 onSinkStart 进沉水动画
+      const W = this._getWindowsCfg();
+      const w = W && W[level];
+      if (w) this.biteWindowElapsed = w.shakeEnd;
       // 四叶草位置 ±2px 随机浮动（art-spec §6.2 末尾）
       const jitterX = Math.round(Math.random() * 4 - 2);
       const jitterY = Math.round(Math.random() * 4 - 2);

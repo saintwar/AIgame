@@ -161,10 +161,8 @@ export class FishGroupHoverUI {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
-    // ① wanderArea 高亮描边（呼吸效果，1.2s 周期）
-    this._drawHighlight(ctx, g);
-
-    // ② 浮窗（仅 popupVisible）
+    // PHASE 21-1 D14：删除 wanderArea 金色呼吸描边（_drawHighlight 已移除）
+    //   只保留浮窗本体；浮窗自身金边作为 UI 元素层保留
     if (this.popupVisible) {
       this._drawPopup(ctx, g);
     }
@@ -193,24 +191,8 @@ export class FishGroupHoverUI {
   // 内部渲染工具
   // ──────────────────────────────────────────────
 
-  /** 鱼群 wanderArea 1px 金边 + 呼吸 alpha（0.6~1.0，1.2s 周期） */
-  _drawHighlight(ctx, g) {
-    const halfW = g.wanderArea.w / 2;
-    const halfH = g.wanderArea.h / 2;
-    const x = Math.round(g.centerX - halfW);
-    const y = Math.round(g.centerY - halfH);
-    const w = Math.round(g.wanderArea.w);
-    const h = Math.round(g.wanderArea.h);
-
-    // 呼吸：Math.sin(t/600) * 0.2 + 0.8 → [0.6, 1.0]，周期 ≈ 1200ms
-    const alpha = Math.sin(performance.now() / 600) * 0.2 + 0.8;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#FFD700';   // 与 PHASE 18 互动点描金边一致
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w, h);  // 0.5 偏移让 1px 描边在像素网格上
-    ctx.restore();
-  }
+  // PHASE 21-1 D14：_drawHighlight 已删除（删除"鱼群外框金色呼吸描边"）
+  //   浮窗本身的 #FFD700 金边作为 UI 元素层保留（见 _drawPopup）
 
   /**
    * 信息浮窗（140×64）：
@@ -255,30 +237,30 @@ export class FishGroupHoverUI {
     const lineY2 = py + 8 + 16;
     const lineY3 = py + 8 + 16 * 2;
 
-    // 第 1 行：label
+    // 第 1 行：label（PHASE 21-1 D14：鱼群密度 → 资源丰富度）
     ctx.fillStyle = '#B0BEC5';
-    ctx.fillText('鱼群密度', padX, lineY1);
+    ctx.fillText('资源丰富度', padX, lineY1);
 
-    // 第 2 行：5 字符密度图
-    const { dots, color } = this._densityVisual(g.fishCount);
+    // 第 2 行：5 字符丰富度图（贫瘠 / 一般 / 丰饶）
+    const { dots, color } = this._richnessVisual(g.fishCount);
     ctx.fillStyle = color;
     ctx.fillText(dots, padX, lineY2);
 
-    // 第 3 行：体型暗示（D3 升级 — 按群内最大体型显示 ⚠/⚠⚠/★）
+    // 第 3 行：体型暗示（按群内最大体型显示 ⚠/⚠⚠/★，与丰富度解耦）
     const hint = SIZE_HINT[_getMaxSize(g.fishes)] || SIZE_HINT.small;
     ctx.fillStyle = hint.color;
     ctx.fillText(hint.text, padX, lineY3);
   }
 
   /**
-   * fishCount → (dots, color)
-   *   count<=3 → 1 档（●○○○○ 红 #FF6B6B 稀疏）
-   *   count<=5 → 3 档（●●●○○ 黄 #FFD93D 中密）
-   *   count>=7 → 5 档（●●●●● 绿 #6BCB77 极密）
+   * PHASE 21-1 D14：fishCount → (dots, color) — 资源丰富度（贫瘠 / 一般 / 丰饶）
+   *   count<=3 → 贫瘠（●○○○○ 红 #FF6B6B）
+   *   count<=6 → 一般（●●●○○ 黄 #FFD93D）  ← 旧 5 档改为 4-6 区间
+   *   count>=7 → 丰饶（●●●●● 绿 #6BCB77）
    */
-  _densityVisual(count) {
+  _richnessVisual(count) {
     if (count <= 3)  return { dots: '●○○○○', color: '#FF6B6B' };
-    if (count <= 5)  return { dots: '●●●○○', color: '#FFD93D' };
+    if (count <= 6)  return { dots: '●●●○○', color: '#FFD93D' };
     /* >=7 */         return { dots: '●●●●●', color: '#6BCB77' };
   }
 
