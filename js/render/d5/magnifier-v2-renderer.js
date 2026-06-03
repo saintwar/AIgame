@@ -142,11 +142,25 @@ export class D5Magnifier {
     const alpha = this._currentAlpha();
     if (alpha <= 0) return;
 
-    // 镜中心 = 浮漂屏幕中心 + D5 抖动/沉水偏移
+    // 镜中心 = 浮漂屏幕中心 + D5 抖动/沉水偏移 + D14 前戏 dx/dy（Waiting 期）
     const d5 = this.scene.d5;
-    const off = d5 && typeof d5.getBobOffset === 'function'
+    const d5Off = d5 && typeof d5.getBobOffset === 'function'
       ? d5.getBobOffset()
       : { dx: 0, dy: 0, hidden: false };
+    // PHASE 21-1 D14 hotfix：Waiting 期叠加前戏 dx/dy（试探/偷吃浮漂晃动）
+    //   合并到 off.dx/dy，让镜底 copy 中心点 + 镜内浮漂位置都跟着前戏晃动
+    let preDx = 0, preDy = 0;
+    if (this.scene.fsm.is('Waiting') &&
+        this.scene.fishGroupSystem &&
+        typeof this.scene.fishGroupSystem.getBobberPreBiteOffset === 'function') {
+      const pre = this.scene.fishGroupSystem.getBobberPreBiteOffset();
+      preDx = pre.dx; preDy = pre.dy;
+    }
+    const off = {
+      dx: d5Off.dx + preDx,
+      dy: d5Off.dy + preDy,
+      hidden: d5Off.hidden,
+    };
     const bobScreenX = this.scene.bobX + off.dx;
     const bobScreenY = this.scene.bobY + off.dy;
 
@@ -316,8 +330,10 @@ export class D5Magnifier {
     // 镜内浮漂 dy = (主画面 d5 偏移 + 等待期微浮) × ZOOM × DY_SCALE（v2.0.1 减半）
     //   主画面 dy 也参与让 shake 期镜内能看到抖动幅度差（spec §5 "看清三档抖动差"）
     //   DY_SCALE=0.5 让视觉幅度更柔和，避免镜内画面剧烈跳动
+    // PHASE 21-1 D14 hotfix：dx 也要 ZOOM 放大，否则前戏（试探/偷吃 dx 晃动）镜内不可见
+    const totalDx = d5Offset.dx * MAGNIFIER_ZOOM;
     const totalDy = (d5Offset.dy + microBobDy) * MAGNIFIER_ZOOM * MAGNIFIER_DY_SCALE;
-    const zoomedBobX = cx;
+    const zoomedBobX = cx + totalDx;
     const zoomedBobY = cy + totalDy;
 
     if (d5Offset.hidden) {
