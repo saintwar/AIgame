@@ -38,10 +38,12 @@ const RADIUS_MAX        = 60;     // 蓄力初始半径
 const RADIUS_MIN        = 20;     // 蓄力极限半径
 
 // 落点圈视觉 —— Nina §3.3
-const LANDING_COLOR     = '#00E5FF';  // 青蓝
-const LANDING_FILL_ALPHA = 0.15;
-const LANDING_OUTER_ALPHA = 0.8;      // 外圈
-const LANDING_INNER_ALPHA_BASE = 0.4; // 内圈基础（叠加呼吸）
+// hotfix-z5（2026-06-04）：青蓝在浅水/绿水里对比度不足 → 改用饱和红，与"目标/瞄准"语义更对
+// hotfix-z5b（2026-06-04）：纯红过于刺眼/像报错，改用粉红，醒目但更柔和友好
+const LANDING_COLOR     = '#FF6FB5';  // 粉红
+const LANDING_FILL_ALPHA = 0.28;      // 填充更明显（旧 0.15）
+const LANDING_OUTER_ALPHA = 0.95;     // 外圈更厚实（旧 0.8）
+const LANDING_INNER_ALPHA_BASE = 0.6; // 内圈呼吸基础（旧 0.4）
 
 // 蓄力进度条 —— Nina §3.2
 const CHARGE_BAR_W = 48;

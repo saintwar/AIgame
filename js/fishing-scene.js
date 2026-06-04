@@ -1344,16 +1344,12 @@ class FishingScene {
       </p>
       <div style="background:rgba(255,255,255,0.08);border-radius:10px;padding:16px;margin:16px 0;text-align:left;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <div style="width:60px;height:16px;background:#44ff44;border-radius:4px;"></div>
-          <span style="font-size:15px;color:#44ff44;font-weight:bold;">绿色区域 — 最佳拉力</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <div style="width:60px;height:16px;background:#ffaa00;border-radius:4px;"></div>
-          <span style="font-size:15px;color:#ffaa00;">黄色区域 — 注意调整</span>
+          <div style="width:60px;height:16px;background:#27AE60;border-radius:4px;"></div>
+          <span style="font-size:15px;color:#27AE60;font-weight:bold;">绿色区域 — 拉力安全区</span>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:60px;height:16px;background:#ff4444;border-radius:4px;"></div>
-          <span style="font-size:15px;color:#ff4444;">红色区域 — 危险！鱼会逃跑</span>
+          <div style="width:60px;height:16px;background:#C0392B;border-radius:4px;"></div>
+          <span style="font-size:15px;color:#C0392B;">红色区域 — 断线危险区</span>
         </div>
       </div>
       <p style="margin:0 0 12px;font-size:14px;color:#ff6b6b;font-weight:bold;">
@@ -1364,8 +1360,64 @@ class FishingScene {
       </div>
     `;
     document.body.appendChild(panel);
+
+    // hotfix-z4（2026-06-04）：从"绿色区域 — 拉力安全区"文字旁出箭头，指向画布右下角拉力条
+    //   - 拉力条在 1280×720 设计坐标系中心约 (cw - 130, ch - 67)，受 CSS 缩放影响
+    //   - 用 canvas.getBoundingClientRect() 算视口实际像素位置
+    //   - 全屏 SVG overlay 画带箭头的红色折线（脉冲呼吸 + 阴影描边突出）
+    //   - panel 关闭时一并移除
+    const arrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrowSvg.id = 'fishing-tutorial-arrow';
+    arrowSvg.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:999;overflow:visible;';
+    const drawArrow = () => {
+      // 起点：panel 内"绿色区域 — 拉力安全区"那一行右端（粗略取 panel 右上区域）
+      const panelRect = panel.getBoundingClientRect();
+      const sx = panelRect.right - 40;
+      const sy = panelRect.top + 138; // 大约"绿色区域"行的 Y
+      // 终点：画布右下角拉力条绿色安全区中心，按 CSS 缩放换算
+      let ex = window.innerWidth - 130, ey = window.innerHeight - 67;
+      if (this.canvas) {
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / 1280;
+        const scaleY = canvasRect.height / 720;
+        // 设计坐标系：拉力条绿区中心约 X = cw - 130, Y = ch - 67
+        ex = canvasRect.left + (1280 - 130) * scaleX;
+        ey = canvasRect.top + (720 - 67) * scaleY;
+      }
+      // 箭头终点回缩，避免线穿出箭头外
+      const dxA = ex - sx, dyA = ey - sy;
+      const lenA = Math.sqrt(dxA * dxA + dyA * dyA) || 1;
+      const back = 14; // 线缩短 14px，把空间让给箭头
+      const lineEx = ex - dxA / lenA * back;
+      const lineEy = ey - dyA / lenA * back;
+      // 箭头顶点角度（让黑/红箭头按相同方向旋转）
+      const angleDeg = Math.atan2(dyA, dxA) * 180 / Math.PI;
+      arrowSvg.innerHTML = `
+        <!-- 黑色描边线：常驻不透明，作为视觉骨架（无 marker，箭头单独画 polygon） -->
+        <line x1="${sx}" y1="${sy}" x2="${lineEx}" y2="${lineEy}"
+              stroke="#000" stroke-width="6" stroke-linecap="round"/>
+        <!-- 红色主线：仅红色闪烁 -->
+        <line x1="${sx}" y1="${sy}" x2="${lineEx}" y2="${lineEy}"
+              stroke="#FF3B30" stroke-width="3" stroke-linecap="round">
+          <animate attributeName="opacity" values="1;0.6;1" dur="1s" repeatCount="indefinite"/>
+        </line>
+        <!-- 箭头：黑色外圈 + 红色内芯共用同一尖端 (0,0)，避免错位 -->
+        <g transform="translate(${ex},${ey}) rotate(${angleDeg})">
+          <polygon points="-18,-10 0,0 -18,10" fill="#000"/>
+          <polygon points="-14,-6 0,0 -14,6" fill="#FF3B30"/>
+        </g>
+      `;
+    };
+    document.body.appendChild(arrowSvg);
+    drawArrow();
+    // 窗口 resize 时重算
+    const resizeHandler = () => drawArrow();
+    window.addEventListener('resize', resizeHandler);
+
     const closeTutorial = () => {
       panel.remove();
+      arrowSvg.remove();
+      window.removeEventListener('resize', resizeHandler);
       window.Save?.set('flags.fishing_tutorial_shown', true);
       window.Save?.commit();
       this.resume();
