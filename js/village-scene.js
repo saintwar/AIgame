@@ -1569,10 +1569,15 @@ class VillageScene {
     const q001 = window.Save?.get('quests.q001_first_fish');
     const q002 = window.Save?.get('quests.q002');
 
-    let params = { spot: 'shuishe', target: '奇力鱼', need: 3, progress: 0 };
+    // hotfix-z3（2026-06-04）：默认不传任务参数，只有 q001/q002 active 时才挂任务 HUD
+    //   原 bug：默认硬编码 { target:'奇力鱼', need:3, progress:0 }，导致玩家未接 q001 / q001 已完成时
+    //   钓鱼界面仍显示"奇力鱼 0/3"虚假任务 HUD
+    let params = { spot: 'shuishe' };
 
-    // q001 进行中：显示 q001 任务条件
+    // q001 进行中：显示 q001 任务条件（奇力鱼 X/3）
     if (q001 && q001.status === 'active') {
+      params.target = '奇力鱼';
+      params.need = 3;
       params.progress = q001.progress?.count || 0;
     }
     // q002 进行中：显示 q002 任务条件（5种鱼图鉴）
