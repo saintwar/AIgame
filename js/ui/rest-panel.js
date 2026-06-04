@@ -39,6 +39,7 @@
  */
 
 import StaminaSystem from '../stamina-system.js';
+import Save from '../save-system.js';
 
 /**
  * 民宿菜单（PRD v2.0 数值）
@@ -49,6 +50,23 @@ const REST_MENU = [
   { id: 'middle', stamina: 60,    coin: 40, label: '午休一觉', desc: '舒舒服服睡一觉' },
   { id: 'full',   stamina: 'max', coin: 80, label: '满血复活', desc: '彻底恢复至满' }
 ];
+
+// hotfix-z2（2026-06-04）：休息 CD —— 1 小时（3600 秒）通用所有 3 个选项
+//   存档：flags.lastRestAt = Date.now() 的时间戳
+//   CD 期间 3 档全部灰显，列表顶部显示剩余分钟/秒
+const REST_CD_MS = 60 * 60 * 1000;
+function _restRemainingMs() {
+  const last = Save.get('flags.lastRestAt') || 0;
+  const remain = REST_CD_MS - (Date.now() - last);
+  return Math.max(0, remain);
+}
+function _formatRemain(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) return `${min}分${sec.toString().padStart(2, '0')}秒`;
+  return `${sec}秒`;
+}
 
 export class RestPanel {
   /**
@@ -169,6 +187,13 @@ export class RestPanel {
   _chooseRest(option) {
     if (!option) return;
 
+    // hotfix-z2：CD 校验（1 小时通用所有选项）
+    const remainMs = _restRemainingMs();
+    if (remainMs > 0) {
+      this._float(`⏳ 阿姨还在准备，还要等 ${_formatRemain(remainMs)}`, '#FFD166');
+      return;
+    }
+
     // 1) 体力满拦截（在金币校验前，避免"花了钱白睡"的最坏体验）
     const cur = StaminaSystem.getCurrent();
     const max = StaminaSystem.getMax();
@@ -195,6 +220,10 @@ export class RestPanel {
       ? max - cur
       : option.stamina;
     StaminaSystem.restoreStamina(restoreAmount, 'rest');
+
+    // hotfix-z2：写入 CD 时间戳（成功扣金币恢复后才写，避免拦截分支占 CD）
+    Save.set('flags.lastRestAt', Date.now());
+    Save.commit();
 
     // 5) 飘字反馈
     this._float(`💤 睡了一觉，恢复 ${restoreAmount} 体力`, '#FFD700', 'large');
@@ -250,8 +279,13 @@ export class RestPanel {
     ctx.font = '20px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.fillText('想休息一下吗？', x + 30, y + 100);
 
-    // 灰显规则提示（金币不足时顶部红字）
-    if (coin < REST_MENU[0].coin) {
+    // hotfix-z2：CD 提示优先级 > 金币不足 > 普通操作说明
+    const cdRemain = _restRemainingMs();
+    if (cdRemain > 0) {
+      ctx.fillStyle = '#FFD166';
+      ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+      ctx.fillText(`⏳ 阿姨还在准备，还要等 ${_formatRemain(cdRemain)}`, x + 30, y + 140);
+    } else if (coin < REST_MENU[0].coin) {
       ctx.fillStyle = '#FFD166';
       ctx.font = 'bold 18px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.fillText('💰 金币不足，先去钓几条鱼吧', x + 30, y + 140);
@@ -305,6 +339,8 @@ export class RestPanel {
     const cur = StaminaSystem.getCurrent();
     const max = StaminaSystem.getMax();
     const isFull = cur >= max;
+    // hotfix-z2：CD 期间所有 3 个恢复选项都灰显
+    const cdActive = _restRemainingMs() > 0;
 
     const itemX = x + 30, itemW = w - 60;
 
@@ -315,7 +351,7 @@ export class RestPanel {
       const selected = i === this.selectedIdx;
       const hovered = this.mouseHoveredItem === i;
       const affordable = coin >= opt.coin;
-      const disabled = !affordable || isFull;
+      const disabled = !affordable || isFull || cdActive;
 
       // 行背景
       if (selected && !disabled) ctx.fillStyle = 'rgba(212,165,116,0.3)';

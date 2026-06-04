@@ -1,4 +1,6 @@
 import { FISH_CODEX } from '../data/fish-codex.js';
+// hotfix-u（2026-06-04）：图鉴优先用 512×512 PNG 鱼图，未就绪兜底 emoji
+import { getFishSpriteBySpecies, isFishSpriteReady } from '../render/fish-sprite-loader.js';
 
 /**
  * 鱼类图鉴 UI（Canvas 绘制）
@@ -232,12 +234,23 @@ export class CodexUI {
       ctx.strokeRect(sx, sy, slotSize, slotSize);
 
       // 图标 / 问号
-      ctx.font = '40px sans-serif';
       ctx.textAlign = 'center';
       if (unlocked) {
-        ctx.fillStyle = '#fff';
-        ctx.fillText(FISH_CODEX[sp].icon, sx + slotSize / 2, sy + slotSize / 2 + 14);
+        // hotfix-u：优先用 PNG，未就绪兜底 emoji
+        const sprite = getFishSpriteBySpecies(sp);
+        if (isFishSpriteReady(sprite)) {
+          // 槽内贴鱼图，留 6px padding
+          const pad = 6;
+          const drawW = slotSize - pad * 2;
+          const drawH = drawW * (sprite.naturalHeight / sprite.naturalWidth);
+          ctx.drawImage(sprite, sx + pad, sy + (slotSize - drawH) / 2, drawW, drawH);
+        } else {
+          ctx.font = '40px sans-serif';
+          ctx.fillStyle = '#fff';
+          ctx.fillText(FISH_CODEX[sp].icon, sx + slotSize / 2, sy + slotSize / 2 + 14);
+        }
       } else {
+        ctx.font = '40px sans-serif';
         ctx.fillStyle = '#445566';
         ctx.fillText('?', sx + slotSize / 2, sy + slotSize / 2 + 14);
       }
@@ -258,11 +271,19 @@ export class CodexUI {
     const unlocked = !!entry;
 
     if (unlocked) {
-      // 大图标
-      ctx.font = '80px sans-serif';
+      // 大图标（hotfix-u：优先用 PNG，未就绪兜底 emoji）
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(data.icon, cardX + cardW / 2, cardY + 90);
+      const bigSprite = getFishSpriteBySpecies(sp);
+      if (isFishSpriteReady(bigSprite)) {
+        // 详情卡顶部贴大图，宽 160 居中
+        const bigW = 160;
+        const bigH = bigW * (bigSprite.naturalHeight / bigSprite.naturalWidth);
+        ctx.drawImage(bigSprite, cardX + cardW / 2 - bigW / 2, cardY + 20, bigW, bigH);
+      } else {
+        ctx.font = '80px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(data.icon, cardX + cardW / 2, cardY + 90);
+      }
       ctx.textAlign = 'left';
 
       // 名称

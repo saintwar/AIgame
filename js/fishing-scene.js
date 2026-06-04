@@ -33,6 +33,8 @@ import {
 import { preloadShipSprite, isShipSpriteReady, drawShipSprite, SHIP_SPRITE_SIZE } from './render/ship-sprite.js';
 // PHASE 21-1 D5：鱼咬钩反馈系统（三档抖动 + PERFECT 字 + 放大镜染色 + 漏提演出 + 四叶草 + 猛档水花 + 镜头微震）
 import { D5BiteFeedback, BiteLevelDispatcher } from './render/d5/d5-bite-feedback.js';
+// PHASE 21-1 D14 hotfix-u（2026-06-04）：水下战斗鱼图替换（512×512 透明 PNG，未就绪 fallback 几何）
+import { getFishSpriteBySpecies, isFishSpriteReady, preloadAllFishSprites } from './render/fish-sprite-loader.js';
 
 // ============================================================
 // CONFIG
@@ -268,6 +270,10 @@ class FishingScene {
     //   - 加载完成前 _renderPlaying Layer 0 走原程序化深水渐变兜底
     preloadFishingDownBg();
 
+    // hotfix-u（2026-06-04）：10 张鱼图预加载（assets/fish/{id}.png）
+    //   - 加载完成前 _renderFish 走原椭圆+三角几何兜底，不阻塞战斗
+    preloadAllFishSprites();
+
     // ── 主角头顶名字标签配置 ──────────────────────────────
     this.playerNameConfig = {
       enabled: true,
@@ -286,6 +292,29 @@ class FishingScene {
     this.questParams = params || { target: null, need: 0, progress: 0 };
     // 重置任务完成状态，避免前置任务的完成提示残留显示
     this.taskComplete = false;
+    // hotfix-y（2026-06-04）：每次进入钓鱼场景强制重置到 Idle 站立态
+    //   原 bug：fishingScene 是模块级单例，第二次进入复用了上次的 fsm 状态/输入标记，
+    //   导致"回村按钮触发 Casting 后回村，下次进来还在 Aiming/Casting 蓄力"的死循环。
+    //   修复：fsm 拨回 Idle + 清空所有鼠标/键盘按住标记 + 清放大镜/船图/竿动作残留
+    if (this.fsm) this.fsm.state = 'Idle';
+    this._aimingSpaceHeld = false;
+    this._aimingMouseHeld = false;
+    this._aimingMouseStartedFlag = false;
+    this._playingMouseHeld = false;
+    this._confirmClick = false;
+    this.tension = 0;
+    this.fishHP = 0;
+    this.currentFish = null;
+    this.caughtFish = null;
+    this.showingFishInfo = false;
+    this.escapeSpeed = 0;
+    this.surgeWarnTimer = 0;
+    this._fishExhaustedLatch = false;
+    this._hookedFishRef = null;
+    this._dmgProjectiles = [];
+    this._combo = 0;
+    this._comboText = null;
+    if (this.castAimSystem && this.castAimSystem.cancelAim) this.castAimSystem.cancelAim();
     const container = document.getElementById('fishing-scene');
     container.innerHTML = '';
     this.canvas = document.createElement('canvas');
@@ -357,6 +386,20 @@ class FishingScene {
       if (e.button !== 0) return;
       // 必须在 Idle 才允许鼠标启动蓄力（避免 Aiming/Casting 期间鼠标点击意外重入）
       if (!this.fsm.is('Idle')) return;
+      // hotfix-y（2026-06-04）：回村按钮命中盒内的点击不能触发抛竿
+      //   原 bug：mousedown 同帧既触发抛竿（_tryStartAimingByInput）又触发回村 click → 切场景后 Aiming 残留
+      //   修复：mousedown 阶段提前判命中盒，直接 return，让 click 事件交给 _returnVillageClickHandler
+      if (this._returnVillageBtnRect && this._isReturnVillageBtnVisible && this._isReturnVillageBtnVisible()) {
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = this.canvas.width / rect.width;
+        const sy = this.canvas.height / rect.height;
+        const cx = (e.clientX - rect.left) * sx;
+        const cy = (e.clientY - rect.top) * sy;
+        const r = this._returnVillageBtnRect;
+        if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+          return; // 在回村按钮内，不启动抛竿
+        }
+      }
       this._tryStartAimingByInput('mouse');
     };
     this._mouseUpAimHandler = (e) => {
@@ -1129,6 +1172,13 @@ class FishingScene {
     //   设 currentFish，新前戏链路（onBite/onLucky）跳过了这步，导致 _initPlayingState
     //   读 currentFish.maxHP 时 NPE。这里补回 —— 在每次真吃/黑漂触发前 roll 鱼种
     if (!this.currentFish) this._selectFish();
+    // hotfix-z（2026-06-04）：在前戏 FSM 被 reset 之前，先抓住"上钩鱼"的引用
+    //   战斗胜利后由 _onFishCaught 调 removeFishFromGroup(ref) 真正删除
+    //   战斗失败/跑鱼时，ref 被 _resetToWaiting / _resetToIdle 主动清掉，鱼仍留在群里（合理）
+    this._hookedFishRef = null;
+    if (this.fishGroupSystem && typeof this.fishGroupSystem.takeHookedFishRef === 'function') {
+      this._hookedFishRef = this.fishGroupSystem.takeHookedFishRef();
+    }
     // 进 BiteWindow 之前清前戏 FSM（接棒给 D5）
     if (this.fishGroupSystem && typeof this.fishGroupSystem.resetBobberApproach === 'function') {
       this.fishGroupSystem.resetBobberApproach();
@@ -1345,6 +1395,69 @@ class FishingScene {
    * D 音效：playFishHit（短促打击音）
    * E 粒子：6 个金色火星向四周散开
    */
+  /**
+   * hotfix-y2（2026-06-04）：扣血流程升级为两阶段
+   *   阶段 1：_launchDamageProjectile(damage) —— 从拉力条指针射出 3 颗光弹，飞向鱼（300ms）
+   *   阶段 2：光弹命中 → 调 _onFishHit(damage) —— 真扣血 + 抖动 + 飘字 + 音效 + 粒子
+   *
+   * Combo 系统（方案 2 温和版）：
+   *   连击 1 → ×1.0 / 2 → ×1.1 / 3 → ×1.25 / 4 → ×1.4 / 5+ → ×1.5（封顶）
+   *   维持条件：连续 tick 都在安全区
+   *   重置条件：tick 在安全区外 / Failed / Caught / _resetTo*
+   */
+  _launchDamageProjectile(baseDamage) {
+    // ── Combo 计算 ──
+    this._combo = (this._combo || 0) + 1;
+    const COMBO_MUL = [1.0, 1.0, 1.1, 1.25, 1.4, 1.5];
+    const idx = Math.min(this._combo, COMBO_MUL.length - 1);
+    const finalDamage = Math.max(1, Math.round(baseDamage * COMBO_MUL[idx]));
+
+    // ── 起点：拉力条 ▲ 指针位置（每帧由 _renderTensionBar 更新缓存）──
+    const sx = this._tensionBarPointerX || (this.cw / 2);
+    const sy = this._tensionBarPointerY || (this.ch - 80);
+    // ── 终点：鱼的当前渲染位置 ──
+    const tx = this.playingFishX || this.bobX || (this.cw / 2);
+    const ty = this.playingFishY || this.bobY || (this.ch / 2);
+
+    // ── 发射 3 颗错峰光弹（每颗 80ms 间隔，每颗飞行 300ms）──
+    if (!this._dmgProjectiles) this._dmgProjectiles = [];
+    const launchAt = performance.now();
+    const colors = ['#FFD700', '#FFE066', '#FFA500']; // 金、亮黄、橙
+    for (let i = 0; i < 3; i++) {
+      this._dmgProjectiles.push({
+        sx, sy, tx, ty,
+        delay: i * 80,                    // 错峰发射
+        launchedAt: launchAt,
+        flightMs: 300,                    // 单颗飞行时长
+        color: colors[i % colors.length],
+        // hotfix-y4：光球放大 ~2 倍
+        //   中间那颗 18px、两侧 14px（旧 6px / 8px）
+        size: i === 1 ? 18 : 14,
+        finished: false,
+        damage: i === 2 ? finalDamage : 0, // 只让最后一颗触发真扣血（避免三连扣血）
+        // hotfix-y4：粒子尾迹时间戳，每帧由 _updateDamageProjectiles 触发 emit
+        _lastEmitAt: 0,
+      });
+    }
+    // 起点立刻闪一下（黄色环扩散，预告"力量发出"）
+    this.particles.emit(sx, sy, 8, '#FFD700', { speed: 40, gravity: 0, size: 3, decay: 0.06 });
+
+    // 屏幕底部短暂"COMBO ×N"提示（连击 ≥2 才显示）
+    if (this._combo >= 2) {
+      this._comboText = {
+        text: `COMBO ×${this._combo}`,
+        life: 0.6,
+        maxLife: 0.6,
+        scale: this._combo >= 4 ? 1.4 : 1.1,
+        color: this._combo >= 5 ? '#FF3B30' : (this._combo >= 3 ? '#FFD700' : '#FFE066'),
+      };
+    }
+  }
+
+  /**
+   * 真扣血回调（由光弹命中触发）—— A/B/D/E 四件套
+   * hotfix-o：原直接在 _updatePlaying 调；hotfix-y2 改由光弹命中调
+   */
   _onFishHit(damage) {
     const fx = this.playingFishX || this.bobX || 0;
     const fy = this.playingFishY || this.bobY || 0;
@@ -1356,11 +1469,10 @@ class FishingScene {
       y: fy - 24,
       text: `-${damage}`,
       color: '#FF3B30',
-      life: 0.8, // 秒
+      life: 0.8,
       maxLife: 0.8,
-      vy: -45,   // 上浮速度 px/s
+      vy: -45,
     });
-    // 容量保护：超过 12 条删除最早的
     if (this._damageTexts.length > 12) this._damageTexts.shift();
     // D：音效
     AudioSystem.playFishHit();
@@ -1394,31 +1506,63 @@ class FishingScene {
           const rod = window.equipment ? window.equipment.getEquippedRod() : null;
           const damageMul = (rod && rod.damageMul) || 1.0;
           const hpPerTick = this.currentFish.hpPerTick || 5;
-          const damage = Math.round(hpPerTick * damageMul);
-          this.fishHP = Math.max(0, this.fishHP - damage);
-          this._onFishHit(damage);
+          const baseDamage = Math.round(hpPerTick * damageMul);
+          // hotfix-y2：发射光弹（光弹命中时由 _updateDamageProjectiles 真扣血 + 调 _onFishHit）
+          //   ⚠️ HP 不在此处扣，由命中回调内部扣（包含 combo 倍率），保证视觉与数值同步
+          this._launchDamageProjectile(baseDamage);
+        } else {
+          // 不在安全区 → combo 中断
+          this._combo = 0;
         }
       }
       // 回血保留：放松状态（未按空格）且未到回血上限时按个体 hpRecoverPerSecond 回血
       //   hotfix-o：从鱼数据直读（按星级 + 个体差异化），旧 cfg.fishHPRecoverPerSecond 已废弃
+      //   hotfix-x2：HP 已经归零 → 不再回血，UI 上死死锁在 0（避免出水演绎期间 HP 数字回弹）
       const hpRecoverRate = (this.currentFish.hpRecoverPerSecond != null)
         ? this.currentFish.hpRecoverPerSecond
         : cfg.fishHPRecoverPerSecond;
       const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
-      if (!holdingSpace && this.fishHP < maxRecoverHP) {
+      if (!holdingSpace && this.fishHP > 0 && this.fishHP < maxRecoverHP) {
         this.fishHP = Math.min(maxRecoverHP, this.fishHP + hpRecoverRate * dt);
       }
     }
-    const fishExhausted = this.fishHP <= 0;
+    // hotfix-x4（2026-06-04）：HP=0 → 锁存进入"出水演绎期"，玩家操作不再影响任何进度
+    //   流程：HP 第一次到 0 → _fishExhaustedLatch=true，从此鱼自动上拉到 catchZoneY → Caught
+    //   出水期间忽略：tension 升降、escape 检查、回血、QTE、tension 爆条、跑鱼
+    //   出水期间保留：鱼图渲染、扣血飘字残留淡出、上拉 Y 动画
+    if (this.fishHP <= 0) this._fishExhaustedLatch = true;
+    const fishExhausted = this._fishExhaustedLatch === true;
+    if (fishExhausted) {
+      // 出水演绎专属分支：只动 playingFishY（恒速向上），其他都不动
+      this.fishHP = 0;                          // 锁死 0（防 UI 飘）
+      this.tension = Math.max(0, this.tension - 30 * dt);  // 慢慢松线，视觉自然
+      this.escapeSpeed = 0;
+      this.playingFishY -= 225 * dt;            // 上拉速度
+      // X 也轻微往中央靠拢（避免鱼飞出屏幕外）
+      const targetX = w * 0.5;
+      const dx = targetX - this.playingFishX;
+      this.playingFishX += Math.sign(dx) * Math.min(Math.abs(dx), 90 * dt);
+      // 到达 catchZoneY → Caught
+      if (this.playingFishY <= h * cfg.catchZoneY) {
+        this.fsm.transition('Caught', 'fish caught');
+        this._onFishCaught();
+      }
+      return;
+    }
+    // hotfix-x（2026-06-04）：HP=0 后免疫所有 Failed 判定（爆条/逃跑等）
+    //   保留出水演绎流程（上拉到 catchZoneY 才进 Caught），但期间不能再被任何失败原因打断
+    //   ⚠️ 注意 _checkEscape 内部已对 fishHP<=0 早返（1508 行），此处只补 tension 爆条 + slack 失败的免疫
     if (this.tension > 70 && !this.highTensionSound) { this.highTensionSound = true; AudioSystem.playReelTick(); } else if (this.tension <= 70) this.highTensionSound = false;
     if (this.tension > cfg.maxTension * 0.85 && !this.warningShown) { this.warningShown = true; } else if (this.tension <= cfg.maxTension * 0.85 && this.warningShown) this.warningShown = false;
-    if (this.tension > cfg.maxTension * 0.9 && holdingSpace) { const breakChance = (this.tension - cfg.maxTension * 0.9) / (cfg.maxTension * 0.1) * 0.45 * dt; if (Math.random() < breakChance) { this.fsm.transition('Failed', 'tension overflow'); this.failedReason = 'tension'; return; } }
+    // hotfix-x：鱼血归零后，按住空格也不再判"鱼线绷断"（玩家正在收线，不该被罚）
+    if (!fishExhausted && this.tension > cfg.maxTension * 0.9 && holdingSpace) { const breakChance = (this.tension - cfg.maxTension * 0.9) / (cfg.maxTension * 0.1) * 0.45 * dt; if (Math.random() < breakChance) { this.fsm.transition('Failed', 'tension overflow'); this.failedReason = 'tension'; return; } }
     const sizeFactor = this.currentFish.size[0] / 30;
     if (holdingSpace && !fishExhausted) {
       const pullSpeed = 120 + sizeFactor * 60; const tensionDecay = cfg.tensionDecayPerSecond * (1 + (sizeFactor - 1) * 0.3);
       this.tension = Math.max(0, this.tension - tensionDecay * dt); this.playingFishX += pullSpeed * dt; this.escapeSpeed = cfg.fishEscapeSpeed * 0.3; this.escapeBurstTimer = 0;
     } else if (!fishExhausted) {
-      if (this.escapeBurstTimer > 0) { this.escapeBurstTimer -= dt; this.escapeSpeed = cfg.fishEscapeSpeed * 3; this.tension += cfg.tensionPerSecond * 2.25 * dt; }
+      // hotfix-w E：escapeBurst 期间 tension 倍率 ×2.25 → ×1.5（旧值会在 burst 1s 内把 tension 拉 45 点）
+      if (this.escapeBurstTimer > 0) { this.escapeBurstTimer -= dt; this.escapeSpeed = cfg.fishEscapeSpeed * 3; this.tension += cfg.tensionPerSecond * 1.5 * dt; }
       else { this.escapeSpeed += cfg.fishEscapeSpeedIncrease * dt; this.tension += cfg.tensionPerSecond * dt; }
     } else { this.escapeSpeed = 0; this.playingFishX += 45 * dt; }
     this.playingFishX -= this.escapeSpeed * dt; this.playingFishX = Math.max(-30, Math.min(w - 90, this.playingFishX));
@@ -1427,8 +1571,13 @@ class FishingScene {
     if (this.playingFishX >= catchZoneRight || fishExhausted) this.fishYTime = 0;
     else { const yAmplitude = h * 0.1; this.playingFishY = this.fishYCenter + Math.sin(this.fishYTime) * yAmplitude; }
     if ((this.playingFishX >= w * cfg.catchZoneX && holdingSpace) || fishExhausted) { const pullUpSpeed = fishExhausted ? 225 : 150; this.playingFishY -= pullUpSpeed * dt; if (this.playingFishY <= h * cfg.catchZoneY) { this.fsm.transition('Caught', 'fish caught'); this._onFishCaught(); return; } }
-    if (this.tension >= cfg.maxTension) { this.fsm.transition('Failed', 'tension overflow'); this.failedReason = 'tension'; }
-    else if (this.playingFishX < -30) { this.fsm.transition('Failed', 'escape'); this.failedReason = 'escape'; }
+    // hotfix-x：鱼血归零后免疫"tension 满 = Failed"和"鱼游出屏幕 = escape"
+    //   前者：出水演绎期间玩家收线可能瞬间打满 tension，不该判失败
+    //   后者：HP=0 后 playingFishX 已被上拉逻辑接管，不会真游出去；安全兜底
+    if (!fishExhausted) {
+      if (this.tension >= cfg.maxTension) { this.fsm.transition('Failed', 'tension overflow'); this.failedReason = 'tension'; }
+      else if (this.playingFishX < -30) { this.fsm.transition('Failed', 'escape'); this.failedReason = 'escape'; }
+    }
 
     // PHASE 13-4：空格控压维度（叠加在现有 QTE / 鱼挣扎逻辑上）
     //   按住空格 → tension 上升（玩家主动施压，拉力变大；视觉条变短趋红）
@@ -1484,6 +1633,50 @@ class FishingScene {
         if (t.life <= 0) this._damageTexts.splice(i, 1);
       }
     }
+
+    // hotfix-y2：扣血光弹更新（每颗光弹独立计时 → 命中时调 _onFishHit + 真扣血）
+    // hotfix-y4：光弹沿轨迹每 30ms 喷一次粒子尾迹
+    if (this._dmgProjectiles && this._dmgProjectiles.length > 0) {
+      const now = performance.now();
+      for (let i = this._dmgProjectiles.length - 1; i >= 0; i--) {
+        const p = this._dmgProjectiles[i];
+        const elapsed = now - p.launchedAt - p.delay;
+        if (elapsed < 0) continue; // 还在延迟期
+        if (elapsed >= p.flightMs) {
+          // 命中！触发扣血回调（仅 damage>0 的光弹真扣血，避免三连扣）
+          if (!p.finished) {
+            p.finished = true;
+            if (p.damage > 0) {
+              // 真正扣 HP（hotfix-y3：最后一击残血是浮点，飘字四舍五入到整数）
+              const dmg = Math.round(Math.min(p.damage, this.fishHP));
+              this.fishHP = Math.max(0, this.fishHP - dmg);
+              this._onFishHit(dmg);
+            }
+          }
+          this._dmgProjectiles.splice(i, 1);
+        } else {
+          // hotfix-y4：飞行中每 30ms 在当前位置 emit 3 颗小火花
+          if (now - p._lastEmitAt > 30) {
+            p._lastEmitAt = now;
+            const t = elapsed / p.flightMs;
+            const ease = t * t * (3 - 2 * t);
+            const px = p.sx + (p.tx - p.sx) * ease;
+            const pyl = p.sy + (p.ty - p.sy) * ease;
+            const arc = Math.sin(t * Math.PI) * 80;
+            const py = pyl - arc;
+            this.particles.emit(px, py, 3, p.color, {
+              speed: 35, gravity: 60, size: 3, decay: 0.06
+            });
+          }
+        }
+      }
+    }
+
+    // hotfix-y2：combo 文字更新
+    if (this._comboText) {
+      this._comboText.life -= dt;
+      if (this._comboText.life <= 0) this._comboText = null;
+    }
   }
 
   _calculateEscapeChance(tension, maxTension) {
@@ -1509,6 +1702,13 @@ class FishingScene {
 
   _onFishCaught() {
     AudioSystem.stopReelSound();
+    // hotfix-z（2026-06-04 修订）：用 _startBite 时缓存的 _hookedFishRef 真正删除鱼
+    //   原 bug：先前用 bobberFSM.follower，但 follower 在进 BiteWindow 时已被 resetBobberApproach 清空
+    //   新链路：_startBite → takeHookedFishRef() → 保存 → 战斗胜利 → removeFishFromGroup(ref)
+    if (this._hookedFishRef && this.fishGroupSystem && typeof this.fishGroupSystem.removeFishFromGroup === 'function') {
+      this.fishGroupSystem.removeFishFromGroup(this._hookedFishRef);
+    }
+    this._hookedFishRef = null;
     const baseSize = this.currentFish.size[0]; this.caughtFishSize = Math.round(baseSize + (Math.random() - 0.5) * baseSize * 0.4);
     this.isNewFish = !this.atlas.has(this.currentFish.id); if (this.isNewFish) this.atlas.add(this.currentFish.id);
     this.fishCount++; this.money += this.currentFish.price; this.caughtFish = this.currentFish;
@@ -1746,6 +1946,12 @@ class FishingScene {
 
   _resetToWaiting() {
     this.fsm.transition('Waiting', 'reset'); this.timeScale = 1; this.waitTimer = 0; this.caughtTimer = 0; this.caughtFish = null; this.caughtFishSize = 0; this.currentFish = null; this.showingFishInfo = false; this.isNewFish = false; this.glowTimer = 0; this.warningShown = false; this.playingFishX = 0; this.playingFishY = 0; this.escapeSpeed = 0; this.fishMaxHP = 0; this.tensionChangeText = ''; this.tensionChangeTimer = 0; this.qteIndex = 0; this.qteTotal = 0; this.fishHP = 0; this.tension = 0; this.lineStartX = 0; this.lineStartY = 0; this.bobX = this.characterX + 180; this.bobY = this.ch * 0.5 + 90; this.castProgress = 0;
+    // hotfix-x2：清 fishExhausted 锁存，下一条鱼重新开始判定
+    this._fishExhaustedLatch = false;
+    // hotfix-y2：清扣血光弹 + combo 状态
+    this._dmgProjectiles = [];
+    this._combo = 0;
+    this._comboText = null;
     // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
     this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
     // P0 放大镜：reset 兜底强制 hide（边沿检测下一帧会重新计时 150ms 出现）
@@ -1756,9 +1962,11 @@ class FishingScene {
     if (this.fishGroupSystem && typeof this.fishGroupSystem.resetBobberApproach === 'function') {
       this.fishGroupSystem.resetBobberApproach();
     }
+    // hotfix-z：清"上钩鱼"缓存引用（战斗失败/跑鱼时鱼仍在群里，引用要丢弃避免下次误删）
+    this._hookedFishRef = null;
   }
 
-  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.currentFish = null; this.showingFishInfo = false;
+  _resetToIdle() { this.fsm.transition('Idle', 'reset'); this.timeScale = 1; this.bobX = this.characterX + 120; this.bobY = this.ch * 0.5 + 90; this.currentFish = null; this.showingFishInfo = false; this._fishExhaustedLatch = false; this._dmgProjectiles = []; this._combo = 0; this._comboText = null;
     // P0 放大镜：回 Idle 强制 hide（虽然边沿检测也会自然 hide，保险）
     if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
     // 取消提竿延迟
@@ -1767,6 +1975,8 @@ class FishingScene {
     if (this.fishGroupSystem && typeof this.fishGroupSystem.resetBobberApproach === 'function') {
       this.fishGroupSystem.resetBobberApproach();
     }
+    // hotfix-z：清"上钩鱼"缓存引用
+    this._hookedFishRef = null;
   }
 
   _toggleAtlas() {
@@ -2572,8 +2782,9 @@ class FishingScene {
     // ── 鱼线（PHASE 13-3f：单段二次贝塞尔 · 抗锯齿 · 圆头 · 鱼端偏置 0.75）──
     // 颜色：危险阈值才变色（85+ 黄 / 95+ 红闪），与右下拉力条独立映射
     // 形状：单段 quadraticCurveTo，最低点偏鱼端 75%；总弧度仍走 curveFactor 表
-    // 约束：起点/终点坐标完全不动；其他场景元素仍保持像素风（save/restore 局部隔离）
-    const lineWidth = 4; // 老版本测量值 ~4-5px，取 4
+    // 约束：起点不动；终点 hotfix-v 改到"鱼嘴"而非鱼中心
+    // hotfix-v（2026-06-04）：鱼线细一倍（4 → 2）；终点挂到鱼嘴而不是鱼身中心
+    const lineWidth = 2;
     const fishingLineColor = this._getFishingLineColor(this.tension);
     // PHASE 21-1 D14 hotfix-o：鱼抖动反馈 —— 扣血后 200ms 内 ±4px 随机偏移
     //   仅作用于渲染层（鱼线终点 + 鱼贴图），不动 this.playingFishX/Y 逻辑坐标
@@ -2584,49 +2795,50 @@ class FishingScene {
     }
     const renderFishX = this.playingFishX + hitDx;
     const renderFishY = this.playingFishY + hitDy;
+
+    // hotfix-v（2026-06-04 第三次修订）：鱼线终点回到鱼中心
+    //   原因：10 种鱼嘴位置 / 朝向差异巨大（曲腰鱼下垂嘴 / 鲤鱼鱼须 / 罗非鱼宽嘴 / 朝向左右翻转），
+    //   单一全局 ratio 无法对齐；per-species 偏移表代价高且每次换图都要重标。
+    //   决策：鱼线挂鱼中心，鱼身遮挡末端给玩家"咬钩"感，不穿帮，零维护成本。
     this._drawSmoothFishingLine(this.lineStartX, this.lineStartY, renderFishX, renderFishY, fishingLineColor, lineWidth);
-    // 钩点（小像素方块，替代矢量灰圆）
+    // 钩点：小到几乎看不见，主要靠鱼身把它遮住
     ctx.fillStyle = '#2A2A2E';
-    ctx.fillRect(Math.floor(renderFishX) - 4, Math.floor(renderFishY) - 4, 8, 8);
-    ctx.fillStyle = '#888';
     ctx.fillRect(Math.floor(renderFishX) - 2, Math.floor(renderFishY) - 2, 4, 4);
 
     // 渲染鱼（约束 6：鱼形状不动；hotfix-o 加扣血抖动偏移）
-    this._renderFish(renderFishX, renderFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace);
+    // hotfix-u：增加 species 参数，_renderFish 内部优先用 PNG，未就绪兜底原几何
+    this._renderFish(renderFishX, renderFishY, this.currentFish.color, this.currentFish.size[0], holdingSpace, holdingSpace, this.currentFish.name);
 
-    // PHASE 21-1 D14 hotfix-o：扣血飘字（红色 "-N" 从鱼头部上方升起，0.8s 淡出）
-    if (this._damageTexts && this._damageTexts.length > 0) {
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = 'bold 22px "TencentSansW7","TencentSans","Microsoft YaHei",sans-serif';
-      for (const t of this._damageTexts) {
-        const alpha = Math.max(0, t.life / t.maxLife);
-        ctx.globalAlpha = alpha;
-        // 黑色描边 + 红字
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 4;
-        ctx.strokeText(t.text, t.x, t.y);
-        ctx.fillStyle = t.color;
-        ctx.fillText(t.text, t.x, t.y);
-      }
-      ctx.restore();
-    }
+    // hotfix-y5（2026-06-04）：扣血光弹 / COMBO 文字 / -N 飘字 三块统一搬到 _renderHUD 之后
+    //   见本函数末尾 _renderHUD() 调用之后的"战斗反馈最顶层"块
+    //   留这里只为标记历史位置，三块绘制代码现已下移到拉力面板之上
 
-    // ─────────── PHASE 15 仗5：鱼行为视觉预警 ───────────
-    // surge 冲刺预告：鱼上方画"!"气泡（红圆 + 黄感叹号），surgeWarnTimer 衰减期间显示
+    // ─────────── PHASE 15 仗5 + hotfix-w B：鱼行为视觉预警增强 ───────────
+    // surge 冲刺预告：鱼上方画"!"气泡（红圆 + 黄感叹号）
+    // hotfix-w B 升级：
+    //   1. 气泡呼吸缩放（1.5Hz pulse），更易引起视觉注意
+    //   2. 加文字 "冲刺！" 在气泡下方
+    //   3. 预警从 0.5s 提前到 1.2s（鱼行为模块已改），玩家有反应时间
     if (this.surgeWarnTimer > 0) {
       const bx = Math.floor(this.playingFishX);
-      const by = Math.floor(this.playingFishY - 50);
+      const by = Math.floor(this.playingFishY - 60);
+      // 呼吸缩放 1.0 ~ 1.35（3Hz pulse）
+      const pulse = 1.0 + 0.35 * Math.abs(Math.sin(this.time * 3 * Math.PI));
+      const r = 14 * pulse;
       // 阴影
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath(); ctx.arc(bx + 1, by + 1, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx + 1, by + 1, r + 1, 0, Math.PI * 2); ctx.fill();
       // 红底
       ctx.fillStyle = '#E74C3C';
-      ctx.beginPath(); ctx.arc(bx, by, 13, 0, Math.PI * 2); ctx.fill();
-      // 黄"!"
-      this._drawPixelText('!', bx, by, 22, '#FFE066', '#1A1A2E');
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      // 黄"!"（字号随脉冲）
+      this._drawPixelText('!', bx, by, Math.round(22 * pulse), '#FFE066', '#1A1A2E');
+      // 文字提示
+      this._drawPixelText('冲刺！', bx, by - 22, 14, '#FFE066', '#5C1A1A');
     }
+    // hotfix-w B（2026-06-04）：surge 进行中红色描边框已删除
+    //   原因：鱼周围硬框影响视觉沉浸，类似 debug bbox。
+    //   "!冲刺！" 呼吸气泡 + 1.2s 提前预警 已经足够明显，不再需要包围盒。
 
     // ── 鱼身体下方耐力条（PHASE 13-3：像素方格 + 像素字）──
     const fishHPBarW = 120; const fishHPBarX = Math.floor(this.playingFishX - fishHPBarW / 2); const fishHPBarY = Math.floor(this.playingFishY + 55);
@@ -2721,31 +2933,41 @@ class FishingScene {
 
     // 鱼线拉力指示器（像素方格 + 三色档分）
     const tensionBarW = hpBarW; const tensionBarX = hpBarX; const tensionBarY = panelY + 100;
+    // hotfix-y2：缓存拉力条坐标 → 给扣血光弹起点用（指针 ▲ 顶端）
+    this._tensionBarRect = { x: tensionBarX, y: tensionBarY, w: tensionBarW, h: 16 };
+    this._tensionBarPointerX = Math.floor(tensionBarX + tensionBarW * Math.max(0, Math.min(1, this.tension / cfg.maxTension)));
+    this._tensionBarPointerY = tensionBarY + 8;
     // PHASE 13-5：拉力条视觉规范定稿 —— 正向语义
     //   tension=0 → 条空（左端）；tension=100 → 条满（右端）
     //   颜色：≤40 红 / ≤70 黄 / >70 绿（getTensionColor 唯一色源，鱼线同步）
     const tensionRatio = Math.max(0, Math.min(1, this.tension / cfg.maxTension));
     const tensionPalette = getTensionColor(this.tension);
-    // 1. 黄金区高亮带（条底色之上、填充之下）：条上 40%~85%，半透明绿
-    //    起点 X = barX + barW * 0.40，终点 X = barX + barW * 0.85
-    //    ⚠️ 必须先于 _drawPixelTensionBar 绘制（z-index：底色 → 黄金区 → 填充 → 边框 → 指针 → 文字）
-    //    但 _drawPixelTensionBar 内部包含底色绘制，因此在 _drawPixelTensionBar 之后再画黄金区也能"压在填充之下"——
-    //    解法：先调用 _drawPixelTensionBar 画底色+填充，再画黄金区半透明叠加（不会盖住填充因为透明度仅 0.25），最后画指针+文字
-    //    （半透明绿带与填充色叠加视觉柔和，符合"提示性高亮"语义）
     // hotfix-r：传 ratio=0 → 只画底色框，不画随 tension 涨/落的彩色填充格
-    //   玩家只看 ▲ 指针 vs 黄金区即可，无需关注填充长度数字
+    //   玩家只看 ▲ 指针 vs 三色区即可，无需关注填充长度数字
     this._drawPixelTensionBar(tensionBarX, tensionBarY, tensionBarW, 16, 0, tensionPalette, 6);
-    // 2. 黄金区高亮带（半透明绿叠加，提示玩家"维持在 40~85 区间最理想"）
+    // hotfix-w（2026-06-04）：拉力条三色区直接画到底（不透明），与玩法层 _checkEscape 数值严格对齐
+    //   旧 bug：绿色区画到 [0.40, 0.85]，但 _checkEscape 实际安全区只到 0.70 → 玩家以为还在绿区已开始跑鱼概率
+    //   新规则：从 CONFIG.playing.tensionLowThreshold/HighThreshold 直接取数，永不脱钩
+    //   配色：安全区绿、两侧（slack / 危险）红，玩家一眼看清楚
     {
-      const goldL = 0.40, goldR = 0.85;
-      const goldX = Math.floor(tensionBarX + tensionBarW * goldL);
-      const goldW = Math.ceil(tensionBarW * (goldR - goldL));
-      ctx.fillStyle = 'rgba(92, 232, 92, 0.25)';
-      ctx.fillRect(goldX, tensionBarY, goldW, 16);
-      // 黄金区两端 1px 米色描边（更可读）
-      ctx.fillStyle = 'rgba(255, 244, 214, 0.55)';
-      ctx.fillRect(goldX, tensionBarY, 1, 16);
-      ctx.fillRect(goldX + goldW - 1, tensionBarY, 1, 16);
+      const safeL = cfg.tensionLowThreshold / cfg.maxTension;   // 0.40
+      const safeR = cfg.tensionHighThreshold / cfg.maxTension;  // 0.70
+      const safeX = Math.floor(tensionBarX + tensionBarW * safeL);
+      const safeW = Math.ceil(tensionBarW * (safeR - safeL));
+      // 左侧红区 [0, safeL)：slack 区
+      ctx.fillStyle = '#C0392B';
+      ctx.fillRect(tensionBarX, tensionBarY, safeX - tensionBarX, 16);
+      // 中央绿区 [safeL, safeR]：实际安全区
+      ctx.fillStyle = '#27AE60';
+      ctx.fillRect(safeX, tensionBarY, safeW, 16);
+      // 右侧红区 (safeR, 1.0]：危险区
+      const dangerX = safeX + safeW;
+      ctx.fillStyle = '#C0392B';
+      ctx.fillRect(dangerX, tensionBarY, tensionBarX + tensionBarW - dangerX, 16);
+      // 绿/红交界 1px 米色细线（更清楚）
+      ctx.fillStyle = 'rgba(255, 244, 214, 0.7)';
+      ctx.fillRect(safeX, tensionBarY, 1, 16);
+      ctx.fillRect(dangerX - 1, tensionBarY, 1, 16);
     }
     // 3. tension≥85 闪烁警告外框（在条外侧加 2px 红色描边，sin 4Hz 振荡）
     //    叠加效果：不替换填充色 —— tension=92 时绿色填充 + 红色闪烁外框（"安全但接近极限"）
@@ -2812,15 +3034,124 @@ class FishingScene {
       ctx.textAlign = 'left';
     }
     this._renderHUD();
+
+    // ════════════════════════════════════════════════════════════
+    // hotfix-y5（2026-06-04）：战斗反馈最顶层
+    //   光弹 / COMBO / -N 飘字 必须画在 _renderHUD（含拉力面板木牌、HUD 木牌等）之上
+    //   否则光弹从拉力条 ▲ 指针射出时会被木牌底框遮挡
+    // ════════════════════════════════════════════════════════════
+
+    // 扣血光弹（从拉力条 ▲ 指针弧线飞向鱼，3 颗错峰）
+    if (this._dmgProjectiles && this._dmgProjectiles.length > 0) {
+      const now = performance.now();
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const p of this._dmgProjectiles) {
+        const elapsed = now - p.launchedAt - p.delay;
+        if (elapsed < 0) continue;
+        const t = Math.min(1, elapsed / p.flightMs);
+        const ease = t * t * (3 - 2 * t);
+        const x = p.sx + (p.tx - p.sx) * ease;
+        const yLine = p.sy + (p.ty - p.sy) * ease;
+        const arc = Math.sin(t * Math.PI) * 80;
+        const y = yLine - arc;
+        // 拖尾
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let k = 0; k < 5; k++) {
+          const tk = Math.max(0, t - k * 0.04);
+          const eK = tk * tk * (3 - 2 * tk);
+          const xk = p.sx + (p.tx - p.sx) * eK;
+          const ykl = p.sy + (p.ty - p.sy) * eK;
+          const ark = Math.sin(tk * Math.PI) * 80;
+          if (k === 0) ctx.moveTo(xk, ykl - ark);
+          else ctx.lineTo(xk, ykl - ark);
+        }
+        ctx.stroke();
+        // 光弹本体（外圈光晕 + 主体 + 高光）
+        const haloPulse = 0.3 + 0.3 * Math.sin(t * Math.PI * 4);
+        ctx.globalAlpha = 0.35 + haloPulse;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(x - p.size * 0.2, y - p.size * 0.2, p.size * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // -N 飘字
+    if (this._damageTexts && this._damageTexts.length > 0) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 22px "TencentSansW7","TencentSans","Microsoft YaHei",sans-serif';
+      for (const dt of this._damageTexts) {
+        const alpha = Math.max(0, dt.life / dt.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeText(dt.text, dt.x, dt.y);
+        ctx.fillStyle = dt.color;
+        ctx.fillText(dt.text, dt.x, dt.y);
+      }
+      ctx.restore();
+    }
+
+    // COMBO 文字（跟随鱼）
+    if (this._comboText) {
+      const ct = this._comboText;
+      const alpha = Math.max(0, ct.life / ct.maxLife);
+      const t = 1 - alpha;
+      const cx = this.playingFishX || this.bobX || this.cw / 2;
+      const cy = (this.playingFishY || this.bobY || this.ch / 2) - 50 - t * 20;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const fontSize = Math.round(24 * ct.scale);
+      ctx.font = `bold ${fontSize}px "TencentSansW7","TencentSans","Microsoft YaHei",sans-serif`;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 5;
+      ctx.strokeText(ct.text, cx, cy);
+      ctx.fillStyle = ct.color;
+      ctx.fillText(ct.text, cx, cy);
+      ctx.restore();
+    }
   }
 
-  _renderFish(x, y, color, size, struggling, fishFacingRight = true) {
+  _renderFish(x, y, color, size, struggling, fishFacingRight = true, species = null) {
     const ctx = this.ctx; const scale = size / 30;
     ctx.save(); ctx.translate(x, y);
     // fishFacingRight 为 true 时鱼头朝右（scaleX=1），为 false 时鱼头朝左（scaleX=-1）
     ctx.scale(fishFacingRight ? 1 : -1, 1);
     // 挣扎时鱼身摆动
     if (struggling) ctx.rotate(Math.sin(this.time * 20) * 0.2);
+
+    // ── hotfix-u（2026-06-04）：优先使用 512×512 PNG 鱼图，未就绪兜底原几何 ──
+    //   原图均"鱼头朝右"绘制，与本函数 fishFacingRight=true 时的方向一致。
+    //   渲染尺寸：原几何鱼总长 ≈ 95 * scale（鱼尾尖到嘴尖 -55~+40），
+    //   所以 PNG 宽度也按 95*scale 等比，高度同步，居中绘制。
+    const sprite = species ? getFishSpriteBySpecies(species) : null;
+    if (isFishSpriteReady(sprite)) {
+      const fishW = 110 * scale;
+      const fishH = fishW * (sprite.naturalHeight / sprite.naturalWidth);
+      ctx.drawImage(sprite, -fishW / 2, -fishH / 2, fishW, fishH);
+      ctx.restore();
+      return;
+    }
+
+    // ── fallback：原程序几何（兼容未提供 species / 图未加载完 / 加载失败）──
     // 鱼身（椭圆形，朝右为正方向）
     ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, 0, 40 * scale, 20 * scale, 0, 0, Math.PI * 2); ctx.fill();
     // 鱼尾（在 -x 方向）
@@ -3303,11 +3634,21 @@ class FishingScene {
     //   原："鱼在屏幕上半 ch*0.35 → ch*0.20" → 改成"鱼在提示框上方 ch*0.30"
     const fishY = ch * 0.30 - t * ch * 0.05; const fishScale = (0.5 + t * 0.35) * 0.85;
     ctx.save(); ctx.translate(cw / 2, fishY); ctx.scale(fishScale, fishScale);
-    ctx.fillStyle = fish.color; ctx.beginPath(); ctx.ellipse(0, 0, 120, 60, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-105, 0); ctx.lineTo(-165, -45); ctx.lineTo(-165, 45); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(0, -45); ctx.lineTo(-30, -90); ctx.lineTo(45, -60); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(75, -15, 22, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(79, -15, 10, 0, Math.PI * 2); ctx.fill();
+    // hotfix-v（2026-06-04）：钓到了弹窗优先用 PNG 鱼图（与水下战斗/图鉴/鱼篓口径统一）
+    //   原程序几何鱼总长 = 165*2 = 330px、高 = 90*2 = 180px → PNG 按等宽 330 绘制
+    const caughtSprite = getFishSpriteBySpecies(fish.name);
+    if (isFishSpriteReady(caughtSprite)) {
+      const drawW = 330;
+      const drawH = drawW * (caughtSprite.naturalHeight / caughtSprite.naturalWidth);
+      ctx.drawImage(caughtSprite, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else {
+      // fallback：原程序几何（不阻塞，等图加载完下次弹窗就用图）
+      ctx.fillStyle = fish.color; ctx.beginPath(); ctx.ellipse(0, 0, 120, 60, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-105, 0); ctx.lineTo(-165, -45); ctx.lineTo(-165, 45); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, -45); ctx.lineTo(-30, -90); ctx.lineTo(45, -60); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(75, -15, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(79, -15, 10, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
     // 提示框放到屏幕正中央
     const boxW = 450; const boxH = 210; const boxX = (cw - boxW) / 2; const boxY = (ch - boxH) / 2;
@@ -3515,30 +3856,33 @@ class FishingScene {
   }
   /**
    * PHASE 13-3f：抗锯齿单段二次贝塞尔鱼线（悬链线感 · 圆头 · 鱼端偏置 0.75）
+   * hotfix-v（2026-06-04）：bias 从 0.75 改为 0.5（对称悬链线）
+   *   原 0.75 让最低点偏鱼端，导致鱼端附近曲率突变（"接近鱼时鱼线急转弯"）。
+   *   改 0.5 后弧度在起终点之间均匀分布，符合物理悬链线，玩家视觉更自然。
+   *   sag 同步降低（curveFactor *= 0.6），避免对称后整体看着太"沉"。
    * - 起点/终点完全不变
    * - 弧度总量 sag = 线长 × curveFactor（拉力联动表沿用）
-   * - bias = 0.75：曲线最低点偏鱼端 75%
-   * - 控制点经验公式：control = 2·midPoint - (start+end)/2，其中 midPoint = 起终点直线 75% 处再下移 sag
-   *   该式保证 t=bias 时贝塞尔点 = midPoint，达到"最低点在 75%"
+   * - bias = 0.5：曲线最低点在起终点中间（对称悬链线）
+   * - 控制点经验公式：control = 2·midPoint - (start+end)/2，其中 midPoint = 起终点直线 50% 处再下移 sag
    * - lineCap='round' 圆头；imageSmoothingEnabled 用 save/restore 局部开启，画完恢复像素风
    */
   _drawSmoothFishingLine(x0, y0, x1, y1, color, w) {
     const dx = x1 - x0, dy = y1 - y0;
     const len = Math.sqrt(dx * dx + dy * dy);
-    // 拉力系数（PHASE 13-3d 表，沿用）
+    // 拉力系数（PHASE 13-3d 表，hotfix-v 同步降权 *0.6 让对称弧度不至于太"沉"）
     const t = this.tension;
     let curveFactor;
-    if (t < 30)      curveFactor = 0.08;
-    else if (t < 60) curveFactor = 0.05;
-    else if (t < 85) curveFactor = 0.03;
-    else             curveFactor = 0.015;
+    if (t < 30)      curveFactor = 0.048;  // 旧 0.08
+    else if (t < 60) curveFactor = 0.030;  // 旧 0.05
+    else if (t < 85) curveFactor = 0.018;  // 旧 0.03
+    else             curveFactor = 0.009;  // 旧 0.015
     const sag = len * curveFactor;
-    // 偏置 0.75：让贝塞尔曲线在 t=0.75 处达到"直线 75% 点 + sag 下移"
-    const bias = 0.75;
+    // hotfix-v：偏置改 0.5，对称悬链线（最低点在中间），避免鱼端急转弯
+    const bias = 0.5;
     const midX = x0 + bias * dx;
     const midY = y0 + bias * dy + sag;
-    // 控制点反推：B(t)=midPoint 时 t=bias，但二次贝塞尔最大下垂点 t=0.5 偏移
-    // 经验公式（任务规范）：control = 2·mid - (start+end)/2
+    // 控制点反推（二次贝塞尔 t=0.5 处恰好是 midPoint，对称情况下简化为）
+    // control = 2·mid - (start+end)/2
     const ctrlX = 2 * midX - (x0 + x1) / 2;
     const ctrlY = 2 * midY - (y0 + y1) / 2;
     // 局部开启抗锯齿 + 圆头，画完 restore 不影响像素风渲染

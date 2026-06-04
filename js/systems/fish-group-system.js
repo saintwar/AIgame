@@ -531,6 +531,46 @@ export class FishGroupSystem {
     return { dx: this.bobberFSM.currentDx | 0, dy: this.bobberFSM.currentDy | 0 };
   }
 
+  /**
+   * hotfix-z（2026-06-04 修订）：取出"当前正在上钩的鱼"引用（不删除，仅返回）
+   *   时机：fishing-scene._startBite 进 BiteWindow 之前，趁 follower 还在拿到引用
+   *   调用方负责保管引用，战斗胜利后调 removeFishFromGroup() 真正删除
+   *   返回：{fish, group} 或 null
+   */
+  takeHookedFishRef() {
+    const f = this.bobberFSM.follower;
+    if (f && f.fish && f.group) {
+      return { fish: f.fish, group: f.group };
+    }
+    return null;
+  }
+
+  /**
+   * hotfix-z：根据 takeHookedFishRef() 返回的引用，把鱼从所在群里彻底删掉
+   *   - group.fishes 数组 splice
+   *   - group.fishCount 同步 -1（HUD 浮窗密度文案用）
+   *   - 兜底：若鱼已飘到别群（受惊态），扫所有群按引用查找
+   */
+  removeFishFromGroup(ref) {
+    if (!ref || !ref.fish) return false;
+    const tryRemove = (g) => {
+      if (!g || !Array.isArray(g.fishes)) return false;
+      const idx = g.fishes.indexOf(ref.fish);
+      if (idx < 0) return false;
+      g.fishes.splice(idx, 1);
+      if (typeof g.fishCount === 'number') {
+        g.fishCount = Math.max(0, g.fishCount - 1);
+      }
+      return true;
+    };
+    if (tryRemove(ref.group)) return true;
+    // 兜底：扫所有群
+    for (const g of (this.fishGroups || [])) {
+      if (tryRemove(g)) return true;
+    }
+    return false;
+  }
+
   /** 玩家在试探/偷吃/真吃晃动期按提竿键 —— 由 fishing-scene 决定罚则后调本方法重置 */
   resetBobberApproach() {
     // 派出去的鱼放回 wander（如果还在 approach/biting）

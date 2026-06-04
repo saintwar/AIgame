@@ -65,14 +65,17 @@ export class FishBehavior {
     }
   }
 
-  // —— surge：平静(2~4s, 0.5×) → 冲刺(0.8~1.5s, 2×) 循环 ——
+  // —— surge：平静(2~4s, 0.5×) → 冲刺(0.8~1.5s, 1.5×) 循环 ——
+  // hotfix-w（2026-06-04）：
+  //   E. 倍数 ×2.0 → ×1.5（仍保留 surge 张力差，但削弱"突然冲刺爆条"概率）
+  //   B. 预警提前到 ≤1.2s（旧 0.5s），并把 isSurging 公开给 UI 层做条上闪烁
   _calcSurge(dt) {
     this.timer += dt;
 
     // calm → surge 切换
     if (this.state === 'calm') {
-      // 距离冲刺 ≤0.5s 时发一次预警事件（让 UI 弹"！"）
-      if (!this._surgeWarned && this.calmDuration - this.timer <= 0.5) {
+      // hotfix-w B：距离冲刺 ≤1.2s 时发一次预警事件（旧 0.5s 玩家来不及反应）
+      if (!this._surgeWarned && this.calmDuration - this.timer <= 1.2) {
         this._surgeWarned = true;
         if (this.onEvent) this.onEvent('surge_incoming', { lead: this.calmDuration - this.timer });
       }
@@ -90,17 +93,30 @@ export class FishBehavior {
       this._surgeWarned = false; // 新一轮 calm，预警重置
     }
 
-    return this.state === 'calm' ? this.basePull * 0.5 : this.basePull * 2.0;
+    // hotfix-w E：surge 倍数 ×2.0 → ×1.5（削弱跳变烈度，但仍保留差异感）
+    return this.state === 'calm' ? this.basePull * 0.5 : this.basePull * 1.5;
   }
 
-  // —— erratic：每 0.3~0.8s 随机变向，幅度 0.5~2× basePull，70% 概率正向 ——
+  /**
+   * hotfix-w B：UI 层可查"鱼当前是否正在冲刺"，用于拉力条警示边框/鱼身抖动
+   * 仅对 surge / mythic 阶段1/阶段3 有效
+   */
+  isSurging() {
+    return this.type === 'surge' && this.state === 'surge';
+  }
+
+  // —— erratic：每 0.4~1.0s 随机变向，幅度 0.4~1.2× basePull，80% 概率正向 ——
+  // hotfix-w E：旧 ×0.5~2.0 + 70% 正向 → 新 ×0.4~1.2 + 80% 正向
+  //   原因：上限 ×2 + 30% 概率反向 = "卡住不动突然蹦"的最大单一来源
+  //   新规则：波动更柔，主要是正向脉冲（鱼在挣扎而非"假装不动"）
+  //   节奏：0.3~0.8s → 0.4~1.0s（每秒变向少一些，玩家更好读节奏）
   _calcErratic(dt) {
     this.timer += dt;
     if (this.timer >= this.nextInterval) {
       this.timer = 0;
-      this.nextInterval = 0.3 + Math.random() * 0.5;
-      const direction = Math.random() > 0.3 ? 1 : -1;
-      const intensity = 0.5 + Math.random() * 1.5;
+      this.nextInterval = 0.4 + Math.random() * 0.6;
+      const direction = Math.random() > 0.2 ? 1 : -1;   // 80% 正向（旧 70%）
+      const intensity = 0.4 + Math.random() * 0.8;       // 0.4~1.2（旧 0.5~2.0）
       this.currentPull   = this.basePull * intensity * direction;
       this.lastDirection = direction;
     }
@@ -120,7 +136,8 @@ export class FishBehavior {
       case 1:
         return this._calcSurge(dt);
       case 2: {
-        // 深潜技能：每 8~12s 触发一次，期间 pull = -30 持续 1s
+        // 深潜技能：每 8~12s 触发一次，期间 pull = -20 持续 1s
+        // hotfix-w E：深潜 -30 → -20（仍能拽松，但不会瞬间把 tension 拉到 slack 失败区）
         this.diveTimer += dt;
         if (this.diving) {
           if (this.diveTimer >= this.diveDuration) {
@@ -128,19 +145,22 @@ export class FishBehavior {
             this.diveTimer = 0;
             this.diveCooldown = 8 + Math.random() * 4;
           } else {
-            return -30; // 鱼往下潜，把线拽松（玩家若按住反而是好事）
+            return -20; // 鱼往下潜，把线拽松（玩家若按住反而是好事）
           }
         } else if (this.diveTimer >= this.diveCooldown) {
           this.diving = true;
           this.diveTimer = 0;
           this.diveDuration = 1.0;
           if (this.onEvent) this.onEvent('mythic_dive', { phase: 2 });
-          return -30;
+          return -20;
         }
-        return this._calcErratic(dt) * 1.5;
+        // hotfix-w E：阶段2 erratic 乘数 ×1.5 → ×1.2
+        return this._calcErratic(dt) * 1.2;
       }
       case 3:
-        return this._calcSurge(dt) * 2.0;
+        // hotfix-w E：阶段3 surge ×2.0 → ×1.5（再叠加 _calcSurge 内的 ×1.5 = 总 ×2.25，
+        //   仍是阶段1 的 2.25 倍残暴度，保留"垂死挣扎"差异感）
+        return this._calcSurge(dt) * 1.5;
       default:
         return this.basePull;
     }

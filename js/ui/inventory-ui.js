@@ -1,5 +1,7 @@
 import { ITEMS } from '../data/items.js';
 import { computeBagWeight } from '../fish-storage.js';
+// hotfix-u（2026-06-04）：鱼篓优先用 512×512 PNG 鱼图，未就绪兜底 🐟 emoji
+import { getFishSpriteBySpecies, isFishSpriteReady } from '../render/fish-sprite-loader.js';
 
 /**
  * 背包 UI（Canvas 绘制）
@@ -334,11 +336,17 @@ export class InventoryUI {
         ctx.lineWidth = 2;
         ctx.strokeRect(x + 30, iy, w - 60, 55);
       }
-      // 图标（用 🐟 兜底；后续仗 2 可接入鱼种 emoji 表）
-      ctx.font = '36px sans-serif';
-      ctx.fillStyle = '#fff';
+      // 图标（hotfix-u：优先用 PNG 鱼图，未就绪兜底 🐟）
       ctx.textAlign = 'left';
-      ctx.fillText('🐟', x + 45, iy + 40);
+      const itemSprite = getFishSpriteBySpecies(item.name);
+      if (isFishSpriteReady(itemSprite)) {
+        const iconW = 48, iconH = iconW * (itemSprite.naturalHeight / itemSprite.naturalWidth);
+        ctx.drawImage(itemSprite, x + 36, iy + (55 - iconH) / 2, iconW, iconH);
+      } else {
+        ctx.font = '36px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🐟', x + 45, iy + 40);
+      }
       // 名称 ×count
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 22px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
