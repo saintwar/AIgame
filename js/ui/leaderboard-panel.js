@@ -152,9 +152,13 @@
       }
 
       /* ─── HUD 排行榜按钮 ─── */
+      /* 2026-06-05：画幅锁 1280×720 后，按钮钉"画幅右边"而非视口右边。
+         公式 calc(50vw - 640px + 12px) = (视口到画幅右边的距离) + 12px 画幅内边距。
+         max() 兜底视口 < 1280px 时回退到原 right:12px 行为。 */
       .hud-leaderboard-btn {
         position: fixed;
-        top: 12px; right: 12px;
+        top: 12px;
+        right: max(12px, calc(50vw - 640px + 12px));
         z-index: 100;
         background: linear-gradient(180deg, ${C_HIGHLIGHT} 0%, ${C_BORDER} 100%);
         border: 2px solid ${C_DEEP};

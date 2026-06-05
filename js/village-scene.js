@@ -83,8 +83,10 @@ class ArrowGuide {
     //   sprite 视觉中心 X = player.px（旧偏右 16 已修），头顶 ≈ player.py - 24 → 头顶上方 21px = py - 45
     // hotfix（2026-06-01d）：sprite 再上移 15 → 头顶 ≈ py-39，箭头 = py-39-21 = py-60
     // hotfix（2026-06-01f）：sprite 再下移 7 → 头顶 ≈ py-32，箭头 = py-32-21 = py-53
+    // 2026-06-05：箭头三角与"阿明"名字标签 [py-70, py-50] 重叠 → 整体上移 25px 到 py-78，
+    //   配套箭头文字 y 由 arrowY-18 → arrowY-22（更醒目的间距，避免文字底贴名字标签顶）
     const arrowX = player.px;
-    const arrowY = player.py - 53 + bobY;
+    const arrowY = player.py - 78 + bobY;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
@@ -108,8 +110,9 @@ class ArrowGuide {
       ctx.lineWidth = 2;
       ctx.font = '14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
       ctx.textAlign = 'center';
-      ctx.strokeText(this.targetTile.label, arrowX, arrowY - 18);
-      ctx.fillText(this.targetTile.label, arrowX, arrowY - 18);
+      // 2026-06-05：文字间距 18→22，配合箭头整体上移避开名字标签
+      ctx.strokeText(this.targetTile.label, arrowX, arrowY - 22);
+      ctx.fillText(this.targetTile.label, arrowX, arrowY - 22);
     }
   }
 }
@@ -311,6 +314,12 @@ class VillageScene {
     // 操作提示卡 ✕ 关闭按钮（坐标在 _renderTutorialCard 内动态计算并写回此字段）
     this._tutorialCloseRect = null;
     this._tutorialCloseHovered = false;
+
+    // 2026-06-05：小地图右下角 3 个图标按钮（背包 / 鱼图鉴 / 任务面板）
+    //   坐标在 _renderMinimap 内动态计算并写回此字段；hover key = 'inventory' / 'codex' / 'quest' / null
+    //   点击 = 等价对应键盘快捷键
+    this._minimapBtnRects = []; // [{ key, x, y, w, h, label, hotkey }]
+    this._minimapBtnHovered = null; // null | 'inventory' | 'codex' | 'quest'
 
     // 初始化图鉴 UI
     this.codexUI = new CodexUI(this.canvas, window.codex);
@@ -1277,6 +1286,28 @@ class VillageScene {
             return;
           }
         }
+
+        // 2026-06-05：小地图右下角 3 个图标按钮 click 派发
+        //   命中 = 等价对应键盘快捷键；与游戏指南 HUD 同优先级（玩法阶段、无面板）
+        {
+          const noPanel = !dialogueSystem.isActive() && !this.questPanelOpen
+            && !(this.inventoryUI && this.inventoryUI.visible)
+            && !(this.codexUI && this.codexUI.visible)
+            && !(this.shopUI && this.shopUI.visible)
+            && !(this.restPanel && this.restPanel.visible);
+          if (noPanel && this._minimapBtnRects && this._minimapBtnRects.length) {
+            const { x, y } = toCanvasXY(e);
+            for (const r of this._minimapBtnRects) {
+              // 圆形命中（精确）：到按钮中心距离 ≤ r
+              const dx = x - r.cx, dy = y - r.cy;
+              if (dx * dx + dy * dy <= r.r * r.r) {
+                this._handleMinimapBtnClick(r.key);
+                e.stopImmediatePropagation();
+                return;
+              }
+            }
+          }
+        }
         // PHASE 16-4.8 仗4：对话激活 → 整框 click = 等同空格（推进/跳过打字机）
         // 必须放在所有面板派发之前，因为对话框覆盖在所有 UI 之上、且 isSceneInteractive
         // 在对话激活时返回 false → ClickToMove 不会寻路；但 stopImmediatePropagation 双保险。
@@ -1390,6 +1421,26 @@ class VillageScene {
             return;
           }
           this._guideHUDHovered = false;
+
+          // 2026-06-05：小地图右下角图标按钮 hover 检测
+          if (noPanel && this._minimapBtnRects && this._minimapBtnRects.length) {
+            let hit = null;
+            for (const r of this._minimapBtnRects) {
+              const dx = x - r.cx, dy = y - r.cy;
+              if (dx * dx + dy * dy <= r.r * r.r) {
+                hit = r.key;
+                break;
+              }
+            }
+            this._minimapBtnHovered = hit;
+            if (hit) {
+              this.canvas.style.cursor = 'pointer';
+              this._hoverTile = null;
+              return;
+            }
+          } else {
+            this._minimapBtnHovered = null;
+          }
         }
         // PHASE 16-4.8 仗4：对话激活 → 整框可点 → cursor pointer
         // PHASE 18 仗5 - 仗2：选项菜单激活时，hover 选项条目 → 同步 choiceIdx + 'pointer'
@@ -2402,14 +2453,16 @@ class VillageScene {
     ctx.fillText('📖 操作指南', cardX + cardW / 2, cardY + 32);
 
     // 操作说明
+    //   2026-06-05：拆"键名/描述"两列，固定 X 坐标对齐 → 解决空格 padding
+    //   在中英文混排下宽度不一致导致"→"垂直不对齐的问题
     const items = [
-      { icon: '⌨️', text: 'WASD / 方向键    →  移动角色' },
-      { icon: '💬', text: 'E 键              →  与人物互动' },
-      { icon: '📋', text: 'Q 键              →  打开任务面板' },
-      { icon: '🎒', text: 'B 键              →  打开背包' },
-      { icon: '📖', text: 'T 键              →  打开图鉴 ⭐' },
-      { icon: '🎣', text: 'F 键（钓点）      →  开始钓鱼' },
-      { icon: '⏭️', text: 'ESC               →  跳过对话' }
+      { icon: '⌨️', key: 'WASD / 方向键',  desc: '移动角色' },
+      { icon: '💬', key: 'E 键',           desc: '与人物互动' },
+      { icon: '📋', key: 'Q 键',           desc: '打开任务面板' },
+      { icon: '🎒', key: 'B 键',           desc: '打开背包' },
+      { icon: '📖', key: 'T 键',           desc: '打开图鉴 ⭐' },
+      { icon: '🎣', key: 'F 键（钓点）',   desc: '开始钓鱼' },
+      { icon: '⏭️', key: 'ESC',            desc: '跳过对话' }
     ];
 
     let y = cardY + 110;
@@ -2417,10 +2470,19 @@ class VillageScene {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#3D2B1F';
 
+    // 固定列 X：图标 / 键名 / 箭头 / 描述（对齐到统一 X）
+    const ICON_X  = cardX + 60;
+    const KEY_X   = cardX + 120;
+    const ARROW_X = cardX + 380;   // 箭头列
+    const DESC_X  = cardX + 430;   // 描述列起点（紧贴箭头）
+
     items.forEach((item, idx) => {
+      const yi = y + idx * 56;
       ctx.fillStyle = '#3D2B1F';
-      ctx.fillText(item.icon, cardX + 60, y + idx * 56);
-      ctx.fillText(item.text, cardX + 120, y + idx * 56);
+      ctx.fillText(item.icon, ICON_X, yi);
+      ctx.fillText(item.key, KEY_X, yi);
+      ctx.fillText('→', ARROW_X, yi);
+      ctx.fillText(item.desc, DESC_X, yi);
     });
 
     // PHASE 18 仗6 - 仗1：底部提示移至面板外（面板下方 28px，灰色小字居中）
@@ -2794,11 +2856,13 @@ class VillageScene {
     // 保留任务标记（角色宽32px，中心在 px+16）
     // HOTFIX：原 y=py-28 与名字标签 box（py-28~py-8）完全重叠，48px serif "?" 字符高度
     // ~48px → 覆盖到 npc.py-52~py-4 → 截图里"阿土伯"的"土"被问号压住，看起来像"阿?伯"。
-    // 移到名字标签上方（py-44，留出名字 box 20px + 间距）。
+    // 2026-06-05 再校：名字标签 topY=py-18，box 高 20 → 区间 [py-38, py-18]；
+    //   36px 标记 textBaseline=middle 在 y 处占 [y-18, y+18]，原 y=py-44 → [py-62, py-26]，
+    //   底端 py-26 仍压住标签顶 py-38 → 改 py-60，标记区间 [py-78, py-42]，与标签留 4px 间距。
     for (const npc of this.npcs) {
       const cx = npc.px + 16;
       const py = npc.py + npc.bobOffset;
-      this._renderNPCMarker(ctx, npc, cx, py - 44);
+      this._renderNPCMarker(ctx, npc, cx, py - 60);
     }
   }
 
@@ -3188,6 +3252,129 @@ class VillageScene {
       ctx.fillStyle = '#FFF';
       ctx.fillText(d.label, dx, dy + 1);
     }
+
+    // 2026-06-05：小地图右下角 3 个图标快捷按钮（贴圆框外侧）
+    //   位置：沿圆弧 25°/45°/65°（顺时针，0° 正东，向下为正）
+    //   行为：点击 = 等价对应键盘快捷键；hover 显示 tooltip
+    this._renderMinimapBtns(ctx, centerX, centerY, radius);
+  }
+
+  /**
+   * 2026-06-05：小地图右下角圆形图标按钮 + tooltip
+   *   3 个按钮沿圆弧排列，紧贴圆框外侧
+   *   - 🎒 背包 (B)
+   *   - 📖 鱼图鉴 (T)
+   *   - 📋 任务面板 (Q)
+   */
+  _renderMinimapBtns(ctx, centerX, centerY, radius) {
+    const btnR = 16; // 按钮半径（直径 32）
+    // 2026-06-05 v3：贴近小地图边缘（btnDist = radius + btnR + 4），
+    //   通过加大角度差（30°）保证按钮间距 —— 数学推导：
+    //   弦长 = 2 * btnDist * sin(Δθ/2)，btnDist≈101, Δθ=30° → 弦长 ~52px
+    //   按钮直径 32px → 实际间隙 ~20px，视觉舒适
+    const btnDist = radius + btnR + 4;
+    // 2026-06-05 v4：避开 S 方向标（90°）—— 角度区间限定 [20°, 70°]
+    //   原 85° 与 S 标记（90°，距离 radius+10≈91）几何重叠
+    const buttons = [
+      { key: 'inventory', icon: '🎒', label: '打开背包',     hotkey: 'B', angleDeg: 20 },
+      { key: 'codex',     icon: '📖', label: '打开鱼图鉴',   hotkey: 'T', angleDeg: 45 },
+      { key: 'quest',     icon: '📋', label: '打开任务面板', hotkey: 'Q', angleDeg: 70 },
+    ];
+
+    this._minimapBtnRects = [];
+    for (const b of buttons) {
+      const rad = (b.angleDeg * Math.PI) / 180;
+      const cx = centerX + Math.cos(rad) * btnDist;
+      const cy = centerY + Math.sin(rad) * btnDist;
+      // 缓存 AABB 给 click/move 用
+      this._minimapBtnRects.push({
+        key: b.key, x: cx - btnR, y: cy - btnR, w: btnR * 2, h: btnR * 2,
+        cx, cy, r: btnR, label: b.label, hotkey: b.hotkey,
+      });
+
+      const hovered = this._minimapBtnHovered === b.key;
+
+      // 圆形按钮底
+      ctx.beginPath();
+      ctx.arc(cx, cy, btnR, 0, Math.PI * 2);
+      ctx.fillStyle = hovered ? 'rgba(232, 200, 76, 0.95)' : 'rgba(0, 0, 0, 0.78)';
+      ctx.fill();
+      // 描边：黑色（与小地图圆框同色，统一视觉语言）；hover 时金色描边突出
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = hovered ? '#FFD700' : '#000000';
+      ctx.stroke();
+      // 图标（emoji，居中）
+      ctx.font = '18px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","TencentSansW7",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#FFF';
+      ctx.fillText(b.icon, cx, cy + 1);
+    }
+
+    // tooltip：在 hover 按钮的"上方"（避免出画幅，选这个方向因为按钮位于地图右下，上方有空间）
+    if (this._minimapBtnHovered) {
+      const r = this._minimapBtnRects.find(r => r.key === this._minimapBtnHovered);
+      if (r) {
+        const text = `${r.label} (${r.hotkey})`;
+        ctx.font = 'bold 14px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const padX = 10, padY = 6;
+        const textW = ctx.measureText(text).width;
+        const tooltipW = textW + padX * 2;
+        const tooltipH = 14 + padY * 2;
+        // 默认放按钮上方
+        let tooltipX = r.cx - tooltipW / 2;
+        let tooltipY = r.y - tooltipH - 8;
+        // 越界保护（极端：屏幕顶部）→ 翻到按钮下方
+        if (tooltipY < 4) tooltipY = r.y + r.h + 8;
+        // 水平 clamp
+        if (tooltipX < 4) tooltipX = 4;
+        if (tooltipX + tooltipW > 1276) tooltipX = 1276 - tooltipW;
+
+        // 圆角矩形底
+        ctx.fillStyle = 'rgba(20, 14, 8, 0.92)';
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(tooltipX, tooltipY, tooltipW, tooltipH, 6);
+          ctx.fill();
+        } else {
+          ctx.fillRect(tooltipX, tooltipY, tooltipW, tooltipH);
+        }
+        // 金色描边
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // 文字
+        ctx.fillStyle = '#FFF4D6';
+        ctx.fillText(text, tooltipX + tooltipW / 2, tooltipY + tooltipH / 2 + 1);
+      }
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  /**
+   * 2026-06-05：小地图按钮点击 → 等价对应键盘快捷键
+   *   key: 'inventory' | 'codex' | 'quest'
+   */
+  _handleMinimapBtnClick(key) {
+    if (key === 'inventory') {
+      if (this.inventoryUI) {
+        this.inventoryUI.toggle();
+        if (this.inventoryUI.visible) AudioSystem.playMenuOpen();
+        else AudioSystem.playMenuClose();
+      }
+    } else if (key === 'codex') {
+      if (this.codexUI) {
+        this.codexUI.toggle();
+        if (this.codexUI.visible) AudioSystem.playMenuOpen();
+        else AudioSystem.playMenuClose();
+      }
+    } else if (key === 'quest') {
+      this.questPanelOpen = true;
+      AudioSystem.playMenuOpen();
+    }
   }
 
   _renderQuestPanel() {
@@ -3223,12 +3410,16 @@ class VillageScene {
     } else {
       let y = panelY + 100;
       for (const q of activeQuests) {
-        const tpl = window.QUESTS?.[q.id] || { name: q.id, description: '' };
+        // 2026-06-05 修复：原 window.QUESTS 永远 undefined（QUESTS 是 ES module
+        //   import 进来的，没挂 window）→ 任务面板一直显示 ID 而不是名字。
+        //   兼容 q001 用 name 字段、q002/q003 用 title 字段的历史不一致。
+        const tpl = QUESTS[q.id] || {};
+        const displayName = tpl.name || tpl.title || q.id;
 
         ctx.font = 'bold 24px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
         ctx.fillStyle = '#3D2B1F';
         ctx.textAlign = 'left';
-        ctx.fillText(tpl.name, panelX + 40, y);
+        ctx.fillText(displayName, panelX + 40, y);
 
         const status = questSystem.getStatus(q.id);
         let badgeColor = '#E8C84C';

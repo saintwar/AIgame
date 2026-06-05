@@ -90,6 +90,17 @@ function _isQ003Completed() {
 }
 
 /**
+ * 2026-06-05 BL-001 方案E：q001"钓 3 条奇力鱼"任务进行中时，临时把奇力鱼权重
+ * 从 35 提到 70（抽中率 30.4% → 47%），让新手任务推进更顺畅。
+ * 任务完成后 getStatus 返回 'completed'，自动恢复原 30% 抽中率，保持后期生态。
+ * 叙事侧已在 chief_quest_offer 对话尾加铺垫"这季节奇力鱼最多"。
+ */
+function _isQ001Active() {
+  if (!window.questSystem || typeof window.questSystem.getStatus !== 'function') return false;
+  return window.questSystem.getStatus('q001_first_fish') === 'active';
+}
+
+/**
  * 取当前可钓鱼池（hotfix-n：钓竿不再过滤，q003 决定 ★4/★5 解锁）。
  * 保留旧函数签名兼容旧调用方（inventory-system 等仅遍历用，与门禁无关）。
  */
@@ -110,10 +121,16 @@ export function rollFishWithRod(rod) {
   const pool = getAvailableFish();
   if (pool.length === 0) return null;
 
-  // 加权权重 = weight * (1 + bigFishBonus * rarity)
+  // 2026-06-05 BL-001：q001 进行中，奇力鱼权重 ×2（35→70），抽中率 30.4%→47%
+  const q001Active = _isQ001Active();
+  const QILIYU_BOOST = 2.0;
+
+  // 加权权重 = weight * (1 + bigFishBonus * rarity) * (q001 期奇力鱼额外 ×2)
   const adjusted = pool.map(f => ({
     ...f,
-    adjWeight: f.weight * (1 + (rod.bigFishBonus || 0) * f.rarity)
+    adjWeight: f.weight
+      * (1 + (rod.bigFishBonus || 0) * f.rarity)
+      * (q001Active && f.id === 'qiliyu' ? QILIYU_BOOST : 1.0)
   }));
   const total = adjusted.reduce((s, f) => s + f.adjWeight, 0);
   let roll = Math.random() * total;

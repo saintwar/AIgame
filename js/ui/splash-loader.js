@@ -75,12 +75,12 @@
     overlay = document.createElement('div');
     overlay.id = 'splash-loader';
     // innerHTML 直接写，DOM 量极小、无 XSS 风险（全部静态文案）
+    // 2026-06-05：删掉 logo（🎣 宝岛钓手）行 —— 登录背景图本身已经是
+    // "宝岛地图 + 阿明持竿"的题图，再叠 logo 视觉冗余且抢戏。
     overlay.innerHTML =
       '<div class="splash-content">' +
         // 设备适配提示：游戏按桌面端 Canvas 尺寸/操作设计，手机端/小屏体验不佳。
-        // 放在 logo 上方，确保移动端竖屏窄视口下不会被裁出可视区。
         '<div class="splash-device-notice">⚠ 请使用台式电脑进行游戏</div>' +
-        '<div class="splash-logo">🎣 宝岛钓手</div>' +
         '<div class="splash-bar-wrap"><div class="splash-bar" id="splash-bar"></div></div>' +
         '<div class="splash-percent" id="splash-percent">0%</div>' +
         '<div class="splash-tip" id="splash-tip">正在准备钓具...</div>' +

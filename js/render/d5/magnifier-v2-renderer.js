@@ -48,19 +48,25 @@ const IDLE_RIPPLE_MIN_MS  = 4000;
 const IDLE_RIPPLE_MAX_MS  = 8000;
 const IDLE_RIPPLE_DUR_MS  = 900; // 单圈寿命
 
-// 边框 / 高光颜色（沿用 D5 色板风格）
+// 边框颜色（沿用 D5 色板风格）
+//   2026-06-05：删除 HILIGHT_COLOR —— 弧形高光被误识为读条，已移除绘制
 const FRAME_COLOR     = '#FFE4B5';  // 金边
 const FRAME_DARK      = '#8B6914';  // 内描边
-const HILIGHT_COLOR   = 'rgba(255,255,255,0.55)';
 const VIGNETTE_COLOR  = 'rgba(0,0,0,0.35)';
 
-// PHASE 21-1 D14 hotfix-l：放大镜正下方"重新抛竿"按钮（hotfix-m 文案 收竿→重新抛竿）
-const RECALL_BTN_W       = 110;
-const RECALL_BTN_H       = 28;
-const RECALL_BTN_GAP     = 14;   // 按钮与镜底间距
-const RECALL_BTN_BG      = '#1A2438';
-const RECALL_BTN_BG_HOV  = '#2A3A5A';
-const RECALL_BTN_TEXT    = '#FFE4B5';
+// 2026-06-05：放大镜下方"放弃"胶囊按钮
+//   形态：胶囊（圆角矩形，宽约 96 高约 32）
+//   位置：浮漂（= 放大镜中心）正下方，距镜底 GAP；越界时翻到镜身正上方
+//   显示：放大镜可见时始终显示；任何状态都可点 → 触发 _resetToIdle
+//   刺鱼按钮已移除（保留键盘空格 / 点鱼触发）—— 老板裁定避免误操作
+const ABANDON_BTN_W      = 96;
+const ABANDON_BTN_H      = 32;
+const ABANDON_BTN_GAP    = 14;   // 胶囊与镜身间距
+const ABANDON_BTN_BG     = '#E74C3C';
+const ABANDON_BTN_BG_HOV = '#FF6B5C';
+const ABANDON_BTN_DARK   = '#922B21';
+const ABANDON_BTN_TEXT   = '#FFF4D6';
+const ABANDON_BTN_FONT   = 16;
 
 // ─────────────────────────────────────────────────────────────
 // D5Magnifier
@@ -84,28 +90,51 @@ export class D5Magnifier {
     this._nextRippleAt = -1;       // 下一圈涟漪触发时间（ms）
     this._activeRipple = null;     // { startMs }，仅 1 圈活跃
 
-    // PHASE 21-1 D14 hotfix-l：收竿按钮
-    this._lastRenderedCx = -9999;  // 上一帧镜中心 X（按钮定位用，含 hide 下滑位移）
+    // 2026-06-05："放弃"胶囊按钮状态
+    this._lastRenderedCx = -9999;  // 上一帧镜中心 X
     this._lastRenderedCy = -9999;  // 上一帧镜中心 Y
     this._lastAlpha      = 0;      // 上一帧 alpha（hit-test 只在 alpha>=1 时有效）
-    this._recallBtnHovered = false;
+    this._abandonBtnHovered = false;
+    this._lastAbandonRect = null;  // 上一帧按钮 AABB（含越界保护后的实际位置）
   }
 
-  // PHASE 21-1 D14 hotfix-l：暴露收竿按钮 AABB 给 fishing-scene 做 click hit-test
-  //   返回 null 表示按钮不可点（淡入/淡出期、未显示）
-  getRecallBtnRect() {
-    if (this._lastAlpha < 0.95) return null; // 完全显示才允许点
-    const cx = this._lastRenderedCx;
-    const cy = this._lastRenderedCy;
-    return {
-      x: Math.round(cx - RECALL_BTN_W / 2),
-      y: Math.round(cy + MAGNIFIER_R + RECALL_BTN_GAP),
-      w: RECALL_BTN_W,
-      h: RECALL_BTN_H,
-    };
+  /**
+   * 2026-06-05：计算"放弃"胶囊 AABB
+   *   默认位置：浮漂（镜身）正下方
+   *   越界保护：
+   *     - 下方放不下（cy + R + GAP + H > ch - 4）→ 翻到镜身正上方
+   *     - 左右居中后超出画幅左/右边 → 水平 clamp 贴边
+   */
+  _computeAbandonRect(cx, cy) {
+    const cw = this.scene.cw;
+    const ch = this.scene.ch;
+    const w = ABANDON_BTN_W;
+    const h = ABANDON_BTN_H;
+    const pad = 4;
+    // 默认水平居中
+    let x = Math.round(cx - w / 2);
+    // 默认放在镜身下方
+    let y = Math.round(cy + MAGNIFIER_R + ABANDON_BTN_GAP);
+    // 下方越界 → 翻到镜身上方
+    if (y + h > ch - pad) {
+      y = Math.round(cy - MAGNIFIER_R - ABANDON_BTN_GAP - h);
+    }
+    // 水平 clamp（极端：浮漂贴左/右边时）
+    if (x < pad) x = pad;
+    if (x + w > cw - pad) x = cw - pad - w;
+    return { x, y, w, h };
   }
 
-  setRecallBtnHovered(v) { this._recallBtnHovered = !!v; }
+  // 2026-06-05：暴露"放弃"按钮 AABB（任何状态可点）
+  //   返回 null 表示不可点（淡入淡出期 alpha<0.95）
+  getAbandonBtnRect() {
+    if (this._lastAlpha < 0.95) return null;
+    return this._lastAbandonRect;
+  }
+  // 兼容旧调用：fishing-scene 仍调 getRecallBtnRect / setRecallBtnHovered，全部转给 abandon
+  getRecallBtnRect() { return this.getAbandonBtnRect(); }
+  setAbandonBtnHovered(v) { this._abandonBtnHovered = !!v; }
+  setRecallBtnHovered(v) { this._abandonBtnHovered = !!v; }
 
   /** 离开 Waiting/BiteWindow 时显式调用，立即开始淡出（reset 也调） */
   hide() {
@@ -241,9 +270,9 @@ export class D5Magnifier {
     // ─── 2. 镜片装饰（边框/高光/暗角） ───
     this._drawFrame(ctx, cx, cy);
 
-    // ─── 3. 收竿按钮（PHASE 21-1 D14 hotfix-l）───
-    //   位置 = 镜中心 cx，y = 镜底 + GAP；alpha 跟随镜框一起淡入淡出 / 下滑消失
-    this._drawRecallBtn(ctx, cx, cy);
+    // ─── 3. "放弃"胶囊按钮（2026-06-05）───
+    //   位置：浮漂正下方；下方越界则翻到上方；水平 clamp
+    this._drawAbandonBtn(ctx, cx, cy);
 
     ctx.restore();
 
@@ -516,29 +545,25 @@ export class D5Magnifier {
     ctx.arc(cx, cy, MAGNIFIER_R - 2, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 弧形高光（左上 45°~135° 弧）
-    ctx.strokeStyle = HILIGHT_COLOR;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(cx, cy, MAGNIFIER_R - 8, Math.PI * 1.15, Math.PI * 1.55);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
+    // 2026-06-05：删除左上弧形高光 —— 玩家容易误解为"读条/进度条"
+    //   原效果：左上 45°~135° 4px 圆头白色弧，模拟玻璃反光
+    //   反馈：弧形+读条心智模型导致误判，去掉后镜片更纯粹
   }
 
   /**
-   * PHASE 21-1 D14 hotfix-l：放大镜正下方"收竿"按钮
-   *   位置：cx 居中，y = 镜底 + GAP；尺寸 RECALL_BTN_W × H 圆角
-   *   样式：深色底 + 金边 + 金字"收竿"；hover 时底色变亮
-   *   alpha：跟随外层 ctx.globalAlpha（render 顶层已 set）
+   * 2026-06-05："放弃"胶囊按钮
+   *   形态：圆角胶囊（红色底 + 米白文字 "放弃"）
+   *   位置：浮漂正下方；下方越界翻到上方；左右 clamp 贴边
+   *   alpha：跟随外层 ctx.globalAlpha（淡入淡出 + 下滑消失）
+   *   点击 → fishing-scene 调 _resetToIdle（任何状态可点）
    */
-  _drawRecallBtn(ctx, cx, cy) {
-    const x = Math.round(cx - RECALL_BTN_W / 2);
-    const y = Math.round(cy + MAGNIFIER_R + RECALL_BTN_GAP);
-    const w = RECALL_BTN_W;
-    const h = RECALL_BTN_H;
-    const r = 6;
-    // 圆角矩形 path
+  _drawAbandonBtn(ctx, cx, cy) {
+    const rect = this._computeAbandonRect(cx, cy);
+    this._lastAbandonRect = rect;
+    const { x, y, w, h } = rect;
+    const r = h / 2; // 胶囊圆角半径 = 半高
+
+    // 圆角胶囊 path
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
@@ -550,19 +575,63 @@ export class D5Magnifier {
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
-    // 底色
-    ctx.fillStyle = this._recallBtnHovered ? RECALL_BTN_BG_HOV : RECALL_BTN_BG;
+
+    // 1. 底色
+    ctx.fillStyle = this._abandonBtnHovered ? ABANDON_BTN_BG_HOV : ABANDON_BTN_BG;
     ctx.fill();
-    // 金边
-    ctx.strokeStyle = FRAME_COLOR;
-    ctx.lineWidth = 1.5;
+
+    // 2. 描边（深红）
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = ABANDON_BTN_DARK;
     ctx.stroke();
-    // 文字"收竿"
-    ctx.fillStyle = RECALL_BTN_TEXT;
-    ctx.font = '14px "TencentSansW7","TencentSans","Microsoft YaHei","PingFang SC",sans-serif';
+
+    // 3. 顶部内高光（按钮立体感）
+    const grad = ctx.createLinearGradient(0, y, 0, y + h * 0.55);
+    grad.addColorStop(0, 'rgba(255,255,255,0.35)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y + 1);
+    ctx.lineTo(x + w - r, y + 1);
+    ctx.quadraticCurveTo(x + w - 1, y + 1, x + w - 1, y + r);
+    ctx.lineTo(x + w - 1, y + h * 0.55);
+    ctx.lineTo(x + 1, y + h * 0.55);
+    ctx.lineTo(x + 1, y + r);
+    ctx.quadraticCurveTo(x + 1, y + 1, x + r, y + 1);
+    ctx.closePath();
+    ctx.fill();
+
+    // 4. hover 外发光
+    if (this._abandonBtnHovered) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y - 2);
+      ctx.lineTo(x + w - r, y - 2);
+      ctx.quadraticCurveTo(x + w + 2, y - 2, x + w + 2, y + r);
+      ctx.lineTo(x + w + 2, y + h - r);
+      ctx.quadraticCurveTo(x + w + 2, y + h + 2, x + w - r, y + h + 2);
+      ctx.lineTo(x + r, y + h + 2);
+      ctx.quadraticCurveTo(x - 2, y + h + 2, x - 2, y + h - r);
+      ctx.lineTo(x - 2, y + r);
+      ctx.quadraticCurveTo(x - 2, y - 2, x + r, y - 2);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // 5. 文字
+    ctx.save();
+    ctx.fillStyle = ABANDON_BTN_TEXT;
+    ctx.font = `bold ${ABANDON_BTN_FONT}px "TencentSansW7","TencentSans","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('重新抛竿', x + w / 2, y + h / 2 + 1);
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowOffsetY = 1;
+    ctx.fillText('放弃', x + w / 2, y + h / 2 + 1);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
+    ctx.restore();
+
     // 复位
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';

@@ -391,7 +391,9 @@ export function drawFishingBg(ctx, w, h) {
 }
 
 // —— 美术贴图懒加载（仅加载一次）——
-const _BG_SRC = 'assets/images/scenes/fishing-bg.jpg';
+//   2026-06-05：加 ?v= 版本号，避免替换图片后浏览器仍用旧缓存。
+//   每次替换 fishing-bg.jpg 时同步 bump 此版本号即可。
+const _BG_SRC = 'assets/images/scenes/fishing-bg.jpg?v=20260605';
 let _bgImg = null;
 let _bgLoading = false;
 let _bgFailed = false;

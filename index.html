@@ -17,7 +17,7 @@
           ?v=... 可省，但保留以便日后强刷
        2) crossorigin="anonymous" 必须有，否则 Chrome 会把 preload 视作不同凭据
           请求，重新拉一遍 -->
-  <link rel="preload" href="font/TencentSans-W7.woff2?v=20260527" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="preload" href="font/TencentSans-W7.woff2?v=20260605" as="font" type="font/woff2" crossorigin="anonymous">
   <!-- PHASE 16-1 紧急补丁：升级 @cloudbase/js-sdk 到 2.x（修复 ACCESS_TOKEN_DISABLED）
        官方真实 CDN：static.cloudbase.net/cloudbase-js-sdk/<version>/cloudbase.full.js
        （来源：docs.cloudbase.net/api-reference/webv2/initialization，实测 200）
@@ -47,7 +47,7 @@
        - GitHub Pages 严格区分大小写，文件名必须完全一致 */
     @font-face {
       font-family: 'TencentSans';
-      src: url('font/TencentSans-W7.woff2?v=20260527') format('woff2');
+      src: url('font/TencentSans-W7.woff2?v=20260605') format('woff2');
       font-weight: normal;
       font-style: normal;
       font-display: swap;
@@ -61,7 +61,7 @@
        的 ctx.fillText 不需要改动也能用上新字体（约束 4：不动 Canvas 内 ctx.fillText） */
     @font-face {
       font-family: 'TencentSansW7';
-      src: url('font/TencentSans-W7.woff2?v=20260527') format('woff2');
+      src: url('font/TencentSans-W7.woff2?v=20260605') format('woff2');
       font-weight: normal;
       font-style: normal;
       font-display: swap;
@@ -238,6 +238,6 @@
        浏览器二次访问直接命中 304/缓存，并且 module 默认就是 defer 行为，
        与上面所有 defer 脚本一并按 DOM 顺序在 DOMContentLoaded 前执行完。
        如需强刷，把 ?v=20260524 升一位（与字体一致的版本号语义）。 -->
-  <script type="module" src="js/main.js?v=20260604c" defer></script>
+  <script type="module" src="js/main.js?v=20260605a" defer></script>
 </body>
 </html>

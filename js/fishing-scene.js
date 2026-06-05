@@ -447,41 +447,47 @@ class FishingScene {
     };
     this.canvas.addEventListener('mousedown', this._confirmMouseDownHandler);
 
-    // PHASE 21-1 D14 hotfix-l：放大镜正下方"收竿"按钮 click + hover
-    //   命中 → 等价 _resetToIdle()（与 Q/ESC 一致，回 Idle 抛新竿）
-    //   按钮 AABB 由 D5Magnifier.getRecallBtnRect() 提供，返回 null 表示未显示/淡入淡出期
+    // 2026-06-05：放大镜下方"放弃"胶囊按钮 click + hover
+    //   位置：浮漂正下方（含越界保护）
+    //   行为：任何状态点击 → _resetToIdle（回 Idle 重抛）
+    //   AABB 由 D5Magnifier.getAbandonBtnRect 提供（兼容 getRecallBtnRect 别名）
+    //   "刺鱼"按钮已移除（保留键盘空格 / 点鱼触发提竿，避免误操作）
     const toCanvasXYLocal = (e) => {
       const rect = this.canvas.getBoundingClientRect();
       const sx = this.canvas.width / rect.width;
       const sy = this.canvas.height / rect.height;
       return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
     };
-    this._magnifierRecallClickHandler = (e) => {
+    const _hitRect = (r, x, y) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    this._magnifierPetalClickHandler = (e) => {
       if (e.button !== 0) return;
       const mag = this.d5 && this.d5.magnifier;
-      if (!mag || typeof mag.getRecallBtnRect !== 'function') return;
-      const r = mag.getRecallBtnRect();
+      if (!mag) return;
+      const getRect = mag.getAbandonBtnRect || mag.getRecallBtnRect;
+      if (typeof getRect !== 'function') return;
+      const r = getRect.call(mag);
       if (!r) return;
       const { x, y } = toCanvasXYLocal(e);
-      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-        e.stopPropagation(); // 防止同帧触发 _confirmMouseDownHandler 等其他逻辑
+      if (_hitRect(r, x, y)) {
+        e.stopPropagation(); // 防止同帧触发 _confirmMouseDownHandler
         this._resetToIdle();
       }
     };
-    this._magnifierRecallMoveHandler = (e) => {
+    this._magnifierPetalMoveHandler = (e) => {
       const mag = this.d5 && this.d5.magnifier;
-      if (!mag || typeof mag.getRecallBtnRect !== 'function') return;
-      const r = mag.getRecallBtnRect();
-      if (!r) { if (mag.setRecallBtnHovered) mag.setRecallBtnHovered(false); return; }
+      if (!mag) return;
+      const getRect = mag.getAbandonBtnRect || mag.getRecallBtnRect;
+      const setHover = mag.setAbandonBtnHovered || mag.setRecallBtnHovered;
+      if (typeof getRect !== 'function') return;
+      const r = getRect.call(mag);
       const { x, y } = toCanvasXYLocal(e);
-      const inBtn = x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-      if (mag.setRecallBtnHovered) mag.setRecallBtnHovered(inBtn);
-      // cursor 跟随
+      const inBtn = _hitRect(r, x, y);
+      if (typeof setHover === 'function') setHover.call(mag, inBtn);
       if (this.canvas) this.canvas.style.cursor = inBtn ? 'pointer' : '';
     };
     // 用 capture 让本 handler 先于 _confirmMouseDownHandler 跑（避免顺序歧义）
-    this.canvas.addEventListener('mousedown', this._magnifierRecallClickHandler, true);
-    this.canvas.addEventListener('mousemove', this._magnifierRecallMoveHandler);
+    this.canvas.addEventListener('mousedown', this._magnifierPetalClickHandler, true);
+    this.canvas.addEventListener('mousemove', this._magnifierPetalMoveHandler);
   }
 
   start() { this.paused = false; this.lastTime = performance.now();
@@ -575,15 +581,15 @@ class FishingScene {
     this._castingWaitingSplash = false;
     this._aimingMouseHeld = false;
 
-    // PHASE 21-1 D14 hotfix-l：解绑放大镜收竿按钮监听
-    if (this.canvas && this._magnifierRecallClickHandler) {
-      this.canvas.removeEventListener('mousedown', this._magnifierRecallClickHandler, true);
+    // 2026-06-05：解绑放大镜双花瓣按钮监听
+    if (this.canvas && this._magnifierPetalClickHandler) {
+      this.canvas.removeEventListener('mousedown', this._magnifierPetalClickHandler, true);
     }
-    if (this.canvas && this._magnifierRecallMoveHandler) {
-      this.canvas.removeEventListener('mousemove', this._magnifierRecallMoveHandler);
+    if (this.canvas && this._magnifierPetalMoveHandler) {
+      this.canvas.removeEventListener('mousemove', this._magnifierPetalMoveHandler);
     }
-    this._magnifierRecallClickHandler = null;
-    this._magnifierRecallMoveHandler = null;
+    this._magnifierPetalClickHandler = null;
+    this._magnifierPetalMoveHandler = null;
     this._aimingMouseStartedFlag = false;
     this.canvas = null;
     this.ctx = null;
@@ -1315,7 +1321,8 @@ class FishingScene {
     });
     this.surgeWarnTimer = 0;          // >0 时：UI 层显示鱼图标抖动 + "！"气泡
     this.lineWarnColor  = null;       // null | 'red'(将断) | 'blue'(将松脱)
-    this.dangerTextTimer = 0;         // >0 时：屏幕中央闪"危险！"
+    this.dangerTextTimer = 0;         // >0 时：屏幕中央闪危险文字
+    this.dangerTextKind  = null;      // null | 'low'(快收线) | 'high'(快放线) — 2026-06-05
     // PHASE 15 修复：删除 fishCurrentHP/fishSpeciesMaxHP 平行 HP 体系。
     //   现在 fishHP / maxHP 直接对接 PHASE 15 数据（fishData.hp / fishData.hpDrain），
     //   mythic 三阶段所需 hpPercent 直接用 fishHP/maxHP 计算。
@@ -1570,11 +1577,17 @@ class FishingScene {
       // 回血保留：放松状态（未按空格）且未到回血上限时按个体 hpRecoverPerSecond 回血
       //   hotfix-o：从鱼数据直读（按星级 + 个体差异化），旧 cfg.fishHPRecoverPerSecond 已废弃
       //   hotfix-x2：HP 已经归零 → 不再回血，UI 上死死锁在 0（避免出水演绎期间 HP 数字回弹）
+      //   hotfix-x5（2026-06-05）：光弹飞行中禁用回血。
+      //     根因：tick 发射的光弹（最后一击）要 300ms 才命中扣血。期间若放松控压回血，
+      //     残血+回血 > 光弹伤害 → 永远扣不死 → 鱼无限游 + 无限回血（用户报 bug）。
+      //     解决：只要有未命中光弹在飞，就跳过回血逻辑。
+      //   hotfix-x5b：HP < 1.0 时也禁用回血（兜底浮点残血回血卡顿场景）
+      const hasFlyingProjectile = this._dmgProjectiles && this._dmgProjectiles.some(p => !p.finished);
       const hpRecoverRate = (this.currentFish.hpRecoverPerSecond != null)
         ? this.currentFish.hpRecoverPerSecond
         : cfg.fishHPRecoverPerSecond;
       const maxRecoverHP = this.fishMaxHP * cfg.fishHPMaxRecoverRatio;
-      if (!holdingSpace && this.fishHP > 0 && this.fishHP < maxRecoverHP) {
+      if (!holdingSpace && this.fishHP >= 1.0 && this.fishHP < maxRecoverHP && !hasFlyingProjectile) {
         this.fishHP = Math.min(maxRecoverHP, this.fishHP + hpRecoverRate * dt);
       }
     }
@@ -1582,6 +1595,8 @@ class FishingScene {
     //   流程：HP 第一次到 0 → _fishExhaustedLatch=true，从此鱼自动上拉到 catchZoneY → Caught
     //   出水期间忽略：tension 升降、escape 检查、回血、QTE、tension 爆条、跑鱼
     //   出水期间保留：鱼图渲染、扣血飘字残留淡出、上拉 Y 动画
+    //   hotfix-x5（2026-06-05）：核心修复在两处 —— 光弹飞行期间禁用回血 + 命中残血<1 钳到0。
+    //     这里阈值保持 <=0 即可（前面已确保不会有浮点正残血卡住）。
     if (this.fishHP <= 0) this._fishExhaustedLatch = true;
     const fishExhausted = this._fishExhaustedLatch === true;
     if (fishExhausted) {
@@ -1653,13 +1668,26 @@ class FishingScene {
 
     // PHASE 15 仗5：视觉预警状态位（每帧重算，UI 层渲染时直接读）
     //   - lineWarnColor: 'red'(将断 ≥85) / 'blue'(将松 ≤15) / null
-    //   - dangerTextTimer: tension≥90 时刷为 0.3s（短闪），渲染层若 >0 显示"危险！"
+    //   - dangerTextTimer: 红区任一侧时刷为 0.3s（短闪），渲染层若 >0 显示对应文字
+    //   - dangerTextKind: 'low'(左红区，鱼快脱钩) / 'high'(右红区，线快断) / null
     //   - surgeWarnTimer: 由 FishBehavior onEvent 触发，已在回调里设置；这里只衰减
     if (this.tension >= 85)      this.lineWarnColor = 'red';
     else if (this.tension <= 15) this.lineWarnColor = 'blue';
     else                         this.lineWarnColor = null;
-    if (this.tension >= 90) this.dangerTextTimer = 0.3;
-    else if (this.dangerTextTimer > 0) this.dangerTextTimer = Math.max(0, this.dangerTextTimer - dt);
+    // 2026-06-05：进红区即提示语义化文字
+    //   左红区（< tensionLowThreshold=40）：拉力不足，鱼要脱钩 → 提示"快收线"
+    //   右红区（> tensionHighThreshold=70）：拉力过头，线要断 → 提示"快放线"
+    //   中间安全/警戒区 → 文字渐隐
+    if (this.tension < cfg.tensionLowThreshold) {
+      this.dangerTextTimer = 0.3;
+      this.dangerTextKind = 'low';
+    } else if (this.tension > cfg.tensionHighThreshold) {
+      this.dangerTextTimer = 0.3;
+      this.dangerTextKind = 'high';
+    } else if (this.dangerTextTimer > 0) {
+      this.dangerTextTimer = Math.max(0, this.dangerTextTimer - dt);
+      if (this.dangerTextTimer === 0) this.dangerTextKind = null;
+    }
     if (this.surgeWarnTimer > 0) this.surgeWarnTimer = Math.max(0, this.surgeWarnTimer - dt);
 
     // PHASE 15 修复：移除 fishCurrentHP 平行扣血段。
@@ -1700,8 +1728,11 @@ class FishingScene {
             p.finished = true;
             if (p.damage > 0) {
               // 真正扣 HP（hotfix-y3：最后一击残血是浮点，飘字四舍五入到整数）
+              // hotfix-x5（2026-06-05）：命中后若残血 < 1，直接钳到 0 触发 latch；
+              //   避免"浮点残血 + 飞行期间回血"导致鱼无限游动（用户报 bug）
               const dmg = Math.round(Math.min(p.damage, this.fishHP));
               this.fishHP = Math.max(0, this.fishHP - dmg);
+              if (this.fishHP < 1.0) this.fishHP = 0;
               this._onFishHit(dmg);
             }
           }
@@ -2005,7 +2036,7 @@ class FishingScene {
     this._combo = 0;
     this._comboText = null;
     // PHASE 15：清理鱼行为状态机 + 视觉预警状态位
-    this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0;
+    this.currentFishBehavior = null; this.surgeWarnTimer = 0; this.lineWarnColor = null; this.dangerTextTimer = 0; this.dangerTextKind = null;
     // P0 放大镜：reset 兜底强制 hide（边沿检测下一帧会重新计时 150ms 出现）
     if (this.d5 && this.d5.magnifier) this.d5.magnifier.hide();
     // 取消提竿延迟（防 300ms 内被 reset 后误入 Reeling）
@@ -2355,10 +2386,12 @@ class FishingScene {
     this._drawBambooCluster(ctx, cw * 0.88, waterLevel - 6, 5, this.time);
     this._drawBambooCluster(ctx, cw * 0.95, waterLevel - 2, 3, this.time + 1.2);
     // ── 岸边灌木 ──
-    this._drawBush(ctx, cw * 0.22, waterLevel - 2, 28, '#2E7D32');
-    this._drawBush(ctx, cw * 0.35, waterLevel + 2, 22, '#388E3C');
-    this._drawBush(ctx, cw * 0.78, waterLevel - 1, 26, '#1B5E20');
-    this._drawBush(ctx, cw * 0.82, waterLevel + 3, 20, '#33691E');
+    //   2026-06-05：4 处程序绘制的绿色圆球状灌木已删除 —— 与新水墨贴图
+    //   风格冲突，被反馈"圆球感太强"。_drawBush 函数保留以防其他场景调用。
+    // this._drawBush(ctx, cw * 0.22, waterLevel - 2, 28, '#2E7D32');
+    // this._drawBush(ctx, cw * 0.35, waterLevel + 2, 22, '#388E3C');
+    // this._drawBush(ctx, cw * 0.78, waterLevel - 1, 26, '#1B5E20');
+    // this._drawBush(ctx, cw * 0.82, waterLevel + 3, 20, '#33691E');
     // ── 水岸芦苇 ──
     this._drawReeds(ctx, cw * 0.02, waterLevel + 10, 6, this.time);
     this._drawReeds(ctx, cw * 0.68, waterLevel + 8, 4, this.time + 0.7);
@@ -2961,13 +2994,10 @@ class FishingScene {
       ctx.strokeRect(3, 3, cw - 6, ch - 6);
       ctx.lineWidth = 1;
     }
-    // 2) 危险文字：tension≥90 时屏幕中央闪"危险！"
-    if (this.dangerTextTimer > 0) {
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const flash = Math.floor(this.dangerTextTimer * 30) % 2 === 0;
-      if (flash) this._drawPixelText('危 险 ！', cw / 2, ch * 0.32, 36, '#E74C3C', '#FFF4D6');
-      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    }
+    // 2026-06-05 方案A+D：原屏幕中央"快收线/快放线"文字已删除（远离玩家视线焦点，
+    //   反应链路太长）。改为：拉力条 ▲ 指针红区放大变红 + 闪烁 + 指针正下方"❗ 按住/松手"
+    //   动作命令词（贴在视线焦点）+ 整条震动。所有反馈集中在 ▲ 指针周围 ~30px 区域。
+    //   dangerTextTimer / dangerTextKind 状态字段保留（其他位置无引用，无副作用）。
 
     // ── 右下角"鱼种"信息面板（PHASE 13-3：木牌质感 + 像素血条/张力条）──
     const panelW = 240; const panelH = 155; const panelX = cw - panelW - 20; const panelY = ch - panelH - 20;
@@ -2994,6 +3024,15 @@ class FishingScene {
     //   颜色：≤40 红 / ≤70 黄 / >70 绿（getTensionColor 唯一色源，鱼线同步）
     const tensionRatio = Math.max(0, Math.min(1, this.tension / cfg.maxTension));
     const tensionPalette = getTensionColor(this.tension);
+    // 2026-06-05 方案A：红区时整个拉力条（含三色区+指针+操作提示）一起轻微震动
+    //   高频低幅 ±1.5px：玩家潜意识感知"危险"，但不影响读 ▲ 位置
+    const _inRedZone = this.tension < cfg.tensionLowThreshold || this.tension > cfg.tensionHighThreshold;
+    if (_inRedZone) {
+      const shakeX = Math.sin(this.time * 40) * 1.5;
+      const shakeY = Math.cos(this.time * 35) * 0.8;
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+    }
     // hotfix-r：传 ratio=0 → 只画底色框，不画随 tension 涨/落的彩色填充格
     //   玩家只看 ▲ 指针 vs 三色区即可，无需关注填充长度数字
     this._drawPixelTensionBar(tensionBarX, tensionBarY, tensionBarW, 16, 0, tensionPalette, 6);
@@ -3031,31 +3070,93 @@ class FishingScene {
       ctx.lineWidth = 1;
     }
     // 4. 当前位置 ▲ 指针（位于填充末端，即 tension/100 处）
+    //   2026-06-05 方案A：进入红区时指针放大 + 变红 + 闪烁，让玩家盯着指针就能感知危险
+    //   2026-06-05 方案D：指针正下方紧贴显示"按住/松手"动作命令词（贴在视线焦点）
     {
       const ptrX = Math.floor(tensionBarX + tensionBarW * tensionRatio);
-      ctx.fillStyle = '#1A1A2E';
+      const inLowRed  = this.tension < cfg.tensionLowThreshold;
+      const inHighRed = this.tension > cfg.tensionHighThreshold;
+      const inRed = inLowRed || inHighRed;
+      // 红区指针：放大（半宽 6→9，高度 8→12）+ 闪烁脉冲
+      const baseHalfW = 6, baseH = 8;
+      const halfW = inRed ? 9 : baseHalfW;
+      const h     = inRed ? 12 : baseH;
+      // 闪烁透明度（4Hz）：红区时在 0.55~1.0 振荡，安全/警戒区恒定 1.0
+      const pulse = inRed ? (0.775 + 0.225 * Math.sin(this.time * 8 * Math.PI)) : 1.0;
+      // 颜色：左红→暖橙红 / 右红→警告红 / 安全→深紫黑
+      const outerColor = inLowRed ? '#E67E22' : (inHighRed ? '#E84C3C' : '#1A1A2E');
+      const innerColor = inLowRed ? '#FFD89B' : (inHighRed ? '#FFC4BD' : '#FFF4D6');
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      // 外描边（深色三角）
+      ctx.fillStyle = outerColor;
       ctx.beginPath();
       ctx.moveTo(ptrX, tensionBarY + 16);
-      ctx.lineTo(ptrX - 6, tensionBarY + 24);
-      ctx.lineTo(ptrX + 6, tensionBarY + 24);
+      ctx.lineTo(ptrX - halfW, tensionBarY + 16 + h);
+      ctx.lineTo(ptrX + halfW, tensionBarY + 16 + h);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#FFF4D6';
+      // 内填充（高光三角）
+      ctx.fillStyle = innerColor;
       ctx.beginPath();
       ctx.moveTo(ptrX, tensionBarY + 17);
-      ctx.lineTo(ptrX - 4, tensionBarY + 23);
-      ctx.lineTo(ptrX + 4, tensionBarY + 23);
+      ctx.lineTo(ptrX - (halfW - 2), tensionBarY + 16 + h - 1);
+      ctx.lineTo(ptrX + (halfW - 2), tensionBarY + 16 + h - 1);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
+
+      // 方案D：指针下方紧贴显示动作命令词（短词 + 黑底高对比）
+      //   左红 → "❗ 按住" / 右红 → "❗ 松手" / 安全/警戒 → 不显示
+      if (inRed) {
+        const label = inLowRed ? '❗ 按住' : '❗ 松手';
+        const labelColor = inLowRed ? '#FFD89B' : '#FFC4BD';
+        // 文字描边色统一深棕，背景给个半透明黑底胶囊增强可读性
+        const textY = tensionBarY + 16 + h + 14; // 紧贴三角下沿 14px
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        // 黑底胶囊
+        const padX = 12, padY = 6;
+        ctx.font = 'bold 16px "TencentSansW7","PingFang SC","Microsoft YaHei",sans-serif';
+        const textW = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(20, 14, 8, 0.88)';
+        const bgX = ptrX - textW / 2 - padX;
+        const bgY = textY - 10 - padY;
+        const bgW = textW + padX * 2;
+        const bgH = 20 + padY * 2;
+        // 圆角矩形（兼容方式）
+        const r = 8;
+        ctx.beginPath();
+        ctx.moveTo(bgX + r, bgY);
+        ctx.lineTo(bgX + bgW - r, bgY);
+        ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + r);
+        ctx.lineTo(bgX + bgW, bgY + bgH - r);
+        ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - r, bgY + bgH);
+        ctx.lineTo(bgX + r, bgY + bgH);
+        ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - r);
+        ctx.lineTo(bgX, bgY + r);
+        ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY);
+        ctx.closePath();
+        ctx.fill();
+        // 描边
+        ctx.strokeStyle = labelColor;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // 文字
+        this._drawPixelText(label, ptrX, textY, 16, labelColor, '#1A1A2E');
+        ctx.restore();
+      }
     }
     // hotfix-r：「鱼线拉力 41/100」数字已隐藏，玩家只看 ▲ 指针 vs 黄金区
     // hotfix-s（2026-06-03）：在拉力条下方加文字提示"请控制在安全区内"
-    //   位置：指针 ▲ 底端（tensionBarY + 24）再下 14px，与拉力条水平居中
-    //   颜色：米白+深棕描边（_drawPixelText 标准木牌字），字号 12
-    {
+    //   2026-06-05：在红区时此文字隐藏（让位给指针下方的动作命令词，避免视觉冲突）
+    if (this.tension >= cfg.tensionLowThreshold && this.tension <= cfg.tensionHighThreshold) {
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       this._drawPixelText('请控制在安全区内', tensionBarX + tensionBarW / 2, tensionBarY + 38, 12, '#FFF4D6', '#5C3A1E');
     }
+    // 收尾：方案A 红区震动 ctx.save 配套 restore
+    if (_inRedZone) ctx.restore();
     ctx.textAlign = 'left';
 
     // PHASE 13-5：极限警告牌（tension ≥ 85，鱼线快断）—— 与条外闪烁外框配合，全屏红闪+木牌
@@ -3763,18 +3864,20 @@ class FishingScene {
 
   _renderIdleHint() {
     const ctx = this.ctx; const cw = this.cw; const ch = this.ch;
-    // 屏幕正中间的提示框（PHASE 21-1 D4：向上移动 120px，避开钓鱼场景下半部分）
-    const hintW = 400; const hintH = 120; const hintX = (cw - hintW) / 2; const hintY = (ch - hintH) / 2 - 60;
+    // 屏幕正中间的提示框
+    //   2026-06-05：第二行加入完整钓鱼操作提示（按 [空格] / [左键] 刺鱼），文字更长 → 加宽到 540
+    const hintW = 540; const hintH = 130; const hintX = (cw - hintW) / 2; const hintY = (ch - hintH) / 2 - 60;
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.beginPath(); ctx.roundRect(hintX, hintY, hintW, hintH, 16); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2; ctx.stroke();
-    // PHASE 21-1 D4：第一行改为「移动鼠标到钓点，长按蓄力抛投」（单段金色，无高亮键）
-    const baseY = hintY + hintH / 2 - 15;
-    ctx.font = "bold 28px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
+    // 第一行（金色）：抛竿引导
+    const baseY = hintY + hintH / 2 - 18;
+    ctx.font = "bold 26px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFD700';
-    ctx.fillText('移动鼠标到钓点，长按蓄力抛投', cw / 2, baseY);
-    ctx.fillStyle = '#AAA'; ctx.font = "22px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
-    ctx.fillText('长按蓄力，松手抛竿', cw / 2, hintY + hintH / 2 + 30);
+    ctx.fillText('移动鼠标到鱼群，长按蓄力抛投', cw / 2, baseY);
+    // 第二行（红色）：刺鱼提示
+    ctx.fillStyle = '#FF6B5C'; ctx.font = "bold 22px 'TencentSansW7','PingFang SC','Microsoft YaHei','Heiti SC',sans-serif";
+    ctx.fillText('黑漂时按 [空格] 或 [左键] 刺鱼', cw / 2, hintY + hintH / 2 + 28);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 

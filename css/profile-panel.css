@@ -229,11 +229,15 @@
 
 /* ─── HUD 个人主页按钮 ────────────────────────── */
 /* 与 .hud-leaderboard-btn 同款样式但位置错开（leaderboard 占 right:12px,
-   profile 排到 right:124px 左侧） */
+   profile 排到 right:124px 左侧）
+   2026-06-05：画幅锁 1280×720 后，按钮不再钉视口右边，而是钉"画幅右边"。
+   公式：calc(50vw - 640px + 124px)
+     = (视口右边到画幅右边的距离) + 画幅内右边距 124px
+   max(124px, ...) 兜底：当视口 < 1280px 时回退到原行为，避免按钮跑到屏幕外。 */
 .hud-profile-btn {
   position: fixed;
   top: 12px;
-  right: 124px;
+  right: max(124px, calc(50vw - 640px + 124px));
   z-index: 100;
   background: linear-gradient(180deg, #5a3e25 0%, #3a2818 100%);
   border: 2px solid #c49a4a;
