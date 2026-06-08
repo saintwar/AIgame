@@ -347,4 +347,16 @@ QuestSystem._inst = instance;
   }
 })();
 
+// ============================================================
+// 2026-06-08 全局挂载（修复长期潜伏 bug）：
+//   全项目 fish-pool / fishing-scene / inventory-system / gm-ui 等多处用
+//   window.questSystem.getStatus(...) 来读取任务状态，但本文件长期只 export
+//   default instance，从未把 instance 挂到 window 上 —— 导致 q003 ★4/★5 门禁、
+//   q001 鱼池锁池等"任务关联"逻辑全部 silent fail（默认走否定分支）。
+//   这一行修复后，hotfix-n 的 q003 门禁、BL-001 的 q001 单池才真正生效。
+// ============================================================
+if (typeof window !== 'undefined') {
+  window.questSystem = instance;
+}
+
 export default instance;

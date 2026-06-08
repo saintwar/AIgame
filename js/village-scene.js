@@ -2748,6 +2748,99 @@ class VillageScene {
         ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
         ctx.restore();
       }
+
+      // ④ 2026-06-08：未被挖走的农田/花圃 → 呼吸闪光星星
+      //   目的：远距离吸引玩家注意，提高探索欲望（即使站很远也能一眼看到"这里能挖"）
+      //   触发：!onCD（CD 中已被黑蒙层盖住，没意义）
+      //   不受 lowStamina 限制：体力不足也展示，让玩家知道"等体力回满就能来挖"
+      //   位置：每 region 内固定 2 颗星，按 regionId hash 决定位置，每帧不抖
+      //   颜色：花圃 #FFB6E1（粉）/ 农田 #FFD700（金）— 区分地形
+      //   节奏：每颗星 phase 错开，避免全村同步刺眼
+      if (!onCD) {
+        this._renderDigSparkles(ctx, t, x, y, w, h);
+      }
+    }
+  }
+
+  // ========================================================
+  // 2026-06-08：可挖地块呼吸闪光星星（探索欲望引导）
+  //   每个未在 CD 中的 region（2×2 tile = 64×64 px）内画 2 颗星，
+  //   位置用 regionId 字符 hash 固定化，phase 用 hash 错开，避免每帧抖+全村同步闪。
+  //   星形：中心 2×2 亮点 + 上下左右各 1 px 十字光芒 + 周围 2 px 暗光晕
+  // ========================================================
+  _renderDigSparkles(ctx, region, rx, ry, rw, rh) {
+    const isGarden = region.type === 'garden';
+    const coreColor = isGarden ? '#FFFFFF' : '#FFFFFF';   // 中心亮点：纯白最显眼
+    const rayColor  = isGarden ? '#FFB6E1' : '#FFD700';   // 十字光芒（主色）
+    const haloColor = isGarden ? '#FF40A0' : '#FF8800';   // 外晕（最深，扩大可视面积）
+
+    // 简单字符串 hash（决定星星位置 + phase 偏移）
+    let h1 = 0, h2 = 0;
+    for (let i = 0; i < region.regionId.length; i++) {
+      h1 = (h1 * 31 + region.regionId.charCodeAt(i)) >>> 0;
+      h2 = (h2 * 17 + region.regionId.charCodeAt(i) * 7) >>> 0;
+    }
+
+    // 2 颗星，区域内坐标按 hash 取 [0.2, 0.8] 安全区（避开边缘）
+    const stars = [
+      {
+        cx: rx + rw * (0.2 + ((h1 & 0xFF) / 255) * 0.6),
+        cy: ry + rh * (0.2 + (((h1 >> 8) & 0xFF) / 255) * 0.6),
+        phase: ((h1 >> 16) & 0xFF) / 255 * Math.PI * 2
+      },
+      {
+        cx: rx + rw * (0.2 + ((h2 & 0xFF) / 255) * 0.6),
+        cy: ry + rh * (0.2 + (((h2 >> 8) & 0xFF) / 255) * 0.6),
+        phase: ((h2 >> 16) & 0xFF) / 255 * Math.PI * 2
+      }
+    ];
+
+    // 2026-06-08 调参：频率放慢 1.6s → 2.6s，每颗星 phase 错开（视觉更悠长）
+    const omega = 2 * Math.PI / 2.6;
+    for (const s of stars) {
+      // pulse 0.0~1.0
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * omega + s.phase);
+      // alpha 0.55~1.0：低谷更亮，提升整体可见度
+      const alpha = 0.55 + 0.45 * pulse;
+      // 光芒长度 3~7 px 随呼吸（原 1~3，放大近 2 倍）
+      const rayLen = 3 + Math.round(pulse * 4);
+      // 外晕半径 4~6 px 随呼吸
+      const haloR = 4 + Math.round(pulse * 2);
+      // 自适应 shadowBlur，让星星有真"光晕"
+      const blur = 4 + pulse * 8;
+
+      const cx = Math.round(s.cx);
+      const cy = Math.round(s.cy);
+
+      // ① 外晕（用 shadowBlur 制造柔和扩散，不再是死板色块）
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.fillStyle = haloColor;
+      ctx.shadowColor = haloColor;
+      ctx.shadowBlur = blur;
+      ctx.fillRect(cx - haloR / 2, cy - haloR / 2, haloR, haloR);
+      ctx.restore();
+
+      // ② 十字光芒（更长更粗，2px 宽）
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = rayColor;
+      ctx.shadowColor = rayColor;
+      ctx.shadowBlur = blur * 0.6;
+      ctx.fillRect(cx,     cy - 2 - rayLen, 2, rayLen);   // 上
+      ctx.fillRect(cx,     cy + 2,          2, rayLen);   // 下
+      ctx.fillRect(cx - 2 - rayLen, cy,     rayLen, 2);   // 左
+      ctx.fillRect(cx + 2,          cy,     rayLen, 2);   // 右
+      ctx.restore();
+
+      // ③ 中心亮点（3×3 纯白，加更强 glow）
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = coreColor;
+      ctx.shadowColor = rayColor;
+      ctx.shadowBlur = blur * 1.2;
+      ctx.fillRect(cx - 1, cy - 1, 3, 3);
+      ctx.restore();
     }
   }
 

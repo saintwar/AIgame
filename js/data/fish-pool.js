@@ -90,10 +90,11 @@ function _isQ003Completed() {
 }
 
 /**
- * 2026-06-05 BL-001 方案E：q001"钓 3 条奇力鱼"任务进行中时，临时把奇力鱼权重
- * 从 35 提到 70（抽中率 30.4% → 47%），让新手任务推进更顺畅。
- * 任务完成后 getStatus 返回 'completed'，自动恢复原 30% 抽中率，保持后期生态。
- * 叙事侧已在 chief_quest_offer 对话尾加铺垫"这季节奇力鱼最多"。
+ * 2026-06-05 BL-001 方案E（2026-06-08 加强为 100%）：
+ *   q001"钓 3 条奇力鱼"任务进行中时，鱼池只剩奇力鱼一种（抽中率 100%）。
+ *   原先权重×2（47%）方案体感推进仍偏慢，改为完全锁池保证新手 3~5 次抛竿即可完成。
+ *   任务完成后 getStatus 返回 'completed'，getAvailableFish 自动恢复完整鱼池，
+ *   后期生态不受影响。叙事侧已在 chief_quest_offer 对话尾铺垫"这季节奇力鱼最多"。
  */
 function _isQ001Active() {
   if (!window.questSystem || typeof window.questSystem.getStatus !== 'function') return false;
@@ -101,10 +102,19 @@ function _isQ001Active() {
 }
 
 /**
- * 取当前可钓鱼池（hotfix-n：钓竿不再过滤，q003 决定 ★4/★5 解锁）。
+ * 取当前可钓鱼池。
+ * 优先级：
+ *   1) q001 active → 仅奇力鱼（新手任务专属，100% 抽中率）
+ *   2) q003 未完成 → 屏蔽 ★4/★5
+ *   3) 否则 → 全鱼池
  * 保留旧函数签名兼容旧调用方（inventory-system 等仅遍历用，与门禁无关）。
  */
 export function getAvailableFish(/* rodRarityUnlock */) {
+  if (_isQ001Active()) {
+    const onlyQiliyu = SHUISHE_FISH_POOL.filter(f => f.id === 'qiliyu');
+    // 兜底：万一 id 不匹配（数据被改），退化到 ★≤3，避免空池死锁
+    if (onlyQiliyu.length > 0) return onlyQiliyu;
+  }
   if (_isQ003Completed()) return SHUISHE_FISH_POOL;
   return SHUISHE_FISH_POOL.filter(f => f.rarity <= 3);
 }
@@ -116,21 +126,17 @@ export function getAvailableFish(/* rodRarityUnlock */) {
  *   - 新增 q003 门禁（未完成 → ★4/★5 不出）
  *   - 保留 bigFishBonus 加权（高级竿仍偏向大鱼）
  *   - 保留 maxSizeMul 体长加成
+ *   - 2026-06-08：q001 active 时 getAvailableFish 已锁池为奇力鱼一种，
+ *     此处不再需要 QILIYU_BOOST 二次加权，单池单选。
  */
 export function rollFishWithRod(rod) {
   const pool = getAvailableFish();
   if (pool.length === 0) return null;
 
-  // 2026-06-05 BL-001：q001 进行中，奇力鱼权重 ×2（35→70），抽中率 30.4%→47%
-  const q001Active = _isQ001Active();
-  const QILIYU_BOOST = 2.0;
-
-  // 加权权重 = weight * (1 + bigFishBonus * rarity) * (q001 期奇力鱼额外 ×2)
+  // 加权权重 = weight * (1 + bigFishBonus * rarity)
   const adjusted = pool.map(f => ({
     ...f,
-    adjWeight: f.weight
-      * (1 + (rod.bigFishBonus || 0) * f.rarity)
-      * (q001Active && f.id === 'qiliyu' ? QILIYU_BOOST : 1.0)
+    adjWeight: f.weight * (1 + (rod.bigFishBonus || 0) * f.rarity)
   }));
   const total = adjusted.reduce((s, f) => s + f.adjWeight, 0);
   let roll = Math.random() * total;

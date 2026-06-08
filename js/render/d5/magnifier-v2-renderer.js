@@ -68,6 +68,36 @@ const ABANDON_BTN_DARK   = '#922B21';
 const ABANDON_BTN_TEXT   = '#FFF4D6';
 const ABANDON_BTN_FONT   = 16;
 
+// 2026-06-08：放大镜下方"提竿"提示徽章（双态）
+//   显示条件：Waiting 期 + BiteWindow 期 全程显示（教学态 → 紧急态）
+//   双态切换：
+//     【教学态】Waiting 期 / BiteWindow 但还没黑漂（off.hidden=false）
+//       - 文字 "浮漂下沉时按 [空格] 提竿"
+//       - 米白底 #FFF4D6，深棕字，柔和 0.8s 呼吸（不抢戏）
+//       - 让玩家在等鱼期间就把规则记牢
+//     【紧急态】BiteWindow 沉水期（off.hidden=true）
+//       - 文字 "⚡ 提竿！[空格]"
+//       - 鲜黄底 #FFD700，深蓝字，强烈 0.4s 呼吸 + 横向 1.0~1.1 脉动 + 外发光
+//       - 关键时刻强抓眼球
+//   形态：胶囊宽 218（教学态长文案）/ 高 34
+//   越界保护：跟"放弃"按钮一起从下方翻到上方
+//   不可点击：纯提示，玩家继续用 [空格] / [左键] 触发提竿
+const STRIKE_HINT_W      = 218;     // 容纳教学态长文案 "浮漂下沉时按 [空格] 提竿"
+const STRIKE_HINT_H      = 34;
+const STRIKE_HINT_GAP    = 10;      // 徽章与镜身间距（< ABANDON_BTN_GAP，更靠近镜身）
+// 紧急态色板（沉水期）
+const STRIKE_HINT_BG     = '#FFD700';
+const STRIKE_HINT_BG_PEAK = '#FFF45A';
+const STRIKE_HINT_DARK   = '#B8860B';
+const STRIKE_HINT_TEXT   = '#1A1A2E';
+const STRIKE_HINT_FONT   = 17;
+// 教学态色板（Waiting 期）—— 米白系，不抢戏
+const TEACH_HINT_BG      = '#FFF4D6';
+const TEACH_HINT_BG_PEAK = '#FFFAEB';
+const TEACH_HINT_DARK    = '#8B6914';
+const TEACH_HINT_TEXT    = '#3D2B1F';
+const TEACH_HINT_FONT    = 14;
+
 // ─────────────────────────────────────────────────────────────
 // D5Magnifier
 // ─────────────────────────────────────────────────────────────
@@ -104,22 +134,49 @@ export class D5Magnifier {
    *   越界保护：
    *     - 下方放不下（cy + R + GAP + H > ch - 4）→ 翻到镜身正上方
    *     - 左右居中后超出画幅左/右边 → 水平 clamp 贴边
+   *   2026-06-08：当"提竿"徽章在场时，本按钮要让位 STRIKE_HINT_H + 间距
+   *     - 默认排列（下方）：镜身 → 提竿徽章 → 放弃按钮（垂直从上到下）
+   *     - 翻到上方时：放弃按钮 → 提竿徽章 → 镜身（垂直从上到下）
+   *     - 这样"提竿"始终离镜身更近，玩家视线优先级最高
    */
-  _computeAbandonRect(cx, cy) {
+  _computeAbandonRect(cx, cy, hasStrikeHint = false) {
     const cw = this.scene.cw;
     const ch = this.scene.ch;
     const w = ABANDON_BTN_W;
     const h = ABANDON_BTN_H;
     const pad = 4;
+    // "提竿"徽章占用的垂直空间（含徽章高 + 徽章自身 GAP）
+    const strikeOffset = hasStrikeHint ? (STRIKE_HINT_H + STRIKE_HINT_GAP) : 0;
     // 默认水平居中
     let x = Math.round(cx - w / 2);
-    // 默认放在镜身下方
-    let y = Math.round(cy + MAGNIFIER_R + ABANDON_BTN_GAP);
-    // 下方越界 → 翻到镜身上方
+    // 默认放在镜身下方（有"提竿"则让位）
+    let y = Math.round(cy + MAGNIFIER_R + ABANDON_BTN_GAP + strikeOffset);
+    // 下方越界 → 翻到镜身上方（同样为"提竿"让位）
     if (y + h > ch - pad) {
-      y = Math.round(cy - MAGNIFIER_R - ABANDON_BTN_GAP - h);
+      y = Math.round(cy - MAGNIFIER_R - ABANDON_BTN_GAP - strikeOffset - h);
     }
     // 水平 clamp（极端：浮漂贴左/右边时）
+    if (x < pad) x = pad;
+    if (x + w > cw - pad) x = cw - pad - w;
+    return { x, y, w, h };
+  }
+
+  /**
+   * 2026-06-08：计算"⚡ 提竿！"徽章 AABB
+   *   位置：默认镜身正下方（贴近镜身），下方越界则翻到镜身正上方
+   *   水平 clamp 贴边
+   */
+  _computeStrikeHintRect(cx, cy) {
+    const cw = this.scene.cw;
+    const ch = this.scene.ch;
+    const w = STRIKE_HINT_W;
+    const h = STRIKE_HINT_H;
+    const pad = 4;
+    let x = Math.round(cx - w / 2);
+    let y = Math.round(cy + MAGNIFIER_R + STRIKE_HINT_GAP);
+    if (y + h > ch - pad) {
+      y = Math.round(cy - MAGNIFIER_R - STRIKE_HINT_GAP - h);
+    }
     if (x < pad) x = pad;
     if (x + w > cw - pad) x = cw - pad - w;
     return { x, y, w, h };
@@ -270,9 +327,21 @@ export class D5Magnifier {
     // ─── 2. 镜片装饰（边框/高光/暗角） ───
     this._drawFrame(ctx, cx, cy);
 
-    // ─── 3. "放弃"胶囊按钮（2026-06-05）───
+    // ─── 3. "提竿"提示徽章（2026-06-08，双态）───
+    //   触发：Waiting 期 + BiteWindow 期 全程显示，让玩家看够教学
+    //   双态：
+    //     - 教学态（Waiting 或 BiteWindow shake 期）：米白底 + 柔和呼吸 + 长文案
+    //     - 紧急态（BiteWindow sink 期，off.hidden=true）：鲜黄底 + 强呼吸 + 短文案
+    const isInBiteWaiting = this.scene.fsm.is('Waiting') || this.scene.fsm.is('BiteWindow');
+    const isUrgent = this.scene.fsm.is('BiteWindow') && off.hidden;
+    if (isInBiteWaiting) {
+      this._drawStrikeHint(ctx, cx, cy, isUrgent);
+    }
+
+    // ─── 4. "放弃"胶囊按钮（2026-06-05）───
     //   位置：浮漂正下方；下方越界则翻到上方；水平 clamp
-    this._drawAbandonBtn(ctx, cx, cy);
+    //   有"提竿"提示时，"放弃"自动让位（向下/向上多挪 STRIKE_HINT_H + 间距）
+    this._drawAbandonBtn(ctx, cx, cy, isInBiteWaiting);
 
     ctx.restore();
 
@@ -557,8 +626,8 @@ export class D5Magnifier {
    *   alpha：跟随外层 ctx.globalAlpha（淡入淡出 + 下滑消失）
    *   点击 → fishing-scene 调 _resetToIdle（任何状态可点）
    */
-  _drawAbandonBtn(ctx, cx, cy) {
-    const rect = this._computeAbandonRect(cx, cy);
+  _drawAbandonBtn(ctx, cx, cy, hasStrikeHint = false) {
+    const rect = this._computeAbandonRect(cx, cy, hasStrikeHint);
     this._lastAbandonRect = rect;
     const { x, y, w, h } = rect;
     const r = h / 2; // 胶囊圆角半径 = 半高
@@ -631,6 +700,153 @@ export class D5Magnifier {
     ctx.shadowColor = 'transparent';
     ctx.shadowOffsetY = 0;
     ctx.restore();
+
+    // 复位
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  /**
+   * 2026-06-08：提竿提示徽章（双态）
+   *   形态：胶囊（圆角矩形）
+   *   触发：Waiting 期 + BiteWindow 期 全程（由 render() 判断 fsm 状态）
+   *   双态：
+   *     【教学态 urgent=false】Waiting 或 BiteWindow shake 期
+   *       - 文字 "浮漂下沉时按 [空格] 提竿"
+   *       - 米白底 + 深棕字，柔和呼吸 0.8s（节奏慢，alpha 0.85~1.0，不抢戏）
+   *       - 不脉动缩放，不外发光
+   *     【紧急态 urgent=true】BiteWindow sink 期（off.hidden=true）
+   *       - 文字 "⚡ 提竿！[空格]"
+   *       - 鲜黄底 + 深蓝字，强呼吸 0.4s（节奏快，alpha 全亮）
+   *       - 横向 1.0~1.08 脉动 + 外发光
+   *   不接收点击（纯提示）
+   */
+  _drawStrikeHint(ctx, cx, cy, urgent = false) {
+    const rect = this._computeStrikeHintRect(cx, cy);
+    const { x, y, w, h } = rect;
+
+    // 配色 + 文字 + 节奏
+    const cfg = urgent
+      ? {
+          bg: STRIKE_HINT_BG,
+          bgPeak: STRIKE_HINT_BG_PEAK,
+          dark: STRIKE_HINT_DARK,
+          text: STRIKE_HINT_TEXT,
+          font: STRIKE_HINT_FONT,
+          label: '⚡ 提竿！[空格]',
+          period: 0.4,             // s，强呼吸
+          maxScale: 0.08,          // 横向脉动幅度
+          glow: true,              // 外发光
+          alphaMin: 1.0            // 紧急态全亮
+        }
+      : {
+          bg: TEACH_HINT_BG,
+          bgPeak: TEACH_HINT_BG_PEAK,
+          dark: TEACH_HINT_DARK,
+          text: TEACH_HINT_TEXT,
+          font: TEACH_HINT_FONT,
+          label: '浮漂下沉时按 [空格] 提竿',
+          period: 0.8,             // s，柔和呼吸
+          maxScale: 0,             // 不脉动
+          glow: false,
+          alphaMin: 0.85           // 教学态低谷略暗，呼吸感
+        };
+
+    // 呼吸 pulse 0~1
+    const omega = 2 * Math.PI / cfg.period;
+    const t = this._frameTime / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(t * omega);
+
+    // 整体 alpha（教学态低谷略暗）
+    const localAlpha = cfg.alphaMin + (1 - cfg.alphaMin) * pulse;
+
+    // 横向脉动（紧急态）
+    const scaleX = 1.0 + cfg.maxScale * pulse;
+    const cxBtn = x + w / 2;
+    const cyBtn = y + h / 2;
+
+    const bgColor = pulse > 0.5 ? cfg.bgPeak : cfg.bg;
+    const strokeW = 1.5 + 1.5 * pulse;
+    const glowBlur = cfg.glow ? (6 + 8 * pulse) : 0;
+
+    ctx.save();
+    ctx.globalAlpha = (ctx.globalAlpha !== undefined ? ctx.globalAlpha : 1) * localAlpha;
+    // 紧急态横向脉动（保持中心稳定）
+    if (cfg.maxScale > 0) {
+      ctx.translate(cxBtn, cyBtn);
+      ctx.scale(scaleX, 1);
+      ctx.translate(-cxBtn, -cyBtn);
+    }
+
+    // 圆角胶囊 path
+    const r = h / 2;
+    const drawCapsulePath = () => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    };
+
+    // 1. 底色（紧急态带外发光）
+    drawCapsulePath();
+    if (cfg.glow) {
+      ctx.save();
+      ctx.shadowColor = cfg.bg;
+      ctx.shadowBlur = glowBlur;
+      ctx.fillStyle = bgColor;
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fillStyle = bgColor;
+      ctx.fill();
+    }
+
+    // 2. 描边
+    drawCapsulePath();
+    ctx.strokeStyle = cfg.dark;
+    ctx.lineWidth = strokeW;
+    ctx.stroke();
+
+    // 3. 顶部内高光
+    const grad = ctx.createLinearGradient(0, y, 0, y + h * 0.5);
+    grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y + 1);
+    ctx.lineTo(x + w - r, y + 1);
+    ctx.quadraticCurveTo(x + w - 1, y + 1, x + w - 1, y + r);
+    ctx.lineTo(x + w - 1, y + h * 0.5);
+    ctx.lineTo(x + 1, y + h * 0.5);
+    ctx.lineTo(x + 1, y + r);
+    ctx.quadraticCurveTo(x + 1, y + 1, x + r, y + 1);
+    ctx.closePath();
+    ctx.fill();
+
+    // 4. 文字
+    ctx.save();
+    ctx.fillStyle = cfg.text;
+    ctx.font = `bold ${cfg.font}px "TencentSansW7","TencentSans","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (urgent) {
+      // 紧急态：文字白底光晕（增强对比）
+      ctx.shadowColor = 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 3;
+    }
+    ctx.fillText(cfg.label, x + w / 2, y + h / 2 + 1);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    ctx.restore(); // 解除缩放/alpha
 
     // 复位
     ctx.textAlign = 'left';
