@@ -175,7 +175,7 @@ class VillageScene {
       px: 0, py: 0,
       direction: 'down',
       frame: 0,
-      speed: 3
+      speed: 2.1
     };
 
     this.keys = { up: false, down: false, left: false, right: false };
@@ -2046,7 +2046,11 @@ class VillageScene {
     const speed = this.player.speed;
     const moving = dx !== 0 || dy !== 0;
 
-    if (dy < 0) this.player.direction = 'up';
+    if (dy < 0 && dx < 0) this.player.direction = 'up-left';
+    else if (dy < 0 && dx > 0) this.player.direction = 'up-right';
+    else if (dy > 0 && dx < 0) this.player.direction = 'down-left';
+    else if (dy > 0 && dx > 0) this.player.direction = 'down-right';
+    else if (dy < 0) this.player.direction = 'up';
     else if (dy > 0) this.player.direction = 'down';
     else if (dx < 0) this.player.direction = 'left';
     else if (dx > 0) this.player.direction = 'right';

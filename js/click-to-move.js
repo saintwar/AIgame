@@ -220,7 +220,7 @@
     // open list：用数组 + 线性扫最小 f（小图量级足够；不引入二叉堆是为了零依赖、可读）
     const open = [startKey];
 
-    const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // 上右下左
+    const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]; // 8 方向：上右下左 + 四斜向
 
     while (open.length > 0) {
       // 取 f 最小的节点
@@ -244,12 +244,16 @@
         return path.reverse();
       }
 
-      // 扩展 4 邻
+      // 扩展 8 邻（含斜向防穿墙检查）
       for (const [dx, dy] of DIRS) {
         const nx = cur.x + dx, ny = cur.y + dy;
         if (!inBounds(nx, ny) || matrix[ny][nx] === 1) continue;
+        // 斜向防穿墙：水平/垂直邻格任一是墙则禁止（防止对角线穿过墙角）
+        if (dx !== 0 && dy !== 0) {
+          if (matrix[cur.y + dy][cur.x] === 1 || matrix[cur.y][cur.x + dx] === 1) continue;
+        }
         const nKey = key(nx, ny);
-        const ng = cur.g + 1;
+        const ng = cur.g + (dx !== 0 && dy !== 0 ? 1.414 : 1);  // 斜向成本 √2
         const existing = nodes.get(nKey);
         if (existing && existing.closed) continue;
         if (!existing) {
@@ -375,12 +379,15 @@
     const dist = Math.sqrt(dx * dx + dy * dy);
     const speed = scene.player.speed || 3;
 
-    // 朝向（与村庄场景 _update 中 WASD 段同款判定）
-    if (Math.abs(dy) > Math.abs(dx)) {
-      scene.player.direction = dy < 0 ? 'up' : 'down';
-    } else if (dx !== 0) {
-      scene.player.direction = dx < 0 ? 'left' : 'right';
-    }
+    // 朝向（八方向，与 village-scene.js _update 同款判定）
+    if (dy < 0 && dx < 0) scene.player.direction = 'up-left';
+    else if (dy < 0 && dx > 0) scene.player.direction = 'up-right';
+    else if (dy < 0) scene.player.direction = 'up';
+    else if (dy > 0 && dx < 0) scene.player.direction = 'down-left';
+    else if (dy > 0 && dx > 0) scene.player.direction = 'down-right';
+    else if (dy > 0) scene.player.direction = 'down';
+    else if (dx < 0) scene.player.direction = 'left';
+    else if (dx > 0) scene.player.direction = 'right';
 
     if (dist <= speed) {
       // 一步到位（吸附到航点中心）

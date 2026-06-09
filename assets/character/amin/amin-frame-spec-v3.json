@@ -1,246 +1,57 @@
 {
-  "source_image": "amin-walk-sheet-v3.png",
-  "source_size": [
-    800,
-    446
-  ],
-  "row_directions": [
-    "down",
-    "up",
-    "left",
-    "right"
-  ],
-  "frames_per_row": 6,
+  "sheet": "assets/character/amin/amin-walk-sheet-v2.png",
+  "sheet_w": 1024,
+  "sheet_h": 1024,
+  "rows": 5,
+  "cols": 6,
   "canvas": {
-    "w": 96,
-    "h": 112,
-    "anchor_x": 48,
-    "anchor_y": 110
+    "w": 130,
+    "h": 195,
+    "anchor_x": 65,
+    "anchor_y": 190,
+    "note": "共享画布，帧在画布内水平居中、脚底贴 anchor_y"
+  },
+  "has_alpha": true,
+  "note": "v3: 5×6 布局，八方向通过翻转实现右侧。Row 3 为完整背面帧。",
+  "directions": {
+    "down":       { "row": 0, "cols": [0, 1, 2, 3],      "note": "面朝屏幕，4帧循环" },
+    "down-left":  { "row": 0, "cols": [4, 5],             "note": "左斜下，2帧循环" },
+    "left":       { "row": 2, "cols": [0, 1, 2],          "note": "左侧身，3帧循环" },
+    "up-left":    { "row": 2, "cols": [3, 4, 5],          "note": "左斜上，3帧循环" },
+    "up":         { "row": 3, "cols": [0, 1, 2, 3, 4, 5], "note": "完整背面，6帧" }
+  },
+  "flip_directions": {
+    "down-right": { "src": "down-left",  "flip_x": true },
+    "right":      { "src": "left",       "flip_x": true },
+    "up-right":   { "src": "up-left",   "flip_x": true }
   },
   "frames": [
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 0,
-      "src_x": 30,
-      "src_y": 9,
-      "src_w": 65,
-      "src_h": 100
-    },
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 1,
-      "src_x": 172,
-      "src_y": 9,
-      "src_w": 57,
-      "src_h": 100
-    },
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 2,
-      "src_x": 306,
-      "src_y": 9,
-      "src_w": 56,
-      "src_h": 100
-    },
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 3,
-      "src_x": 430,
-      "src_y": 9,
-      "src_w": 65,
-      "src_h": 100
-    },
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 4,
-      "src_x": 573,
-      "src_y": 9,
-      "src_w": 55,
-      "src_h": 100
-    },
-    {
-      "direction": "down",
-      "row": 0,
-      "col": 5,
-      "src_x": 705,
-      "src_y": 9,
-      "src_w": 54,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 0,
-      "src_x": 38,
-      "src_y": 121,
-      "src_w": 65,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 1,
-      "src_x": 171,
-      "src_y": 121,
-      "src_w": 57,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 2,
-      "src_x": 305,
-      "src_y": 121,
-      "src_w": 57,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 3,
-      "src_x": 438,
-      "src_y": 121,
-      "src_w": 65,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 4,
-      "src_x": 571,
-      "src_y": 121,
-      "src_w": 58,
-      "src_h": 100
-    },
-    {
-      "direction": "up",
-      "row": 1,
-      "col": 5,
-      "src_x": 704,
-      "src_y": 121,
-      "src_w": 56,
-      "src_h": 100
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 0,
-      "src_x": 40,
-      "src_y": 234,
-      "src_w": 54,
-      "src_h": 100
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 1,
-      "src_x": 155,
-      "src_y": 231,
-      "src_w": 74,
-      "src_h": 101
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 2,
-      "src_x": 287,
-      "src_y": 233,
-      "src_w": 75,
-      "src_h": 99
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 3,
-      "src_x": 440,
-      "src_y": 233,
-      "src_w": 54,
-      "src_h": 101
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 4,
-      "src_x": 553,
-      "src_y": 231,
-      "src_w": 75,
-      "src_h": 102
-    },
-    {
-      "direction": "left",
-      "row": 2,
-      "col": 5,
-      "src_x": 685,
-      "src_y": 231,
-      "src_w": 75,
-      "src_h": 101
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 0,
-      "src_x": 40,
-      "src_y": 344,
-      "src_w": 54,
-      "src_h": 102
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 1,
-      "src_x": 152,
-      "src_y": 344,
-      "src_w": 77,
-      "src_h": 102
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 2,
-      "src_x": 287,
-      "src_y": 344,
-      "src_w": 75,
-      "src_h": 100
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 3,
-      "src_x": 440,
-      "src_y": 344,
-      "src_w": 54,
-      "src_h": 102
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 4,
-      "src_x": 551,
-      "src_y": 344,
-      "src_w": 76,
-      "src_h": 102
-    },
-    {
-      "direction": "right",
-      "row": 3,
-      "col": 5,
-      "src_x": 685,
-      "src_y": 344,
-      "src_w": 75,
-      "src_h": 102
-    }
-  ],
-  "frame_interval_ms": 100,
-  "walk_speed_px_s": 80,
-  "notes": [
-    "bbox 宽度差异: 54~77px（持竿/持竿在身侧导致）",
-    "bbox 高度: 99~102px（很稳定）",
-    "建议统一画布 96×112，脚底锚点 (48,110)",
-    "frame_interval=100ms x 6帧 = 600ms单循环（主策划方案）"
+    {"direction": "down",      "col": 0, "src_x": 25,  "src_y": 26,  "src_w": 120, "src_h": 175},
+    {"direction": "down",      "col": 1, "src_x": 196, "src_y": 26,  "src_w": 120, "src_h": 175},
+    {"direction": "down",      "col": 2, "src_x": 367, "src_y": 26,  "src_w": 120, "src_h": 175},
+    {"direction": "down",      "col": 3, "src_x": 534, "src_y": 26,  "src_w": 120, "src_h": 175},
+    {"direction": "down-left", "col": 4, "src_x": 705, "src_y": 26,  "src_w": 128, "src_h": 175},
+    {"direction": "down-left", "col": 5, "src_x": 874, "src_y": 26,  "src_w": 126, "src_h": 175},
+    {"direction": "up",        "col": 0, "src_x": 25,  "src_y": 222, "src_w": 120, "src_h": 180},
+    {"direction": "up",        "col": 1, "src_x": 196, "src_y": 222, "src_w": 120, "src_h": 180},
+    {"direction": "up",        "col": 2, "src_x": 367, "src_y": 222, "src_w": 120, "src_h": 180},
+    {"direction": "left",      "col": 3, "src_x": 534, "src_y": 222, "src_w": 120, "src_h": 180},
+    {"direction": "left",      "col": 4, "src_x": 705, "src_y": 222, "src_w": 128, "src_h": 180},
+    {"direction": "left",      "col": 5, "src_x": 874, "src_y": 222, "src_w": 126, "src_h": 180},
+    {"direction": "left",      "col": 0, "src_x": 25,  "src_y": 415, "src_w": 120, "src_h": 180},
+    {"direction": "left",      "col": 1, "src_x": 196, "src_y": 415, "src_w": 120, "src_h": 180},
+    {"direction": "left",      "col": 2, "src_x": 367, "src_y": 415, "src_w": 120, "src_h": 180},
+    {"direction": "up-left",   "col": 3, "src_x": 534, "src_y": 415, "src_w": 120, "src_h": 180},
+    {"direction": "up-left",   "col": 4, "src_x": 705, "src_y": 415, "src_w": 128, "src_h": 180},
+    {"direction": "up-left",   "col": 5, "src_x": 874, "src_y": 415, "src_w": 126, "src_h": 180},
+    {"direction": "up",        "col": 0, "src_x": 25,  "src_y": 617, "src_w": 120, "src_h": 188},
+    {"direction": "up",        "col": 1, "src_x": 196, "src_y": 617, "src_w": 120, "src_h": 188},
+    {"direction": "up",        "col": 2, "src_x": 367, "src_y": 617, "src_w": 120, "src_h": 188},
+    {"direction": "up",        "col": 3, "src_x": 534, "src_y": 617, "src_w": 120, "src_h": 188},
+    {"direction": "up",        "col": 4, "src_x": 705, "src_y": 617, "src_w": 128, "src_h": 188},
+    {"direction": "up",        "col": 5, "src_x": 874, "src_y": 617, "src_w": 126, "src_h": 188},
+    {"direction": "down",      "col": 0, "src_x": 25,  "src_y": 825, "src_w": 120, "src_h": 191, "note": "Row 4 补充帧"},
+    {"direction": "down",      "col": 1, "src_x": 196, "src_y": 825, "src_w": 120, "src_h": 191, "note": "Row 4 补充帧"},
+    {"direction": "down",      "col": 2, "src_x": 367, "src_y": 825, "src_w": 120, "src_h": 191, "note": "Row 4 补充帧"}
   ]
 }
