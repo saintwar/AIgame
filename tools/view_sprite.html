@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>精灵图查看器</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+    .sheet { margin: 20px 0; }
+    .sheet img { image-rendering: pixelated; border: 1px solid #444; background: #000; }
+    .frame-grid { display: grid; gap: 10px; margin: 20px 0; }
+    .frame { border: 1px solid #666; padding: 5px; text-align: center; background: #2a2a2a; }
+    .frame img { image-rendering: pixelated; background: #000; }
+    .info { color: #aaa; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>精灵图查看器</h1>
+  
+  <div class="sheet">
+    <h2>阿明精灵图 (amin-walk-sheet-v2.png)</h2>
+    <img id="sheet" src="../assets/character/amin/amin-walk-sheet-v2.png?v=20260609" onload="analyzeSheet(this, 'v2')">
+  </div>
+  
+  <div id="v2-frames"></div>
+  
+  <script>
+    // 精灵图信息（由 analyze_sprite_sheet_v2.py 生成）
+    const SHEET_INFO = {
+      'v2': {
+        rows: 4,
+        cols: 6,
+        frames: [
+          // Row 0: down (正面朝屏幕)
+          {row: 0, col: 0, x: 39, y: 26, w: 120, h: 175},
+          {row: 0, col: 1, x: 199, y: 26, w: 120, h: 175},
+          {row: 0, col: 2, x: 359, y: 26, w: 120, h: 175},
+          {row: 0, col: 3, x: 519, y: 26, w: 120, h: 175},
+          {row: 0, col: 4, x: 679, y: 26, w: 120, h: 175},
+          {row: 0, col: 5, x: 839, y: 26, w: 128, h: 175},
+          // Row 1: up (背面)
+          {row: 1, col: 0, x: 39, y: 222, w: 120, h: 180},
+          {row: 1, col: 1, x: 199, y: 222, w: 120, h: 180},
+          {row: 1, col: 2, x: 359, y: 222, w: 120, h: 180},
+          {row: 1, col: 3, x: 519, y: 222, w: 120, h: 180},
+          {row: 1, col: 4, x: 679, y: 222, w: 120, h: 180},
+          {row: 1, col: 5, x: 839, y: 222, w: 128, h: 180},
+          // Row 2: left (左侧)
+          {row: 2, col: 0, x: 39, y: 415, w: 120, h: 180},
+          {row: 2, col: 1, x: 199, y: 415, w: 120, h: 180},
+          {row: 2, col: 2, x: 359, y: 415, w: 120, h: 180},
+          {row: 2, col: 3, x: 519, y: 415, w: 120, h: 180},
+          {row: 2, col: 4, x: 679, y: 415, w: 120, h: 180},
+          {row: 2, col: 5, x: 839, y: 415, w: 128, h: 180},
+          // Row 3: right (右侧，通过翻转 left 实现)
+          {row: 3, col: 0, x: 39, y: 617, w: 120, h: 188},
+          {row: 3, col: 1, x: 199, y: 617, w: 120, h: 188},
+          {row: 3, col: 2, x: 359, y: 617, w: 120, h: 188},
+          {row: 3, col: 3, x: 519, y: 617, w: 120, h: 188},
+          {row: 3, col: 4, x: 679, y: 617, w: 120, h: 188},
+          {row: 3, col: 5, x: 839, y: 617, w: 128, h: 188},
+        ]
+      }
+    };
+    
+    function analyzeSheet(img, key) {
+      console.log(key + ' sheet loaded:', img.naturalWidth, 'x', img.naturalHeight);
+    }
+    
+    function renderFrames(key) {
+      const info = SHEET_INFO[key];
+      const container = document.getElementById(key + '-frames');
+      container.innerHTML = '<h2>' + key + ' 帧预览 (请手动查看精灵图，告诉AI每行是什么方向)</h2>';
+      
+      // Group by row
+      for (let row = 0; row < info.rows; row++) {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'frame-grid';
+        rowDiv.style.gridTemplateColumns = 'repeat(' + info.cols + ', 150px)';
+        
+        const label = document.createElement('h3');
+        label.textContent = 'Row ' + row + ' (请告诉AI这行是什么方向)';
+        container.appendChild(label);
+        
+        for (let col = 0; col < info.cols; col++) {
+          const idx = row * info.cols + col;
+          const f = info.frames[idx];
+          const frameDiv = document.createElement('div');
+          frameDiv.className = 'frame';
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = f.w;
+          canvas.height = f.h;
+          canvas.style.imageRendering = 'pixelated';
+          canvas.style.background = '#000';
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(
+            document.getElementById(key + '-sheet'),
+            f.x, f.y, f.w, f.h,
+            0, 0, f.w, f.h
+          );
+          
+          frameDiv.appendChild(canvas);
+          const info_div = document.createElement('div');
+          info_div.className = 'info';
+          info_div.textContent = '(' + f.x + ',' + f.y + ') ' + f.w + 'x' + f.h;
+          frameDiv.appendChild(info_div);
+          
+          rowDiv.appendChild(frameDiv);
+        }
+        
+        container.appendChild(rowDiv);
+      }
+    }
+    
+    // Wait for images to load
+    window.addEventListener('load', function() {
+      renderFrames('v2');
+    });
+  </script>
+</body>
+</html>
