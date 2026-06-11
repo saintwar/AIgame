@@ -2077,10 +2077,21 @@ class VillageScene {
         ? (cx, cy) => obs.isBlocked(cx, cy, hbHalf)
         : () => false;
 
+      // ── NPC 碰撞阻挡：覆盖下半身，防止玩家走到 NPC 身上 ──
+      const _npcBlocked = (cx, cy) => {
+        for (const npc of this.npcs) {
+          // NPC 下半身碰撞盒（中心在腰部偏下，覆盖 py+18 ~ py+50）
+          const npcCx = npc.px + 16;
+          const npcCy = npc.py + 34;
+          if (Math.abs(cx - npcCx) < 14 && Math.abs(cy - npcCy) < 16) return true;
+        }
+        return false;
+      };
+
       // X-only 下一帧中心（沿用 hbCy = nextPy + T*3/8 的 y 偏移规则，但 Y 分量取 player.py，不是 nextPy）
       const xOnlyCx = nextPx;
       const xOnlyCy = this.player.py + T * 3 / 8;
-      const blockX = _blocked(xOnlyCx, xOnlyCy);
+      const blockX = _blocked(xOnlyCx, xOnlyCy) || _npcBlocked(xOnlyCx, xOnlyCy);
       const canX = this._canMoveTo(txX, tyMinX) && this._canMoveTo(txX, tyMaxX) && !blockX;
 
       const txMinY = Math.floor((hbCx - hbHalf) / T);
@@ -2089,7 +2100,7 @@ class VillageScene {
       // Y-only 下一帧中心
       const yOnlyCx = this.player.px;
       const yOnlyCy = nextPy + T * 3 / 8;
-      const blockY = _blocked(yOnlyCx, yOnlyCy);
+      const blockY = _blocked(yOnlyCx, yOnlyCy) || _npcBlocked(yOnlyCx, yOnlyCy);
       const canY = this._canMoveTo(txMinY, tyY) && this._canMoveTo(txMaxY, tyY) && !blockY;
 
       if (canX) this.player.px = nextPx;
@@ -2267,11 +2278,8 @@ class VillageScene {
     // drawFountain(ctx, 544, 160, this.time * 1000);
     // this._renderDecorations();
 
-    // Layer 5: NPC
-    this._renderNPCs();
-
-    // Layer 6: 玩家
-    this._renderPlayer();
+    // Layer 5-6: NPC + 玩家 Y-sort（按脚底 Y 排序，下方角色遮挡上方）
+    this._renderSprites();
 
     // ─────────────────────────────────────────────────────────────
     // Layer 6.4: 建筑 Y-sort occluder（PHASE 21-C）
@@ -2917,19 +2925,11 @@ class VillageScene {
     }
   }
 
-  _renderNPCs() {
+  _renderSprites() {
     const ctx = this.ctx;
     const time = this.time * 1000;
 
-    // 从 this.npcs 读取正确坐标，映射到对应的渲染函数
-    //
-    // PHASE 18+：NPC 逐个美术化，按 ART_SPEC v1.1 标准（64×80 PNG）
-    //   - 秀兰阿姨（mom）：assets/images/npcs/xiulan.png（首版 120×150，待按 64×80 重交付）
-    //   - 村长阿土伯（chief）：assets/images/npcs/atubo.png（64×80 标准尺寸）
-    //   每个 NPC 有独立 IIFE 模块（window.NpcXiulan / window.NpcAtubo），由 index.html
-    //   在 main.js 之前 defer 加载。模块内部已处理"图片未加载/失败"的兜底（简易椭圆）。
-    //   仅在 window.Npc* 未挂载（极端环境异常）时才退回原程序化 sprite。
-    //   其他 NPC 暂保持程序化 sprite，等后续美术资源到齐再按相同模式追加。
+    // ── 预解析 NPC 绘制函数 ──
     const drawXiulanResolved = (window.NpcXiulan && typeof window.NpcXiulan.draw === 'function')
       ? window.NpcXiulan.draw
       : drawXiulan;
@@ -2944,26 +2944,59 @@ class VillageScene {
       : drawXiaofang;
     const drawMap = { mom: drawXiulanResolved, chief: drawAtuboResolved, master_lin: drawLinResolved, xiaofang: drawXiaofangResolved };
 
+    // ── 玩家移动状态 ──
+    const wasdMoving = this.keys.up || this.keys.down || this.keys.left || this.keys.right;
+    const clickMoving = !!(window.ClickToMove
+      && typeof window.ClickToMove.isWalking === 'function'
+      && window.ClickToMove.isWalking());
+    const isMoving = wasdMoving || clickMoving;
 
-    this.npcs.forEach(npc => {
-      const drawFn = drawMap[npc.id];
-      if (drawFn) {
-        // 脚下椭圆阴影（地面之上、角色之下）；阴影固定贴地，不随 bobOffset 上下浮动
-        drawCharacterShadow(ctx, npc.px + 16, npc.py + 48);
-        drawFn(ctx, npc.px, npc.py, npc.facing || 'down', time);
-      }
-      // NPC 头顶名字标签（2026-05-28：底部 y 由 py-8 累计上移 10px → py-18，避免压头）
-      if (!dialogueSystem.isActive()) {
-        drawNameTag(ctx, npc.px + 16, npc.py - 18, npc.name);
-      }
-    });
+    // ── 收集所有 sprite 并按脚底 Y 排序（Y 小的先画 = 在后方）──
+    const sprites = [];
 
-    // 保留任务标记（角色宽32px，中心在 px+16）
-    // HOTFIX：原 y=py-28 与名字标签 box（py-28~py-8）完全重叠，48px serif "?" 字符高度
-    // ~48px → 覆盖到 npc.py-52~py-4 → 截图里"阿土伯"的"土"被问号压住，看起来像"阿?伯"。
-    // 2026-06-05 再校：名字标签 topY=py-18，box 高 20 → 区间 [py-38, py-18]；
-    //   36px 标记 textBaseline=middle 在 y 处占 [y-18, y+18]，原 y=py-44 → [py-62, py-26]，
-    //   底端 py-26 仍压住标签顶 py-38 → 改 py-60，标记区间 [py-78, py-42]，与标签留 4px 间距。
+    // 玩家：脚底在 player.py + 16
+    sprites.push({ type: 'player', obj: this.player, sortY: this.player.py + 16 });
+
+    // NPC：脚底在 npc.py + 48
+    for (const npc of this.npcs) {
+      sprites.push({ type: 'npc', obj: npc, sortY: npc.py + 48 });
+    }
+
+    sprites.sort((a, b) => a.sortY - b.sortY);
+
+    // ── 逐个绘制 ──
+    for (const s of sprites) {
+      if (s.type === 'player') {
+        const p = s.obj;
+        // 阴影
+        drawCharacterShadow(ctx, p.px, p.py + 16);
+        // 角色
+        drawAming(ctx, p.px - 16, p.py - 32, p.direction, time, isMoving);
+      } else {
+        const npc = s.obj;
+        const drawFn = drawMap[npc.id];
+        if (drawFn) {
+          // 阴影
+          drawCharacterShadow(ctx, npc.px + 16, npc.py + 48);
+          // 角色
+          drawFn(ctx, npc.px, npc.py, npc.facing || 'down', time);
+        }
+      }
+    }
+
+    // ── 名字标签（Y-sort 之后统一画，避免被后方角色遮挡）──
+    if (!dialogueSystem.isActive()) {
+      for (const s of sprites) {
+        if (s.type === 'player') {
+          this._renderPlayerNameTag();
+        } else {
+          const npc = s.obj;
+          drawNameTag(ctx, npc.px + 16, npc.py - 18, npc.name);
+        }
+      }
+    }
+
+    // ── NPC 任务标记（最顶层）──
     for (const npc of this.npcs) {
       const cx = npc.px + 16;
       const py = npc.py + npc.bobOffset;
@@ -3030,28 +3063,6 @@ class VillageScene {
     // hotfix（2026-06-01d）：再上移 15px → py - 57
     // hotfix（2026-06-01f）：再下移 7px → py - 50
     drawNameTag(this.ctx, this.player.px, this.player.py - 50, cfg.text);
-  }
-
-  _renderPlayer() {
-    const ctx = this.ctx;
-    const time = this.time * 1000;
-    // PHASE 16-4.8 仗1-FIX：行走动画判定要兼容鼠标点击寻路
-    //   原 bug：isMoving 只看 WASD → 鼠标寻路时角色双腿静止
-    //   修复：再叠加 ClickToMove.isWalking() 信号
-    const wasdMoving = this.keys.up || this.keys.down || this.keys.left || this.keys.right;
-    const clickMoving = !!(window.ClickToMove
-      && typeof window.ClickToMove.isWalking === 'function'
-      && window.ClickToMove.isWalking());
-    const isMoving = wasdMoving || clickMoving;
-    // hotfix（2026-06-01c）：让 sprite "脚底" 踩在玩家逻辑中心 (player.px, player.py + T*3/8) 上
-    //   - drawAming 内部脚底锚点 = (传入X + 16, 传入Y + 48)（aming-sprite.js LEGACY_FOOT_OFFSET）
-    //   - 想要脚底 = (player.px, player.py + 24) → 传入 (player.px - 16, player.py - 24)
-    //   - 仅改阿明，不动任何 NPC
-    // hotfix（2026-06-01d）：再上移 15px → 传入 Y = player.py - 39（脚底落到 player.py + 9）
-    // hotfix（2026-06-01f）：再下移 7px → 传入 Y = player.py - 32（脚底落到 player.py + 16）
-    drawAming(ctx, this.player.px - 16, this.player.py - 32, this.player.direction, time, isMoving);
-    // Layer 6.2: 主角头顶名字标签（Billboard，最高层）
-    this._renderPlayerNameTag();
   }
 
   _renderInteractionHints() {
