@@ -206,23 +206,27 @@
        由 village-scene.js 在 _renderMap 阶段调用，替换原程序化瓦片地形。
        defer + 在 main.js 之前 → 保证 main.js 启动时 window.VillageBg 已就绪。 -->
   <script src="js/render/village-bg.js?v=20260530" defer></script>
-  <!-- 秀兰阿姨 NPC 美术贴图模块（IIFE 挂 window.NpcXiulan）：
-       由 village-scene.js _renderNPCs 在绘制 mom 时调用，替换原程序化 sprite。
-       defer + 在 main.js 之前 → 保证 main.js 启动时 window.NpcXiulan 已就绪。
-       未来其他 NPC 美术图（村长/林师傅/小芳）按相同模式追加新 script 即可。 -->
-  <script src="js/render/npc-xiulan.js?v=20260528" defer></script>
-  <!-- 村长阿土伯 NPC 美术贴图模块（IIFE 挂 window.NpcAtubo）：
-       由 village-scene.js _renderNPCs 在绘制 chief 时调用，替换原程序化 sprite。
-       美术稿 atubo.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
-  <script src="js/render/npc-atubo.js?v=20260528" defer></script>
-  <!-- 林师傅 NPC 美术贴图模块（IIFE 挂 window.NpcLinshifu）：
-       由 village-scene.js _renderNPCs 在绘制 master_lin 时调用，替换原程序化 sprite。
-       美术稿 linshifu.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
-  <script src="js/render/npc-linshifu.js?v=20260528" defer></script>
-  <!-- 小芳 NPC 美术贴图模块（IIFE 挂 window.NpcXiaofang）：
-       由 village-scene.js _renderNPCs 在绘制 xiaofang 时调用，替换原程序化 sprite。
-       美术稿 xiaofang.png 为 ART_SPEC v1.1 标准 64×80 尺寸。 -->
-  <script src="js/render/npc-xiaofang.js?v=20260528" defer></script>
+  <!-- NPC 精灵图共享渲染器（IIFE 挂 window.NpcSpriteRenderer）：
+       所有 NPC 美术模块（秀兰/阿土伯/林师傅/小芳）共用，
+       必须在各 npc-xxx.js 之前加载。
+       从 4NPC.png 精灵图读取 8 帧待机动画。 -->
+  <script src="js/render/npc-sprite-renderer.js" defer></script>
+  <!-- 秀兰阿姨 NPC 精灵图模块（IIFE 挂 window.NpcXiulan）：
+       由 village-scene.js _renderNPCs 在绘制 mom 时调用。
+       内部调用 NpcSpriteRenderer.draw(ctx, 'xiulan', x, y, time)。 -->
+  <script src="js/render/npc-xiulan.js?v=20260611" defer></script>
+  <!-- 村长阿土伯 NPC 精灵图模块（IIFE 挂 window.NpcAtubo）：
+       由 village-scene.js _renderNPCs 在绘制 chief 时调用。
+       内部调用 NpcSpriteRenderer.draw(ctx, 'atubo', x, y, time)。 -->
+  <script src="js/render/npc-atubo.js?v=20260611" defer></script>
+  <!-- 林师傅 NPC 精灵图模块（IIFE 挂 window.NpcLinshifu）：
+       由 village-scene.js _renderNPCs 在绘制 master_lin 时调用。
+       内部调用 NpcSpriteRenderer.draw(ctx, 'linshifu', x, y, time)。 -->
+  <script src="js/render/npc-linshifu.js?v=20260611" defer></script>
+  <!-- 小芳 NPC 精灵图模块（IIFE 挂 window.NpcXiaofang）：
+       由 village-scene.js _renderNPCs 在绘制 xiaofang 时调用。
+       内部调用 NpcSpriteRenderer.draw(ctx, 'xiaofang', x, y, time)。 -->
+  <script src="js/render/npc-xiaofang.js?v=20260611" defer></script>
   <!-- 建筑美术贴图统一元数据表（IIFE 挂 window.BuildingsArt）：
        由 village-scene.js Layer3 建筑绘制阶段调用，替换各 drawXxx 程序化版本。
        支持村长家、渔具店等建筑独立声明渲染尺寸/锚点（参见 ART_SPEC v1.2 §2）。 -->
@@ -238,6 +242,6 @@
        浏览器二次访问直接命中 304/缓存，并且 module 默认就是 defer 行为，
        与上面所有 defer 脚本一并按 DOM 顺序在 DOMContentLoaded 前执行完。
        如需强刷，把 ?v=20260524 升一位（与字体一致的版本号语义）。 -->
-  <script type="module" src="js/main.js?v=20260609a" defer></script>
+  <script type="module" src="js/main.js?v=20260611a" defer></script>
 </body>
 </html>

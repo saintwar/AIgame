@@ -1,0 +1,79 @@
+{
+  "sheet": "assets/character/NPC/4NPC.png",
+  "sheet_w": 1024,
+  "sheet_h": 1024,
+  "npcs": {
+    "xiulan": {
+      "name": "秀兰阿姨",
+      "row": 0,
+      "row_y": 13,
+      "row_h": 238,
+      "anchor_x_ratio": 0.5,
+      "anchor_y_ratio": 0.95,
+      "frames": [
+        {"col": 0, "src_x": 17,   "src_w": 96},
+        {"col": 1, "src_x": 148,  "src_w": 90},
+        {"col": 2, "src_x": 275,  "src_w": 91},
+        {"col": 3, "src_x": 402,  "src_w": 91},
+        {"col": 4, "src_x": 529,  "src_w": 96},
+        {"col": 5, "src_x": 656,  "src_w": 97},
+        {"col": 6, "src_x": 787,  "src_w": 90},
+        {"col": 7, "src_x": 912,  "src_w": 96}
+      ]
+    },
+    "atubo": {
+      "name": "阿土伯",
+      "row": 1,
+      "row_y": 279,
+      "row_h": 228,
+      "anchor_x_ratio": 0.5,
+      "anchor_y_ratio": 0.95,
+      "frames": [
+        {"col": 0, "src_x": 15,   "src_w": 101},
+        {"col": 1, "src_x": 142,  "src_w": 102},
+        {"col": 2, "src_x": 272,  "src_w": 100},
+        {"col": 3, "src_x": 401,  "src_w": 100},
+        {"col": 4, "src_x": 525,  "src_w": 103},
+        {"col": 5, "src_x": 658,  "src_w": 99},
+        {"col": 6, "src_x": 783,  "src_w": 100},
+        {"col": 7, "src_x": 909,  "src_w": 102}
+      ]
+    },
+    "linshifu": {
+      "name": "林师傅",
+      "row": 2,
+      "row_y": 537,
+      "row_h": 227,
+      "anchor_x_ratio": 0.5,
+      "anchor_y_ratio": 0.95,
+      "frames": [
+        {"col": 0, "src_x": 5,    "src_w": 117},
+        {"col": 1, "src_x": 134,  "src_w": 117},
+        {"col": 2, "src_x": 268,  "src_w": 107},
+        {"col": 3, "src_x": 394,  "src_w": 109},
+        {"col": 4, "src_x": 525,  "src_w": 104},
+        {"col": 5, "src_x": 651,  "src_w": 106},
+        {"col": 6, "src_x": 774,  "src_w": 114},
+        {"col": 7, "src_x": 900,  "src_w": 116}
+      ]
+    },
+    "xiaofang": {
+      "name": "小芳",
+      "row": 3,
+      "row_y": 804,
+      "row_h": 216,
+      "anchor_x_ratio": 0.5,
+      "anchor_y_ratio": 0.95,
+      "frames": [
+        {"col": 0, "src_x": 22,   "src_w": 83},
+        {"col": 1, "src_x": 147,  "src_w": 104},
+        {"col": 2, "src_x": 277,  "src_w": 103},
+        {"col": 3, "src_x": 405,  "src_w": 103},
+        {"col": 4, "src_x": 516,  "src_w": 120},
+        {"col": 5, "src_x": 645,  "src_w": 104},
+        {"col": 6, "src_x": 776,  "src_w": 102},
+        {"col": 7, "src_x": 919,  "src_w": 82}
+      ]
+    }
+  }
+}
