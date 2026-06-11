@@ -18,6 +18,7 @@ import {
   drawBuildingShadow, drawGoldRim, drawDuskOverlay,
   drawWoodenDock, drawFishingRipple, drawFountain, drawDistantMountains
 } from './render/dusk-effects.js';
+import { drawSunbeams, drawAtmosphereClouds } from './render/atmosphere.js';
 import { PALETTE } from './render/palette.js';
 import { drawChiefHouse, drawFishingShop, drawAmingHome, drawAmingHomeSmoke, draw711Store } from './render/buildings.js';
 import {
@@ -2198,19 +2199,26 @@ class VillageScene {
     }
 
     // Layer 0: 动态天空（黄昏→夜晚）⭐ Phase C
+    // NOTE: 全屏 BG 图会覆盖天空，但保留作为无 BG 时的兜底
     drawDynamicSky(ctx, this.time * 1000);
 
     // Layer 0.5: 远山剪影 ⭐ Phase B 新增
     drawDistantMountains(ctx);
 
-    // Layer 1: 地图层（草地用噪点 tile）
+    // Layer 1: 地图层（全屏美术背景图，覆盖天空和远山）
     this._renderMap();
+
+    // Layer 1.2: 大气云彩（叠在 BG 图天空区域之上）
+    drawAtmosphereClouds(ctx, this.time * 1000);
 
     // Layer 1.4: 湖面倒影 ⭐ Phase C 新增
     drawLakeReflections(ctx, this.time * 1000);
 
     // Layer 1.5: 湖面波纹
     drawLakeWaves(ctx, this.time * 1000);
+
+    // Layer 1.7: 斜射阳光（从右上角射入）
+    drawSunbeams(ctx, this.time * 1000);
 
     // Layer 2: 建筑长投影（在建筑下方）
     // PHASE Step2：BUILDINGS 已像素化（drawX/drawY），不再依赖 T
