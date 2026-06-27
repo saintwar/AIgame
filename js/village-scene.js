@@ -176,7 +176,7 @@ class VillageScene {
       px: 0, py: 0,
       direction: 'down',
       frame: 0,
-      speed: 2.1
+      speed: 1.5
     };
 
     this.keys = { up: false, down: false, left: false, right: false };
@@ -2968,8 +2968,8 @@ class VillageScene {
     for (const s of sprites) {
       if (s.type === 'player') {
         const p = s.obj;
-        // 阴影
-        drawCharacterShadow(ctx, p.px, p.py + 16);
+        // 阴影（2026-06-28：换新雪碧图后脚底位置上移，阴影上提 10px 贴回脚下）
+        drawCharacterShadow(ctx, p.px, p.py + 6);
         // 角色
         drawAming(ctx, p.px - 16, p.py - 32, p.direction, time, isMoving);
       } else {
