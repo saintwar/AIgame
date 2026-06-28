@@ -86,8 +86,9 @@ class ArrowGuide {
     // hotfix（2026-06-01f）：sprite 再下移 7 → 头顶 ≈ py-32，箭头 = py-32-21 = py-53
     // 2026-06-05：箭头三角与"阿明"名字标签 [py-70, py-50] 重叠 → 整体上移 25px 到 py-78，
     //   配套箭头文字 y 由 arrowY-18 → arrowY-22（更醒目的间距，避免文字底贴名字标签顶）
+    // 2026-06-29：箭头+文字整体再上移 20px → py-98
     const arrowX = player.px;
-    const arrowY = player.py - 78 + bobY;
+    const arrowY = player.py - 98 + bobY;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
@@ -2991,7 +2992,7 @@ class VillageScene {
           this._renderPlayerNameTag();
         } else {
           const npc = s.obj;
-          drawNameTag(ctx, npc.px + 16, npc.py - 18, npc.name);
+          drawNameTag(ctx, npc.px + 16, npc.py - 28, npc.name);
         }
       }
     }
@@ -3062,7 +3063,8 @@ class VillageScene {
     //   名字标签同步：X 从 px+16 → px（sprite 新中心）；Y 从 py-18 → py-42（py-24 sprite 顶 + 上方 18px）
     // hotfix（2026-06-01d）：再上移 15px → py - 57
     // hotfix（2026-06-01f）：再下移 7px → py - 50
-    drawNameTag(this.ctx, this.player.px, this.player.py - 50, cfg.text);
+    // 2026-06-29：再上移 10px → py - 60
+    drawNameTag(this.ctx, this.player.px, this.player.py - 60, cfg.text);
   }
 
   _renderInteractionHints() {
