@@ -3,9 +3,9 @@
 //   - 仅影响【村庄场景】阿明（本模块只被 characters.js drawAming → village-scene 使用）
 //   - 钓鱼场景阿明走独立的 aming-fish-sprite.js，不受影响
 //
-// 新素材规格（2026-06-29 更新）：
-//   图片 amin_new.png 504×504，每帧 42×84，PNG 自带透明背景
-//   （为消除缩小一半导致的锯齿，原图按显示尺寸 1:1 重制，渲染不再缩放）
+// 新素材规格（2026-06-30 更新）：
+//   图片 amin_new.png 985×82（单行横排，帧间隔 1px），每帧 40×80，PNG 自带透明背景
+//   共 18 帧，按显示尺寸 1:1 绘制，渲染不缩放（消除锯齿）
 //   4 方向：down / up / left / right（right = left 水平翻转，由 JSON flipH 标记）
 //   动画：idle_<dir>（单帧站立）+ walk_<dir>（6 帧行走）
 //   JSON 用 animationsFlat 数组直接给出每个动画 key 的帧名序列 / fps / flipH
@@ -16,10 +16,10 @@
 //   left / up-left / down-left   → left
 //   right / up-right / down-right → right
 
-const SHEET_URL = 'assets/character/amin/amin_new.png?v=20260629d';
-const SPEC_URL  = 'assets/character/amin/amin_new.json?v=20260629d';
+const SHEET_URL = 'assets/character/amin/amin_new.png?v=20260630a';
+const SPEC_URL  = 'assets/character/amin/amin_new.json?v=20260630a';
 
-// 显示缩放：新素材帧 42×84（504×504 雪碧图）本身即目标显示尺寸，1:1 绘制不缩放（消除锯齿）
+// 显示缩放：新素材帧 40×80（985×82 雪碧图）本身即目标显示尺寸，1:1 绘制不缩放（消除锯齿）
 const DISPLAY_SCALE = 1.0;
 
 // 脚底锚点偏移（沿用旧惯例，保证脚底落在 player 逻辑中心）
@@ -115,7 +115,7 @@ export function preloadAmingSheet() {
         _image   = img;
         _ready   = true;
         _loading = false;
-        console.log('[aming-sprite] amin_new ready (504x504, 42x84/frame, 1:1, 4-dir)');
+        console.log('[aming-sprite] amin_new ready (985x82, 40x80/frame, 18f, 1:1, 4-dir)');
       };
       img.onerror = () => {
         _failed  = true;
