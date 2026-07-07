@@ -23,14 +23,10 @@
   width: 1280px;
   height: 720px;
   z-index: 99999;
-  /* 2026-06-05：登录页背景图（古风地图 + 阿明持竿钓鱼）替换原暖橙渐变
-     - cover：填满 1280×720（原图 1080×608 ≈ 16:9，几乎无裁切）
-     - center center：阿明、村庄、城堡都在画面中央/三分点上，居中显示构图最稳 */
+  /* 2026-07-07 v3：保留 login-bg 背景图，改由 ::before 承载并单独设 30% 透明
+     - 这里只保留 background-color 兜底底色（图加载前/下方透出用）
+     - 背景图实现见下方 #splash-loader::before */
   background-color: #2a1f12; /* 图加载前的兜底底色，与图整体暖棕调和谐 */
-  background-image: url('../assets/ui/login-bg.jpg?v=20260605');
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,7 +38,27 @@
   opacity: 1;
 }
 
+/* 2026-07-07 v3：背景图改由 ::before 承载，单独设 30% 透明
+   - cover + center center：填满 1280×720（原图 1080×608 ≈ 16:9，几乎无裁切）
+   - opacity: 0.3：用户要求 30% 透明，让卡片/进度条成为绝对视觉焦点
+   - 进度条/文字/卡片（.splash-content）保持 100% 不透明，对比度不受影响 */
+#splash-loader::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('../assets/ui/login-bg.jpg?v=20260605');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0.3;
+  z-index: 0;
+}
+
 .splash-content {
+  /* 2026-07-07 v3：背景图在 ::before 承载（opacity: 0.3），这里要提到 z-index: 1
+     才能保证进度条/卡片/文字浮在背景图之上，不会被 ::before 盖住 */
+  position: relative;
+  z-index: 1;
   text-align: center;
   /* 2026-06-05 v2：删除 logo 行后卡片可缩窄；蒙版改更深更聚焦 */
   width: 460px;
