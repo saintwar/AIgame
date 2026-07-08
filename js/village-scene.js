@@ -645,9 +645,9 @@ class VillageScene {
     ctx.fillStyle = '#888';
     ctx.font = '16px "TencentSansW7","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText('v1.1 · 720p HD', 20, ch - 40);
-    ctx.textAlign = 'right';
-    ctx.fillText('出品人: Aidendeng', cw - 20, ch - 40);
+    ctx.fillText('出品人: Aidendeng', 20, ch - 20);
     ctx.textAlign = 'center';
 
     // 开始游戏按钮
