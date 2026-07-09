@@ -2111,13 +2111,15 @@ class VillageScene {
       if (this.animTimer >= 0.125) {
         this.animTimer = 0;
         this.player.frame = (this.player.frame + 1) % 3;
-        // 脚步声
-        this.footsteps++;
+        // 脚步声：先判断再自增 → 起步首帧（footsteps=0）立即响，消除响应延迟
         if (this.footsteps % 2 === 0) AudioSystem.playFootstep();
+        this.footsteps++;
       }
     } else {
       this.player.frame = 0;
-      this.animTimer = 0;
+      // 预置到阈值 + 归零脚步相位：下次起步首帧立即切帧并响脚步
+      this.animTimer = 0.125;
+      this.footsteps = 0;
     }
 
     const T_ = window.GAME_CONFIG.TILE_SIZE;

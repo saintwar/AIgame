@@ -510,6 +510,9 @@ class FishingScene {
     //   但异常路径（reload / 切到非村庄场景）会导致 effects.mp3 残留循环。
     AudioSystem.stopAmbient();
     AudioSystem.stopBGM();
+    AudioSystem.stopUnderwaterAmbient();
+    AudioSystem.stopReelSound();
+    AudioSystem.stopLineOutSound();
     // PHASE 16-6 仗4：卸载鱼饵 HUD
     baitHUD.unmount();
     // 清理 InputSystem 的键盘监听
@@ -1287,6 +1290,8 @@ class FishingScene {
 
   _initPlayingState() {
     const cfg = CONFIG.playing; const w = this.cw; const h = this.ch;
+    // 进入水下搏斗 → 循环播放水下气泡环境音（幂等，回合结束/退场时停止）
+    AudioSystem.startUnderwaterAmbient();
     // hotfix（2026-06-01）：进入 Playing 强制清零鼠标按住标记，避免上一回合残留
     this._playingMouseHeld = false;
     // 纯水下视角：鱼线从右上角（模拟从水面伸入）
@@ -1543,9 +1548,9 @@ class FishingScene {
     // PHASE 21-1 hotfix（2026-06-01）：鼠标左键与空格键并行，按住任意一个都视为"拉线"
     //   变量名沿用 holdingSpace 是为了下方所有原有判断零改动；含义已扩展为"按住拉杆键（空格 OR 鼠标左键）"
     const cfg = CONFIG.playing; const holdingSpace = this.input.isDown(' ') || this.input.isDown('space') || this._playingMouseHeld; const w = this.cw; const h = this.ch;
-    // 收线音效控制：按住空格时启动音效，松手停止
-    if (holdingSpace) AudioSystem.startReelSound();
-    else AudioSystem.stopReelSound();
+    // 收线/出线音效控制（互斥）：按住空格=收线音(shouxian)，松手=鱼拉线出线音(chuxian)
+    if (holdingSpace) { AudioSystem.startReelSound(); AudioSystem.stopLineOutSound(); }
+    else { AudioSystem.stopReelSound(); AudioSystem.startLineOutSound(); }
     if (this._checkEscape(dt)) return;
     // PHASE 21-1 D14 hotfix-n：HP 扣血新规则 —— 3 秒安全区 tick
     //   旧规则：holdingSpace 每帧 ×dt 扣 hpDrain → 删除
@@ -1785,6 +1790,7 @@ class FishingScene {
 
   _onFishCaught() {
     AudioSystem.stopReelSound();
+    AudioSystem.stopLineOutSound();
     // hotfix-z（2026-06-04 修订）：用 _startBite 时缓存的 _hookedFishRef 真正删除鱼
     //   原 bug：先前用 bobberFSM.follower，但 follower 在进 BiteWindow 时已被 resetBobberApproach 清空
     //   新链路：_startBite → takeHookedFishRef() → 保存 → 战斗胜利 → removeFishFromGroup(ref)
@@ -1996,10 +2002,12 @@ class FishingScene {
   }
 
   _updateCaught(dt) {
+    // 鱼已出水 → 停止水下气泡环境音（幂等）
+    AudioSystem.stopUnderwaterAmbient();
     this.caughtTimer += dt;
     if (this.currentFish && this.currentFish.rarity >= CONFIG.caught.slowmoThreshold) this.timeScale = CONFIG.caught.slowmoScale;
     if (this.currentFish && this.currentFish.legendary) this.glowTimer += dt;
-    if (this.caughtTimer >= CONFIG.caught.animationDuration && !this.showingFishInfo) this.showingFishInfo = true;
+    if (this.caughtTimer >= CONFIG.caught.animationDuration && !this.showingFishInfo) { this.showingFishInfo = true; AudioSystem.playCatchResult(); }
     // 按空格键确认后收回浮标，回到 Idle 重新开始抛投流程
     // hotfix（2026-06-01b）：空格 OR 鼠标左键单击 都能再次抛竿
     if (this.showingFishInfo && (this.input.wasPressed('space') || this._confirmClick)) {
@@ -2010,6 +2018,9 @@ class FishingScene {
 
   _updateFailed(dt) {
     AudioSystem.stopReelSound();
+    AudioSystem.stopLineOutSound();
+    // 搏斗失败 → 停止水下气泡环境音（幂等）
+    AudioSystem.stopUnderwaterAmbient();
     this.failedMessageTimer += dt; // 文字翻页计时器
     // 文字翻页：每5秒切换一条消息
     if (this.failedMessageTimer >= 5) {

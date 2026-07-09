@@ -200,13 +200,30 @@ class AudioSystem {
     osc.stop(this.ctx.currentTime + dur);
   }
 
+  /**
+   * 播放一次性 MP3 音效（每次 new Audio 独立实例，允许重叠，播完由浏览器自动回收）
+   *   用于替代 _beep 合成音的真实素材音效。不接 Web Audio graph，直接用 <audio>.volume。
+   * @param {string} src   音频路径
+   * @param {number} [vol] 音量 0~1（默认沿用 sfxVolume）
+   * @param {number} [rate] 播放倍速（默认 1；2=加快一倍）
+   */
+  _playSfxFile(src, vol = this.sfxVolume, rate = 1) {
+    if (this.muted) return;
+    try {
+      const a = new Audio(src);
+      a.volume = Math.max(0, Math.min(1, vol));
+      if (rate && rate !== 1) a.playbackRate = rate;
+      a.play().catch(() => { });
+    } catch (_) { }
+  }
+
   // 各种 UI 音效（命名清晰，方便业务调用）
   playDialogTick() { this._beep(800, 0.03, 'square', 0.25); }     // 打字机咔嗒
   playDialogNext() { this._beep(600, 0.08, 'sine', 0.22); }       // 翻页
   playMenuOpen() { this._beep(440, 0.1, 'sine', 0.2); setTimeout(() => this._beep(660, 0.12, 'sine', 0.2), 60); }
   playMenuClose() { this._beep(660, 0.08, 'sine', 0.2); setTimeout(() => this._beep(440, 0.1, 'sine', 0.2), 60); }
-  playFootstep() { this._beep(120 + Math.random() * 40, 0.04, 'triangle', 0.08); }
-  playCast() { this._beep(200, 0.3, 'sawtooth', 0.15); }    // 抛竿嗖
+  playFootstep() { this._playSfxFile('music/jiaobu.wav', 0.7, 2.5); }   // 真实脚步声 jiaobu.wav，2.5 倍速播放
+  playCast() { this._playSfxFile('music/paogan.mp3', 0.7); }    // 抛竿落水（真实音效 paogan.mp3）
   playBite() { this._beep(880, 0.06, 'square', 0.3); setTimeout(() => this._beep(1100, 0.08, 'square', 0.3), 80); }
 
   // ─────────────────────────────────────────────────────────────────
@@ -290,10 +307,14 @@ class AudioSystem {
     setTimeout(() => this._beep(520, 0.04, 'triangle', 0.22), 65);
   }
   playFishCaught() {
-    // 上扬 4 音音阶
+    // 上扬 4 音音阶（钓上瞬间的即时反馈音）
     const notes = [523, 659, 784, 1047];
     notes.forEach((f, i) => setTimeout(() => this._beep(f, 0.18, 'sine', 0.25), i * 100));
   }
+  // 钓获鱼结算界面音效：真实素材 diaodaoyu.mp3，结算面板弹出时播放一次
+  playCatchResult() { this._playSfxFile('music/diaodaoyu.mp3', 0.8); }
+  // 挖掘音效：真实素材 wajue.wav，成功挖掘一次时播放
+  playDig() { this._playSfxFile('music/wajue.wav', 0.7); }
   playQuestAccept() {
     const notes = [660, 880, 1320];
     notes.forEach((f, i) => setTimeout(() => this._beep(f, 0.15, 'triangle', 0.2), i * 80));
@@ -308,33 +329,45 @@ class AudioSystem {
     this.muted = !this.muted;
     if (this.bgmGain) this.bgmGain.gain.value = this.muted ? 0 : this.bgmVolume;
     if (this.sfxGain) this.sfxGain.gain.value = this.muted ? 0 : this.sfxVolume;
+    if (this._underwaterGain) this._underwaterGain.gain.value = this.muted ? 0 : 0.5;
+    // 收线/出线循环音（<audio>，不接 gain）：静音时暂停；取消静音后由 _updatePlaying 每帧自动恢复
+    if (this.muted) { this._stopLoopSfx('_reelAudio'); this._stopLoopSfx('_lineOutAudio'); }
     return this.muted;
   }
 
-  // 渔轮收线连续音效：程序化生成机械旋转声
-  startReelSound() {
-    if (!this.ctx || this.muted) return;
-    if (this._reelRunning) return;
-    this._reelRunning = true;
-
-    // 间断咔哒声：每 0.5 秒触发一次，模拟机械棘轮声
-    const tick = () => {
-      if (!this._reelRunning || this.muted) return;
-      this._beep(900, 0.04, 'sawtooth', 0.28);
-      setTimeout(tick, 500);
-    };
-    tick();
-  }
-
-  stopReelSound() {
-    if (!this._reelRunning) return;
-    this._reelRunning = false;
-    if (this._reelNodes) {
-      try { this._reelNodes.src.stop(); } catch (e) { }
-      try { this._reelNodes.lfo.stop(); } catch (e) { }
-      this._reelNodes = null;
+  /**
+   * 循环音效通用管理（持久 <audio loop> 实例，切换用 play/pause，避免 new Audio 延迟卡顿）
+   *   用于水下搏斗中频繁互斥切换的收线/出线音。start 幂等（正在播不重启）。
+   * @param {string} key  存到 this[key] 的实例键名
+   * @param {string} src  音频路径
+   * @param {number} vol  音量 0~1
+   */
+  _startLoopSfx(key, src, vol) {
+    if (this.muted) return;
+    let a = this[key];
+    if (!a) {
+      a = new Audio(src);
+      a.loop = true;
+      a.volume = Math.max(0, Math.min(1, vol));
+      this[key] = a;
     }
+    if (!a.paused) return; // 已在播放，幂等
+    try { a.currentTime = 0; a.play().catch(() => { }); } catch (_) { }
   }
+
+  _stopLoopSfx(key) {
+    const a = this[key];
+    if (!a) return;
+    try { a.pause(); a.currentTime = 0; } catch (_) { }
+  }
+
+  // 渔轮收线连续音效：真实素材 shouxian.mp3 循环（玩家按住收线时播放）
+  startReelSound() { this._startLoopSfx('_reelAudio', 'music/shouxian.mp3', 0.6); }
+  stopReelSound() { this._stopLoopSfx('_reelAudio'); }
+
+  // 鱼拉线出线音效：真实素材 chuxian.wav 循环（松手放线、鱼往外挣扎拉线时播放）
+  startLineOutSound() { this._startLoopSfx('_lineOutAudio', 'music/chuxian.wav', 0.6); }
+  stopLineOutSound() { this._stopLoopSfx('_lineOutAudio'); }
 
   isMuted() {
     return this.muted;
@@ -422,6 +455,53 @@ class AudioSystem {
         console.warn('BGM play failed:', e);
         this._bgmCurrentSrc = null;
       }
+    }
+  }
+
+  // ── 水下搏斗场景循环环境音（underwater_bubbles.mp3）──
+  //   独立于 BGM 层（effects.mp3）：用独立 <audio> + 独立 gain，
+  //   进入 Playing 时 start、回合结束/退出场景时 stop。幂等：重复 start 不叠加。
+  async startUnderwaterAmbient(src = 'music/underwater_bubbles.mp3') {
+    if (this._underwaterAudio) return; // 已在播放，幂等
+    await this.init();
+    if (!this.ctx || this.muted) return;
+    if (this._underwaterAudio) return; // init await 期间可能已被别处启动
+
+    try {
+      const audio = new Audio(src);
+      audio.loop = true;
+      audio.crossOrigin = 'anonymous';
+      this._underwaterAudio = audio;
+
+      if (!this._underwaterGain) {
+        this._underwaterGain = this.ctx.createGain();
+        this._underwaterGain.gain.value = this.muted ? 0 : 0.5;
+        this._underwaterGain.connect(this.ctx.destination);
+      }
+      this._underwaterSource = this.ctx.createMediaElementSource(audio);
+      this._underwaterSource.connect(this._underwaterGain);
+
+      this._underwaterPlayPromise = audio.play();
+      await this._underwaterPlayPromise;
+      this._underwaterPlayPromise = null;
+    } catch (e) {
+      this._underwaterPlayPromise = null;
+      if (e.name !== 'AbortError') console.warn('Underwater ambient play failed:', e);
+    }
+  }
+
+  async stopUnderwaterAmbient() {
+    if (this._underwaterPlayPromise) {
+      try { await this._underwaterPlayPromise; } catch (_) { }
+      this._underwaterPlayPromise = null;
+    }
+    if (this._underwaterAudio) {
+      try { this._underwaterAudio.pause(); } catch (_) { }
+      this._underwaterAudio = null;
+    }
+    if (this._underwaterSource) {
+      try { this._underwaterSource.disconnect(); } catch (_) { }
+      this._underwaterSource = null;
     }
   }
 

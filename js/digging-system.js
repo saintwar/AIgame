@@ -292,6 +292,11 @@ class DiggingSystem {
     // ⑤ 上锁 + 抽卡
     this._lockUntil.set(id, now + LOCK_MS);
 
+    // 挖掘音效（成功挖掘一次时播放，真实素材 wajue.wav）
+    if (window.AudioSystem && typeof window.AudioSystem.playDig === 'function') {
+      window.AudioSystem.playDig();
+    }
+
     const table = tile.type === 'farm' ? DIG_TABLE_FARM : DIG_TABLE_GARDEN;
     let result = rollTable(table);
 

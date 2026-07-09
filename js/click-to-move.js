@@ -316,6 +316,8 @@
     pathIndex = 1;
     onArriveCallback = onArrive || null;
     isWalking = true;
+    // 起步复位：预置动画计时器到阈值 + 归零脚步相位，让第一步立即响（消除响应延迟）
+    if (scene) { scene.animTimer = 0.125; scene.footsteps = 0; }
     showClickFeedback(targetGX, targetGY);
   }
 
@@ -335,7 +337,7 @@
    *   - true：调用方应跳过 WASD 处理（避免 WASD 段 else 分支把 frame=0 重置）
    *   - false：未控制（未寻路 / 已被 WASD 接管 / 已抵达）
    */
-  function update(/* dt */) {
+  function update(dt) {
     if (!isWalking || !scene) return false;
 
     // 任一 WASD/方向键被按住 → 立即移交控制权
@@ -406,16 +408,17 @@
     scene.player.tx = Math.floor(scene.player.px / T);
     scene.player.ty = Math.floor((scene.player.py + T * 3 / 8) / T);
 
-    // 行走帧动画（与 WASD 段同款节流：~0.125s 切一帧）
-    scene.animTimer = (scene.animTimer || 0) + (1 / 60);
+    // 行走帧动画（与 WASD 段同款节流：按真实 dt 累加，两条路径节奏一致；
+    //   dt 缺省时兜底 1/60，避免早期误传导致停摆）
+    scene.animTimer = (scene.animTimer || 0) + (dt || 1 / 60);
     if (scene.animTimer >= 0.125) {
       scene.animTimer = 0;
       scene.player.frame = ((scene.player.frame || 0) + 1) % 3;
-      // 脚步声（与 WASD 段同款节流：每两帧切换播放）
-      scene.footsteps = (scene.footsteps || 0) + 1;
-      if (scene.footsteps % 2 === 0 && window.AudioSystem && window.AudioSystem.playFootstep) {
+      // 脚步声：先判断再自增 → 起步首帧（footsteps=0）立即响，消除响应延迟
+      if ((scene.footsteps || 0) % 2 === 0 && window.AudioSystem && window.AudioSystem.playFootstep) {
         window.AudioSystem.playFootstep();
       }
+      scene.footsteps = (scene.footsteps || 0) + 1;
     }
 
     return true;
