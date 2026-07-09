@@ -105,20 +105,35 @@ export function drawLakeWaves(ctx, time) {
     ctx.fillRect(offset, y, 1280, 2);
   }
 
-  // 高光点：黄昏暖光 / 白天白光 / 夜晚冷光
-  let hlR = 255, hlG = 228, hlB = 181, hlAlpha = 0.7;
+  // 高光色：黄昏暖光 / 白天白光 / 夜晚冷光
+  let hlR = 255, hlG = 228, hlB = 181, hlAlpha = 0.8;
   if (name === 'day') {
-    hlR = 255; hlG = 255; hlB = 255; hlAlpha = 0.5;
+    hlR = 255; hlG = 255; hlB = 255; hlAlpha = 0.6;
   } else if (name === 'night') {
-    hlR = 150; hlG = 160; hlB = 200; hlAlpha = 0.3;
+    hlR = 150; hlG = 170; hlB = 220; hlAlpha = 0.35;
   } else if (name === 'dawn') {
-    hlR = 255; hlG = 210; hlB = 180; hlAlpha = 0.5;
+    hlR = 255; hlG = 215; hlB = 185; hlAlpha = 0.55;
   }
-  ctx.fillStyle = `rgba(${hlR}, ${hlG}, ${hlB}, ${hlAlpha})`;
-  for (let i = 0; i < 8; i++) {
-    const hx = (i * 160 + (time / 30) % 160) % 1280;
-    const hy = 600 + (i % 3) * 30;
-    ctx.fillRect(hx, hy, 2, 1);
+
+  // ── 水面闪耀高光：40 个随机闪烁光点 ──
+  const sparkleCount = 40;
+  for (let i = 0; i < sparkleCount; i++) {
+    // 伪随机种子 → 位置确定但分布均匀
+    const sx = ((i * 317 + 137) % 1280);
+    const sy = 580 + ((i * 199 + 73) % 136);
+    const seedPhase = (i * 0.73) % (Math.PI * 2);
+    const seedFreq = 0.004 + (i % 7) * 0.0008;
+
+    // 独立闪烁：sin² 让闪耀更锐利（暗面更暗→亮面更集中）
+    const raw = (Math.sin(time * seedFreq + seedPhase) + 1) / 2;
+    const twinkle = raw * raw;
+    const alpha = twinkle * hlAlpha;
+
+    if (alpha < 0.03) continue;
+
+    const size = 1.2 + twinkle * 1.6;
+    ctx.fillStyle = `rgba(${hlR}, ${hlG}, ${hlB}, ${alpha})`;
+    ctx.fillRect(sx, sy, size, size);
   }
 }
 
@@ -155,6 +170,17 @@ export function drawBuildingShadow(ctx, x, y, w, h) {
   ctx.lineTo(x + w, y + h);
   ctx.closePath();
   ctx.fill();
+
+  // ── 软阴影半影区（径向渐变，边缘渐隐）──
+  const penumbraCx = x + w / 2 + skewX * 0.5;
+  const penumbraCy = y + h + h * extendY * 0.5;
+  const penumbraR = w * 0.85;
+  const pGrad = ctx.createRadialGradient(penumbraCx, penumbraCy, penumbraR * 0.08, penumbraCx, penumbraCy, penumbraR);
+  pGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
+  pGrad.addColorStop(0.35, 'rgba(0,0,0,0.10)');
+  pGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pGrad;
+  ctx.fillRect(penumbraCx - penumbraR, penumbraCy - penumbraR * 0.6, penumbraR * 2, penumbraR * 1.2);
 }
 
 // ========== 5. 建筑侧光描边（动态化：黄昏描金，白天白光，夜晚微暖光） ==========

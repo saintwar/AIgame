@@ -18,7 +18,7 @@ export function drawSunbeams(ctx, time) {
   if (name === 'day') {
     const dayProgress = (phase - 0.25) / 0.25;
     const noonFactor = 1 - Math.abs(dayProgress - 0.5) * 2;
-    const intensity = noonFactor * 0.15; // 柔和，不抢眼
+    const intensity = noonFactor * 0.25; // 增强光柱存在感
     if (intensity <= 0.02) return;
 
     ctx.save();
@@ -54,6 +54,9 @@ export function drawSunbeams(ctx, time) {
       ctx.stroke();
     }
 
+    // ── 浮尘粒子（阳光下可见的微尘，增加空气体积感）──
+    _drawDustParticles(ctx, time, cw, ch, intensity);
+
     ctx.restore();
     return;
   }
@@ -81,7 +84,7 @@ export function drawSunbeams(ctx, time) {
     const ex = sx + Math.cos(angle + sway) * len;
     const ey = sy + Math.sin(angle + sway) * len;
 
-    const a = duskIntensity * (0.45 - Math.abs(t - 0.5) * 0.4);
+    const a = duskIntensity * (0.55 - Math.abs(t - 0.5) * 0.4);
     const grad = ctx.createLinearGradient(sx, sy, ex, ey);
     if (name === 'dawn') {
       grad.addColorStop(0, `rgba(255, 200, 100, ${a})`);
@@ -103,7 +106,40 @@ export function drawSunbeams(ctx, time) {
     ctx.stroke();
   }
 
+  // ── 浮尘粒子（黎明/黄昏金色微尘）──
+  _drawDustParticles(ctx, time, cw, ch, duskIntensity * 0.5);
+
   ctx.restore();
+}
+
+// ============================================================
+// 1.5. 浮尘粒子（空气介质感）
+// ============================================================
+function _drawDustParticles(ctx, time, cw, ch, intensity) {
+  const count = 25;
+  for (let i = 0; i < count; i++) {
+    // 伪随机种子 → 位置确定但分布均匀
+    const seed = i * 137.508; // golden angle
+    const px = cw * 0.1 + (Math.sin(seed) * 0.5 + 0.5) * cw * 0.85;
+    const py = ch * 0.05 + (Math.cos(seed * 0.7) * 0.5 + 0.5) * ch * 0.70;
+
+    // 缓飘移
+    const dx = Math.sin(time / 4000 + seed) * 12;
+    const dy = Math.cos(time / 3500 + seed * 1.3) * 6;
+
+    // 呼吸透明度
+    const breathe = (Math.sin(time / 2500 + seed * 2.1) + 1) / 2;
+    const alpha = intensity * 0.28 * (0.2 + breathe * 0.8);
+
+    if (alpha < 0.008) continue;
+
+    const size = 0.8 + breathe * 1.4;
+
+    ctx.fillStyle = `rgba(255, 250, 235, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px + dx, py + dy, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ============================================================

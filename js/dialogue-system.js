@@ -2,6 +2,7 @@
 
 import { DIALOGUES } from './data/dialogues.js';
 import QuestSystem from './quest-system.js';
+import AudioSystem from './audio-system.js';
 
 class DialogueSystem {
   constructor() {
@@ -61,6 +62,9 @@ class DialogueSystem {
       };
     }
 
+    // 对话开始时压低 BGM
+    AudioSystem.lowerBGMForDialogue();
+
     this.active = true;
     this.dialogId = dialogId;
     this.currentDialog = currentDialog;
@@ -95,6 +99,10 @@ class DialogueSystem {
       if (now - this.lastTypeTime > 1000 / this.typingSpeed) {
         this.charIdx++;
         this.lastTypeTime = now;
+        // 每打出2个字符触发一次打字音（避免高频刺耳）
+        if (this.charIdx % 2 === 0) {
+          AudioSystem.playDialogTick();
+        }
       }
     }
 
@@ -331,7 +339,6 @@ class DialogueSystem {
 
     // 选项触发后，先把当前对话标记结束（清状态），再分发 action。
     // 注意：必须先清 active，避免 callback 里再 start 新对话时旧 _end 钩子误触发。
-    const dialogId = this.dialogId;
     this.active = false;
     this.currentDialog = null;
     this.currentLineIdx = 0;
@@ -339,20 +346,8 @@ class DialogueSystem {
     this.dialogId = null;
     this.onEndCallback = null;
 
-    // 已读对话记录（与 _end 保持一致）
-    try {
-      const save = window.Save;
-      if (save && dialogId) {
-        const readDialogues = save.get('flags.readDialogues') || [];
-        if (!readDialogues.includes(dialogId)) {
-          readDialogues.push(dialogId);
-          save.set('flags.readDialogues', readDialogues);
-          save.commit();
-        }
-      }
-    } catch (e) {
-      console.error('DialogueSystem _activateChoice save error:', e);
-    }
+    // 对冲当前对话的 BGM 压低（_activateChoice 绕过 _end，子 dialog 的 start 会重新压低）
+    AudioSystem.restoreBGMAfterDialogue();
 
     if (typeof action === 'string') {
       this.start(action);
@@ -363,7 +358,7 @@ class DialogueSystem {
       if (action.dialogId) {
         this.start(action.dialogId);
       }
-      // close: true 或不带 dialogId → 已经清状态，等同关闭
+      // close: true 或不带 dialogId → 已经清状态，BGM 已由上方 restore 恢复
     }
   }
 
@@ -440,6 +435,7 @@ class DialogueSystem {
     } else {
       this.charIdx = 0;
       this.lastTypeTime = performance.now();
+      AudioSystem.playDialogNext();
     }
   }
 
@@ -448,6 +444,9 @@ class DialogueSystem {
     this.active = false;
     this.charIdx = 0;
     this.currentLineIdx = 0;
+
+    // 对话结束时恢复 BGM
+    AudioSystem.restoreBGMAfterDialogue();
 
     const callback = this.onEndCallback;
     const dialogId = this.dialogId;

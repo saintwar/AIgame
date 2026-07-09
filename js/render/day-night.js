@@ -281,27 +281,27 @@ function _drawCloud(ctx, x, y, scale) {
  * 动态全局滤镜：根据 phase 调整环境光照
  */
 export function drawDynamicOverlay(ctx, time) {
-  // 2026-06-01e：四阶段对齐（0.25/0.50/0.75）+ 滤镜浓度全部 × 0.5
+  // 2026-07-09：滤镜浓度上调，增强昼夜 mood 切换感
   const phase = getDayNightPhase(time);
   const darkness = getDarkness(phase);
 
   if (phase < 0.25) {
-    // 黎明破晓：暖粉滤镜，从暗到亮（峰值 0.15 → 0.075）
+    // 黎明破晓：暖粉滤镜，从暗到亮（峰值 0.10）
     const t = phase / 0.25;
-    const alpha = 0.075 * (1 - t);
+    const alpha = 0.10 * (1 - t);
     ctx.fillStyle = `rgba(255, 200, 160, ${Math.max(0, alpha)})`;
   } else if (phase < 0.50) {
     // 日正当中：无滤镜
     ctx.fillStyle = 'rgba(0, 0, 0, 0)';
   } else if (phase < 0.75) {
-    // 黄昏降临：暖橙滤镜渐强（峰值 0.12 → 0.06）
+    // 黄昏降临：暖橙滤镜渐强（峰值 0.10）
     const t = (phase - 0.50) / 0.25;
-    const alpha = 0.06 * t;
+    const alpha = 0.10 * t;
     ctx.fillStyle = `rgba(255, 165, 107, ${alpha})`;
   } else {
-    // 漫天星光：冷蓝滤镜（基线 0.06 → 0.03，峰值 0.32 → 0.16）
-    const alpha = 0.03 + darkness * 0.14;
-    ctx.fillStyle = `rgba(20, 25, 60, ${Math.min(0.16, alpha)})`;
+    // 漫天星光：冷蓝滤镜（基线 0.04，峰值 0.22）
+    const alpha = 0.04 + darkness * 0.18;
+    ctx.fillStyle = `rgba(20, 25, 60, ${Math.min(0.22, alpha)})`;
   }
   ctx.fillRect(0, 0, 1280, 720);
 }

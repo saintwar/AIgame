@@ -25,6 +25,14 @@ export function drawCharacterShadow(ctx, cx, footY, opts = {}) {
   const ry = opts.ry != null ? opts.ry : 4;
   const alpha = opts.alpha != null ? opts.alpha : 0.30;
   ctx.save();
+
+  // AO 环境光遮蔽（更大更淡，模拟地面间接光照衰减）
+  ctx.fillStyle = 'rgba(0,0,0,0.10)';
+  ctx.beginPath();
+  ctx.ellipse(cx, footY + 1, rx * 1.8, ry * 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 主接触阴影（紧凑的脚底投影）
   ctx.fillStyle = `rgba(0,0,0,${alpha})`;
   ctx.beginPath();
   ctx.ellipse(cx, footY, rx, ry, 0, 0, Math.PI * 2);

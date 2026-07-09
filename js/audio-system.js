@@ -201,8 +201,8 @@ class AudioSystem {
   }
 
   // 各种 UI 音效（命名清晰，方便业务调用）
-  playDialogTick() { this._beep(800, 0.03, 'square', 0.15); }     // 打字机咔嗒
-  playDialogNext() { this._beep(600, 0.08, 'sine', 0.15); }       // 翻页
+  playDialogTick() { this._beep(800, 0.03, 'square', 0.25); }     // 打字机咔嗒
+  playDialogNext() { this._beep(600, 0.08, 'sine', 0.22); }       // 翻页
   playMenuOpen() { this._beep(440, 0.1, 'sine', 0.2); setTimeout(() => this._beep(660, 0.12, 'sine', 0.2), 60); }
   playMenuClose() { this._beep(660, 0.08, 'sine', 0.2); setTimeout(() => this._beep(440, 0.1, 'sine', 0.2), 60); }
   playFootstep() { this._beep(120 + Math.random() * 40, 0.04, 'triangle', 0.08); }
@@ -338,6 +338,28 @@ class AudioSystem {
 
   isMuted() {
     return this.muted;
+  }
+
+  // ── 对话期间 BGM 压低/恢复 ──
+  lowerBGMForDialogue() {
+    if (!this.ctx || this.muted) return;
+    this._dialogueCount = (this._dialogueCount || 0) + 1;
+    if (this._dialogueCount > 1) return; // 已在对话中
+    // 缓降到 25%
+    const t0 = this.ctx.currentTime;
+    this.bgmGain.gain.cancelScheduledValues(t0);
+    this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, t0);
+    this.bgmGain.gain.linearRampToValueAtTime(this.bgmVolume * 0.25, t0 + 0.4);
+  }
+
+  restoreBGMAfterDialogue() {
+    if (!this.ctx || this.muted) return;
+    this._dialogueCount = Math.max(0, (this._dialogueCount || 0) - 1);
+    if (this._dialogueCount > 0) return; // 还有嵌套对话未结束
+    const t0 = this.ctx.currentTime;
+    this.bgmGain.gain.cancelScheduledValues(t0);
+    this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, t0);
+    this.bgmGain.gain.linearRampToValueAtTime(this.bgmVolume, t0 + 0.6);
   }
 
   /**
