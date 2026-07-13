@@ -10,13 +10,6 @@
 (function() {
   'use strict';
 
-  // 推荐昵称池（台湾本土风味 + 钓鱼主题，避免敏感词）
-  const SUGGESTIONS = [
-    '日月潭浪人', '阿里山钓客', '北港老饕', '高雄船长',
-    '基隆夜钓', '澎湖小将', '屏东海风', '宜兰山溪',
-    '台中钓神', '花莲渔郎', '嘉义鱼王', '小琉球船家',
-  ];
-
   // 主题色
   const C_BG = '#3A2A1A';
   const C_BORDER = '#C49A4A';
@@ -89,7 +82,7 @@
         input.type = 'text';
         input.maxLength = 12;
         input.value = defaultValue;
-        input.placeholder = '输入你的钓鱼名号...';
+        input.placeholder = '请输入你的企微英文名';
         input.style.cssText = `
           width: 100%; padding: 12px;
           font-size: 18px; font-family: inherit;
@@ -113,47 +106,16 @@
         input.addEventListener('input', () => {
           // 用户开始输入时清除错误样式
           input.style.borderColor = C_BORDER;
-          input.placeholder = '输入你的钓鱼名号...';
+          input.placeholder = '请输入你的企微英文名';
           updateCounter();
         });
 
-        // ============ 推荐昵称 ============
+        // ============ 活动公告 ============
         const suggestLabel = document.createElement('div');
-        suggestLabel.textContent = '✨ 想不出？随机推荐：';
+        suggestLabel.textContent = '☕ 每天15点，排行榜TOP2可找制作者兑换咖啡，真实的哦！';
         suggestLabel.style.cssText = `
-          font-size: 13px; color: ${C_BORDER}; margin-bottom: 8px;
+          font-size: 13px; color: ${C_BORDER}; margin-bottom: 20px; line-height: 1.5;
         `;
-
-        const suggestBox = document.createElement('div');
-        suggestBox.style.cssText = `
-          display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px;
-        `;
-        // 随机选 4 个
-        const shuffled = [...SUGGESTIONS].sort(() => Math.random() - 0.5).slice(0, 4);
-        shuffled.forEach((name) => {
-          const tag = document.createElement('button');
-          tag.textContent = name;
-          tag.style.cssText = `
-            padding: 6px 10px; font-size: 13px; font-family: inherit;
-            background: ${C_DEEP}; color: ${C_TEXT};
-            border: 1px solid ${C_BORDER}; cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-          `;
-          tag.addEventListener('click', () => {
-            input.value = name;
-            updateCounter();
-            input.focus();
-          });
-          tag.addEventListener('mouseenter', () => {
-            tag.style.background = C_BORDER;
-            tag.style.color = C_BG;
-          });
-          tag.addEventListener('mouseleave', () => {
-            tag.style.background = C_DEEP;
-            tag.style.color = C_TEXT;
-          });
-          suggestBox.appendChild(tag);
-        });
 
         // ============ 按钮区 ============
         const btnBox = document.createElement('div');
@@ -245,7 +207,6 @@
         dialog.appendChild(input);
         dialog.appendChild(counter);
         dialog.appendChild(suggestLabel);
-        dialog.appendChild(suggestBox);
         dialog.appendChild(btnBox);
         mask.appendChild(dialog);
         document.body.appendChild(mask);
